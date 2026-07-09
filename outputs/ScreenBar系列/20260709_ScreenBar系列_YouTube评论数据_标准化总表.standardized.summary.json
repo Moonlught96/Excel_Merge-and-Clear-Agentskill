@@ -1,0 +1,115 @@
+{
+  "input_path": "D:\\八爪鱼cli Project\\outputs\\ScreenBar系列\\20260709_ScreenBar系列_YouTube评论数据_合并总表.xlsx",
+  "output_xlsx": "D:\\八爪鱼cli Project\\outputs\\ScreenBar系列\\20260709_ScreenBar系列_YouTube评论数据_标准化总表.xlsx",
+  "sheets_processed": 1,
+  "data_rows_written": 4617,
+  "header_row": 1,
+  "output_headers": [
+    "评论日期",
+    "评论内容",
+    "产品名",
+    "点赞数",
+    "子评论数/追评数",
+    "一级评论",
+    "二级评论",
+    "三级评论"
+  ],
+  "drop_headers": [
+    "IP地址",
+    "IP属地",
+    "用户名称",
+    "用户昵称",
+    "昵称",
+    "rpid",
+    "parent_rpid",
+    "username",
+    "ip_location",
+    "id",
+    "comment_id",
+    "commentId",
+    "cid",
+    "uid",
+    "user_id",
+    "userId",
+    "uniqueId",
+    "author",
+    "authorName",
+    "author_name",
+    "authorDisplayName",
+    "authorChannelId",
+    "authorChannelUrl",
+    "channelId",
+    "channel_id",
+    "channelUrl",
+    "profileUrl",
+    "profile_url",
+    "avatar",
+    "videoId",
+    "video_id",
+    "videoUrl",
+    "url",
+    "permalink"
+  ],
+  "sheets": [
+    {
+      "sheet_name": "总表",
+      "data_rows_written": 4617,
+      "selected_columns": [
+        {
+          "output_header": "评论日期",
+          "source_header": "published_at",
+          "source_column": 6
+        },
+        {
+          "output_header": "评论内容",
+          "source_header": "text",
+          "source_column": 5
+        },
+        {
+          "output_header": "产品名",
+          "source_header": null,
+          "source_column": null
+        },
+        {
+          "output_header": "点赞数",
+          "source_header": "likes",
+          "source_column": 7
+        },
+        {
+          "output_header": "子评论数/追评数",
+          "source_header": "reply_count",
+          "source_column": 8
+        },
+        {
+          "output_header": "一级评论",
+          "source_header": null,
+          "source_column": null
+        },
+        {
+          "output_header": "二级评论",
+          "source_header": null,
+          "source_column": null
+        },
+        {
+          "output_header": "三级评论",
+          "source_header": null,
+          "source_column": null
+        }
+      ],
+      "omitted_headers": [
+        "id",
+        "reply_to",
+        "youtube_comment_id",
+        "author",
+        "is_creator",
+        "is_verified",
+        "author_channel_id",
+        "avatar_url"
+      ],
+      "configured_drop_headers_found": [
+        "id",
+        "author"
+      ]
+    }
+  ]
+}

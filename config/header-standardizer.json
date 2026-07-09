@@ -1,0 +1,140 @@
+{
+  "header_row": 1,
+  "output_columns": [
+    {
+      "header": "评论日期",
+      "aliases": [
+        "评论日期",
+        "评论时间",
+        "评论日期与产品",
+        "timestamp",
+        "createTime",
+        "create_time",
+        "createdAt",
+        "created_at",
+        "createDate",
+        "create_date",
+        "publishedAt",
+        "published_at",
+        "publishedTime",
+        "published_time",
+        "published",
+        "date",
+        "Date",
+        "time",
+        "Time",
+        "commentTime",
+        "comment_time",
+        "Comment Published",
+        "Published At"
+      ],
+      "required": true
+    },
+    {
+      "header": "评论内容",
+      "aliases": [
+        "评论内容",
+        "content",
+        "text",
+        "Text",
+        "comment",
+        "Comment",
+        "commentText",
+        "comment_text",
+        "Comment Text",
+        "message",
+        "body"
+      ],
+      "required": true
+    },
+    {
+      "header": "产品名",
+      "aliases": ["产品名", "购买产品", "商品名称", "商品", "评论日期与产品"],
+      "required": false
+    },
+    {
+      "header": "点赞数",
+      "aliases": [
+        "点赞数",
+        "点赞量",
+        "like_count",
+        "likeCount",
+        "Like Count",
+        "likes",
+        "Likes",
+        "diggCount",
+        "digg_count"
+      ],
+      "required": true
+    },
+    {
+      "header": "子评论数/追评数",
+      "aliases": [
+        "子评论数/追评数",
+        "子评论数",
+        "子评论数（追评数）",
+        "追评数",
+        "评论数",
+        "replyCount",
+        "reply_count",
+        "Reply Count",
+        "replyCommentTotal",
+        "reply_comment_total",
+        "replies",
+        "Replies"
+      ],
+      "required": false
+    },
+    {
+      "header": "一级评论",
+      "aliases": ["一级评论", "一级评论内容", "追评", "replyText", "reply_text", "Reply Text"],
+      "required": false
+    },
+    {
+      "header": "二级评论",
+      "aliases": ["二级评论", "二级评论内容", "引用的评论内容"],
+      "required": false
+    },
+    {
+      "header": "三级评论",
+      "aliases": ["三级评论", "三级评论内容"],
+      "required": false
+    }
+  ],
+  "drop_headers": [
+    "IP地址",
+    "IP属地",
+    "用户名称",
+    "用户昵称",
+    "昵称",
+    "rpid",
+    "parent_rpid",
+    "username",
+    "ip_location",
+    "id",
+    "comment_id",
+    "commentId",
+    "cid",
+    "uid",
+    "user_id",
+    "userId",
+    "uniqueId",
+    "author",
+    "authorName",
+    "author_name",
+    "authorDisplayName",
+    "authorChannelId",
+    "authorChannelUrl",
+    "channelId",
+    "channel_id",
+    "channelUrl",
+    "profileUrl",
+    "profile_url",
+    "avatar",
+    "videoId",
+    "video_id",
+    "videoUrl",
+    "url",
+    "permalink"
+  ]
+}

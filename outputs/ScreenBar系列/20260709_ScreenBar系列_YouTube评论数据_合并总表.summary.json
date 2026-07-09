@@ -1,0 +1,1243 @@
+{
+  "output_path": "D:\\八爪鱼cli Project\\outputs\\ScreenBar系列\\20260709_ScreenBar系列_YouTube评论数据_合并总表.xlsx",
+  "files_processed": 122,
+  "sheets_processed": 122,
+  "data_rows_written": 4617,
+  "add_source_columns": false,
+  "header": [
+    "id",
+    "reply_to",
+    "youtube_comment_id",
+    "author",
+    "text",
+    "published_at",
+    "likes",
+    "reply_count",
+    "is_creator",
+    "is_verified",
+    "author_channel_id",
+    "avatar_url"
+  ],
+  "files": [
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-36-23.xlsx",
+      "data_rows": 21,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 21
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-36-36.xlsx",
+      "data_rows": 55,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 55
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-36-47.xlsx",
+      "data_rows": 15,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 15
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-36-57.xlsx",
+      "data_rows": 12,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 12
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-37-05.xlsx",
+      "data_rows": 5,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 5
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-37-16.xlsx",
+      "data_rows": 60,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 60
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-37-26.xlsx",
+      "data_rows": 14,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 14
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-37-39.xlsx",
+      "data_rows": 45,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 45
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-37-48.xlsx",
+      "data_rows": 6,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 6
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-37-55.xlsx",
+      "data_rows": 18,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 18
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-38-03.xlsx",
+      "data_rows": 2,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 2
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-38-11.xlsx",
+      "data_rows": 15,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 15
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-38-22.xlsx",
+      "data_rows": 69,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 69
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-38-40.xlsx",
+      "data_rows": 11,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 11
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-38-50.xlsx",
+      "data_rows": 26,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 26
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-40-07.xlsx",
+      "data_rows": 676,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 676
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-40-58.xlsx",
+      "data_rows": 208,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 208
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-41-11.xlsx",
+      "data_rows": 8,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 8
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-41-28.xlsx",
+      "data_rows": 120,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 120
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-41-37.xlsx",
+      "data_rows": 6,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 6
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-42-17.xlsx",
+      "data_rows": 50,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 50
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-42-34.xlsx",
+      "data_rows": 11,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 11
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-42-43.xlsx",
+      "data_rows": 7,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 7
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-42-56.xlsx",
+      "data_rows": 13,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 13
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-43-13.xlsx",
+      "data_rows": 109,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 109
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-43-26.xlsx",
+      "data_rows": 28,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 28
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-43-36.xlsx",
+      "data_rows": 5,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 5
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-43-44.xlsx",
+      "data_rows": 9,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 9
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-43-50.xlsx",
+      "data_rows": 2,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 2
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-43-57.xlsx",
+      "data_rows": 8,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 8
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-44-06.xlsx",
+      "data_rows": 15,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 15
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-44-14.xlsx",
+      "data_rows": 3,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 3
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-44-23.xlsx",
+      "data_rows": 1,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 1
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-44-36.xlsx",
+      "data_rows": 45,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 45
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-44-45.xlsx",
+      "data_rows": 3,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 3
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-45-13.xlsx",
+      "data_rows": 56,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 56
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-45-22.xlsx",
+      "data_rows": 3,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 3
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-45-30.xlsx",
+      "data_rows": 3,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 3
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-45-35.xlsx",
+      "data_rows": 2,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 2
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-45-54.xlsx",
+      "data_rows": 55,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 55
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-46-08.xlsx",
+      "data_rows": 60,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 60
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-46-25.xlsx",
+      "data_rows": 6,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 6
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-46-33.xlsx",
+      "data_rows": 9,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 9
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-46-42.xlsx",
+      "data_rows": 13,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 13
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-47-52.xlsx",
+      "data_rows": 5,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 5
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-47-59.xlsx",
+      "data_rows": 5,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 5
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-48-30.xlsx",
+      "data_rows": 29,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 29
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-48-43.xlsx",
+      "data_rows": 32,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 32
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-49-02.xlsx",
+      "data_rows": 24,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 24
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-51-46.xlsx",
+      "data_rows": 208,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 208
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-52-33.xlsx",
+      "data_rows": 362,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 362
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-52-55.xlsx",
+      "data_rows": 66,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 66
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-53-28.xlsx",
+      "data_rows": 75,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 75
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-53-43.xlsx",
+      "data_rows": 21,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 21
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-53-59.xlsx",
+      "data_rows": 28,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 28
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-54-10.xlsx",
+      "data_rows": 32,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 32
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-54-34.xlsx",
+      "data_rows": 35,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 35
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-54-47.xlsx",
+      "data_rows": 30,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 30
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-05-53.xlsx",
+      "data_rows": 23,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 23
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-06-19.xlsx",
+      "data_rows": 142,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 142
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-06-29.xlsx",
+      "data_rows": 19,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 19
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-06-40.xlsx",
+      "data_rows": 2,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 2
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-07-00.xlsx",
+      "data_rows": 21,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 21
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-07-18.xlsx",
+      "data_rows": 48,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 48
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-07-32.xlsx",
+      "data_rows": 28,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 28
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-07-41.xlsx",
+      "data_rows": 5,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 5
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-08-04.xlsx",
+      "data_rows": 51,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 51
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-08-14.xlsx",
+      "data_rows": 38,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 38
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-08-24.xlsx",
+      "data_rows": 10,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 10
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-08-44.xlsx",
+      "data_rows": 15,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 15
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-08-57.xlsx",
+      "data_rows": 3,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 3
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-09-21.xlsx",
+      "data_rows": 20,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 20
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-09-34.xlsx",
+      "data_rows": 2,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 2
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-09-48.xlsx",
+      "data_rows": 8,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 8
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-09-58.xlsx",
+      "data_rows": 9,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 9
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-10-36.xlsx",
+      "data_rows": 11,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 11
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-10-47.xlsx",
+      "data_rows": 24,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 24
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-11-00.xlsx",
+      "data_rows": 18,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 18
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-11-11.xlsx",
+      "data_rows": 8,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 8
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-11-34.xlsx",
+      "data_rows": 82,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 82
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-11-44.xlsx",
+      "data_rows": 6,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 6
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-12-26.xlsx",
+      "data_rows": 19,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 19
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-12-39.xlsx",
+      "data_rows": 7,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 7
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-16-13-05.xlsx",
+      "data_rows": 33,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 33
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-08-55-46.xlsx",
+      "data_rows": 208,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 208
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-08-56-58.xlsx",
+      "data_rows": 5,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 5
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-08-57-33.xlsx",
+      "data_rows": 6,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 6
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-08-57-47.xlsx",
+      "data_rows": 13,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 13
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-08-58-09.xlsx",
+      "data_rows": 6,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 6
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-08-59-01.xlsx",
+      "data_rows": 3,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 3
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-08-59-55.xlsx",
+      "data_rows": 18,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 18
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-00-11.xlsx",
+      "data_rows": 6,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 6
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-00-41.xlsx",
+      "data_rows": 4,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 4
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-01-04.xlsx",
+      "data_rows": 9,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 9
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-01-19.xlsx",
+      "data_rows": 28,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 28
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-01-31.xlsx",
+      "data_rows": 24,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 24
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-01-43.xlsx",
+      "data_rows": 6,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 6
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-02-12.xlsx",
+      "data_rows": 3,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 3
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-02-48.xlsx",
+      "data_rows": 36,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 36
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-03-05.xlsx",
+      "data_rows": 7,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 7
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-03-19.xlsx",
+      "data_rows": 2,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 2
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-04-55.xlsx",
+      "data_rows": 11,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 11
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-05-17.xlsx",
+      "data_rows": 13,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 13
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-06-04.xlsx",
+      "data_rows": 14,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 14
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-06-21.xlsx",
+      "data_rows": 32,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 32
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-07-05.xlsx",
+      "data_rows": 9,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 9
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-07-25.xlsx",
+      "data_rows": 2,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 2
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-07-45.xlsx",
+      "data_rows": 6,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 6
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-08-01.xlsx",
+      "data_rows": 12,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 12
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-09-10.xlsx",
+      "data_rows": 22,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 22
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-09-22.xlsx",
+      "data_rows": 2,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 2
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-09-42.xlsx",
+      "data_rows": 14,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 14
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-09-54.xlsx",
+      "data_rows": 7,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 7
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-10-08.xlsx",
+      "data_rows": 5,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 5
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-12-32.xlsx",
+      "data_rows": 10,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 10
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-13-00.xlsx",
+      "data_rows": 30,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 30
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-09-09-13-24.xlsx",
+      "data_rows": 10,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 10
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-32-49.xlsx",
+      "data_rows": 7,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 7
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-33-52.xlsx",
+      "data_rows": 39,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 39
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-35-24.xlsx",
+      "data_rows": 378,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 378
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-35-38.xlsx",
+      "data_rows": 14,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 14
+        }
+      ]
+    },
+    {
+      "file": "D:\\专案\\ScreenBar十周年专案\\产品数据\\youtube数据\\长视频评论\\yt-comments-2026-07-08-15-35-54.xlsx",
+      "data_rows": 84,
+      "sheets": [
+        {
+          "sheet_name": "Comments",
+          "data_rows": 84
+        }
+      ]
+    }
+  ]
+}
