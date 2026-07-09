@@ -27,6 +27,8 @@ BEIJING_TZ = timezone(timedelta(hours=8))
 BEIJING_TIMESTAMP_FORMAT = "%Y-%m-%d"
 RELATIVE_COUNT_PATTERN = r"\d+|[一二两三四五六七八九十]+"
 PLATFORM_DATETIME_HEADERS = (
+    "评论日期",
+    "评论时间",
     "timestamp",
     "createTime",
     "create_time",
@@ -153,6 +155,21 @@ def convert_unix_timestamp_to_beijing(value: Any) -> Any:
         return datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone(BEIJING_TZ).strftime(BEIJING_TIMESTAMP_FORMAT)
     except (OSError, OverflowError, ValueError):
         return value
+
+
+def is_numeric_timestamp_value(value: Any) -> bool:
+    if value is None:
+        return False
+    return re.fullmatch(r"[+-]?\d+(?:\.\d+)?", str(value).strip()) is not None
+
+
+def is_datetime_text_value(value: Any) -> bool:
+    if isinstance(value, datetime):
+        return True
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    return bool(re.search(r"(?:\d{1,2}:\d{1,2}(?::\d{1,2})?|T\d{1,2}:\d{1,2})", text))
 
 
 def current_beijing_date() -> date:
@@ -321,6 +338,10 @@ def value_for_selected_column(row: tuple[Any, ...], column: SelectedColumn, toda
             return comment_date
         if output_key == normalize_header(PRODUCT_NAME_HEADER):
             return product_name
+    if source_key in {normalize_header("评论日期"), normalize_header("评论时间")} and output_key == normalize_header(COMMENT_DATE_HEADER):
+        if is_numeric_timestamp_value(raw_value) or is_datetime_text_value(raw_value):
+            return convert_platform_datetime_to_beijing_date(raw_value, today=today)
+        return raw_value
     platform_datetime_keys = {normalize_header(header) for header in PLATFORM_DATETIME_HEADERS}
     if source_key in platform_datetime_keys and output_key == normalize_header(COMMENT_DATE_HEADER):
         return convert_platform_datetime_to_beijing_date(raw_value, today=today)

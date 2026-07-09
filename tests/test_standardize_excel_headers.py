@@ -202,6 +202,40 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         self.assertEqual(["id", "uniqueId"], summary["sheets"][0]["configured_drop_headers_found"])
 
+    def test_maps_confirmed_tiktok_chinese_exporter_aliases_without_ai(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-chinese-aliases"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.csv"
+        input_path.write_text(
+            "评论ID,回复哪个评论,用户身份,用户名,昵称,评论,评论时间,Digg Count,Author Digged,回复数,固定到顶部,用户主页\n"
+            "1001,0,user,user_a,Nick,This monitor light works great,1678870952,4,false,7,false,https://example.com/user\n",
+            encoding="utf-8-sig",
+        )
+
+        result = standardize_workbook(input_path, load_config(), output_dir=tmp / "out")
+        standardized = load_workbook(result.output_xlsx, read_only=True, data_only=True)
+        rows = list(standardized["raw"].iter_rows(values_only=True))
+
+        self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
+        self.assertEqual(("2023-03-15", "This monitor light works great", None, "4", "7", None, None, None), rows[1])
+
+    def test_maps_confirmed_tiktok_chinese_datetime_without_time_output(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-chinese-datetime"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.csv"
+        input_path.write_text(
+            "评论,评论时间,Digg Count,回复数\n"
+            "This monitor light works great,2026/7/7 08:24:05,4,7\n",
+            encoding="utf-8-sig",
+        )
+
+        result = standardize_workbook(input_path, load_config(), output_dir=tmp / "out")
+        standardized = load_workbook(result.output_xlsx, read_only=True, data_only=True)
+        rows = list(standardized["raw"].iter_rows(values_only=True))
+
+        self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
+        self.assertEqual(("2026-07-07", "This monitor light works great", None, "4", "7", None, None, None), rows[1])
+
     def test_maps_youtube_comment_aliases_and_iso_time_to_beijing_date(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-youtube-aliases"
         tmp.mkdir(parents=True, exist_ok=True)

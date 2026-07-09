@@ -153,13 +153,19 @@ These rules are fixed and must remain unchanged during future feature additions 
 - For direct legacy cleaning, use column 3 as the comment/content column.
 - For standardized workbooks, locate the comment/content column by the header `评论内容`.
 - Trim leading and trailing whitespace before evaluating the comment.
-- Delete comments whose trimmed length is less than or equal to 7 characters.
+- Chinese comments whose trimmed length is less than or equal to 7 characters are deleted.
 - Delete comments exactly equal to:
   - `该用户未填写评价内容`
   - `此用户未填写评价内容`
 - Delete comments containing any user-provided KOL clean word.
 - Before using provided KOL clean words, confirm that the user has provided the complete clean-word list.
 - Fixed delete words are appended to the original `链接` rule; do not replace or remove `链接`.
+- Chinese comments delete by character length; non-Chinese comments delete by deterministic word count.
+- Non-Chinese comments with four or fewer words are deleted.
+- For unspaced non-Chinese scripts, only very short text with four or fewer characters is deleted by the short-text rule.
+- Pure numeric comments keep the legacy seven-character threshold for backward compatibility.
+- When adding a fixed delete word later, add confirmed equivalents for Chinese, English, Japanese, Korean, Spanish, Thai, and Hindi where applicable.
+- The complete fixed delete word lists are stored in `config/comment-cleaner.json`; the configured coverage currently includes Chinese, English, Japanese, Korean, Spanish, Thai, and Hindi terms.
 - Delete comments containing any configured fixed delete word. Current fixed delete words include: `链接`, `凑字数`, `水经验`, `赚积分`, `为了金币`, `赚硬币`, `赚京豆`, `淘气值`, `为了评论而评论`, `混个脸熟`, `完成任务`, `代下`, `代买`, `内部券`, `加微`, `加v`, `私聊我`, `主页看`, `点击链接`, `http://`, `https://`, `第一`, `打卡`, `路过`, `来了`, `冒泡`, `占座`, `测试`, `test`, `无`, `无内容`, `略`, `暂无评价`, `蹲`, `蹲一个`, `求链接`, `求分享`, `多少钱`, `怎么卖`, `啥牌子`, `什么牌子`, `求品牌`, `求私`, `加群`, `裙内`, `互赞`, `互粉`, `互关`, `回关`, `秒回`, `交朋友`, `リンク`, `プロフィール見て`, `プロフ見て`, `DMして`, `フォロー返し`, `相互フォロー`, `テスト`, `内容なし`, `評価なし`, `コメント稼ぎ`, `링크`, `맞팔`, `테스트`, `내용 없음`.
 - `加v` is matched case-insensitively so `加v` and `加V` are both deleted. English fixed delete words are also matched case-insensitively, including `link in bio`, `click link`, `click the link`, `check my profile`, `see my profile`, `visit my profile`, `dm me`, `message me`, `follow me`, `follow back`, `follow for follow`, `sub4sub`, `sub for sub`, `subscribe to my channel`, `earn coins`, `free coins`, `for coins`, `comment for points`, `promo code`, `coupon code`, `discount code`, `whatsapp`, `telegram`, `first`, `test`, `n/a`, `no content`, `no comment`, and `nothing to say`.
 - Delete no-Chinese random alphanumeric heap comments only by deterministic regex and thresholds; do not use AI or normal-English semantic judgment for this rule.
@@ -196,10 +202,10 @@ These rules run after merge for multi-file workflows and before cleaning for sin
   8. `三级评论`
 - Accepted deterministic aliases:
   - `评论日期`: `评论日期`, `评论时间`, `评论日期与产品`, `timestamp`, `createTime`, `create_time`, `createdAt`, `created_at`, `createDate`, `create_date`, `publishedAt`, `published_at`, `publishedTime`, `published_time`, `published`, `date`, `Date`, `time`, `Time`, `commentTime`, `comment_time`, `Comment Published`, `Published At`
-  - `评论内容`: `评论内容`, `content`, `text`, `Text`, `comment`, `Comment`, `commentText`, `comment_text`, `Comment Text`, `message`, `body`
+  - `评论内容`: `评论内容`, `评论`, `content`, `text`, `Text`, `comment`, `Comment`, `commentText`, `comment_text`, `Comment Text`, `message`, `body`
   - `产品名`: `产品名`, `购买产品`, `商品名称`, `商品`, `评论日期与产品`
-  - `点赞数`: `点赞数`, `点赞量`, `like_count`, `likeCount`, `Like Count`, `likes`, `Likes`, `diggCount`, `digg_count`
-  - `子评论数/追评数`: `子评论数/追评数`, `子评论数`, `子评论数（追评数）`, `追评数`, `评论数`, `replyCount`, `reply_count`, `Reply Count`, `replyCommentTotal`, `reply_comment_total`, `replies`, `Replies`
+  - `点赞数`: `点赞数`, `点赞量`, `Digg Count`, `like_count`, `likeCount`, `Like Count`, `likes`, `Likes`, `diggCount`, `digg_count`
+  - `子评论数/追评数`: `子评论数/追评数`, `子评论数`, `子评论数（追评数）`, `追评数`, `评论数`, `回复数`, `replyCount`, `reply_count`, `Reply Count`, `replyCommentTotal`, `reply_comment_total`, `replies`, `Replies`
   - `一级评论`: `一级评论`, `一级评论内容`, `追评`, `replyText`, `reply_text`, `Reply Text`
   - `二级评论`: `二级评论`, `二级评论内容`, `引用的评论内容`
   - `三级评论`: `三级评论`, `三级评论内容`
@@ -207,7 +213,8 @@ These rules run after merge for multi-file workflows and before cleaning for sin
   - The leading `YYYY年M月D日`, `YYYY/M/D`, or `YYYY-M-D` text becomes `评论日期`.
   - Text after the optional fixed marker `已购：` becomes `产品名`.
   - If the value does not match this fixed date-leading pattern, keep the original value in `评论日期` and leave `产品名` blank.
-- When the source header is `timestamp`, `createTime`, `create_time`, `createdAt`, `created_at`, `publishedAt`, `published_at`, `publishedTime`, `published_time`, `date`, `Date`, `time`, `Time`, or another configured English platform time alias, convert Unix seconds/milliseconds or ISO timestamps deterministically to Beijing date (`UTC+8`) in `YYYY-MM-DD` format. Keep only year, month, and day; do not output hours, minutes, or seconds.
+- When the source header is `timestamp`, `createTime`, `create_time`, `createdAt`, `created_at`, `publishedAt`, `published_at`, `publishedTime`, `published_time`, `date`, `Date`, `time`, `Time`, or another configured platform time alias, convert Unix seconds/milliseconds or ISO timestamps deterministically to Beijing date (`UTC+8`) in `YYYY-MM-DD` format. Keep only year, month, and day; do not output hours, minutes, or seconds.
+- For Chinese `评论时间` or `评论日期` source columns, convert only numeric timestamps or date-time text that includes a time component to `YYYY-MM-DD`; preserve plain date-only values as originally provided.
 - Relative platform time values such as `1年前`, `9个月前`, `1 year ago`, and `9 months ago` are converted deterministically from the current Beijing date. Relative year values output only `YYYY`; relative month values output only `YYYY-MM`. Relative day/week values output `YYYY-MM-DD`. Do not infer missing month/day beyond this fixed granularity.
 - The standardized output keeps only the configured columns. `IP地址`, `IP属地`, `用户名称`, `用户昵称`, `昵称`, `rpid`, `parent_rpid`, `username`, `ip_location`, `id`, `comment_id`, `commentId`, `cid`, `uid`, `user_id`, `userId`, `uniqueId`, `author`, `authorName`, `authorDisplayName`, `authorChannelId`, `channelId`, `profileUrl`, `avatar`, `videoId`, `videoUrl`, `url`, `permalink`, and any other non-configured columns are omitted from the standardized workbook.
 - `parent_rpid` is a parent-comment ID, not a subcomment count. Do not map it to `子评论数/追评数`.
@@ -411,7 +418,9 @@ After changing code, config, or the skill:
 Current required base-rule coverage includes:
 
 - KOL clean words are optional.
-- Comments with 7 or fewer characters are deleted.
+- Chinese comments with 7 or fewer characters are deleted.
+- Non-Chinese comments with four or fewer words are deleted, while unspaced non-Chinese scripts use only the four-character short-text fallback.
+- Pure numeric comments keep the legacy seven-character threshold.
 - Comments with 8 or more characters can be retained when no other rule deletes them.
 - Fixed delete words are appended to the original `链接` rule, including later additions such as `为了金币`, `暂无评价`, `蹲一个`, and `交朋友`.
 - `加v` fixed-word matching is case-insensitive.
@@ -438,8 +447,9 @@ Current required header-standardization coverage includes:
 - `IP地址`, `用户名称`, `rpid`, `parent_rpid`, `username`, and `ip_location` are omitted from standardized output.
 - `timestamp`, `content`, and `like_count` map to `评论日期`, `评论内容`, and `点赞数`.
 - `timestamp` values convert to Beijing date (`UTC+8`) in `YYYY-MM-DD` format, keeping only year, month, and day.
+- Chinese `评论时间` or `评论日期` columns convert numeric timestamps or date-time text with a time component to `YYYY-MM-DD`, while plain date-only values are preserved.
 - Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.
-- TikTok aliases such as `createTime`, `text`, `diggCount`, and `replyCommentTotal` map deterministically to the standard schema.
+- TikTok aliases such as `createTime`, `评论`, `text`, `Digg Count`, `diggCount`, `回复数`, and `replyCommentTotal` map deterministically to the standard schema.
 - YouTube aliases such as `publishedAt`, `commentText`, `likeCount`, `replyCount`, and `replyText` map deterministically to the standard schema, with ISO timestamps converted to Beijing date.
 - Required missing headers are rejected instead of guessed.
 - Missing source headers for `子评论数/追评数` keep that standard output column blank instead of failing.

@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ except ModuleNotFoundError:
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "comment-cleaner.json"
 CHINESE_CHAR_PATTERN = re.compile(r"[\u4e00-\u9fff]")
 ALNUM_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
+LATIN_LETTER_PATTERN = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿĀ-ž]")
 DEFAULT_DELETE_CONTAINS_TEXTS = (
     "链接",
     "凑字数",
@@ -118,6 +120,85 @@ DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS = (
     "no content",
     "no comment",
     "nothing to say",
+    "how much",
+    "price?",
+    "what brand",
+    "brand?",
+    "share link",
+    "need link",
+    "passing by",
+    "check in",
+    "enlace",
+    "link en bio",
+    "haz clic en el enlace",
+    "mira mi perfil",
+    "revisa mi perfil",
+    "mándame dm",
+    "mandame dm",
+    "escríbeme",
+    "escribeme",
+    "sígueme",
+    "sigueme",
+    "te sigo",
+    "cupón",
+    "cupon",
+    "código promocional",
+    "codigo promocional",
+    "descuento",
+    "primero",
+    "prueba",
+    "sin contenido",
+    "sin comentario",
+    "nada que decir",
+    "cuánto cuesta",
+    "cuanto cuesta",
+    "precio",
+    "qué marca",
+    "que marca",
+    "marca?",
+    "pásame el link",
+    "pasame el link",
+    "necesito el link",
+    "ลิงก์",
+    "ขอลิงก์",
+    "ส่งลิงก์",
+    "ดูโปรไฟล์",
+    "ทัก dm",
+    "dm มา",
+    "ติดตามกลับ",
+    "ฟอลกลับ",
+    "ทดสอบ",
+    "ไม่มีเนื้อหา",
+    "ไม่มีความคิดเห็น",
+    "ปั๊มคอมเมนต์",
+    "เก็บแต้ม",
+    "ราคาเท่าไหร่",
+    "กี่บาท",
+    "ยี่ห้ออะไร",
+    "แบรนด์อะไร",
+    "ผ่านมา",
+    "เช็คชื่อ",
+    "ทำภารกิจ",
+    "लिंक",
+    "लिंक दो",
+    "लिंक भेजो",
+    "प्रोफाइल देखें",
+    "डीएम करें",
+    "dm करें",
+    "फॉलो बैक",
+    "मुझे फॉलो करें",
+    "टेस्ट",
+    "कोई सामग्री नहीं",
+    "कोई टिप्पणी नहीं",
+    "पॉइंट कमाने",
+    "सिक्के कमाने",
+    "कितने का है",
+    "कीमत",
+    "कौन सा ब्रांड",
+    "ब्रांड क्या है",
+    "बस गुजर रहा",
+    "चेक इन",
+    "काम पूरा",
 )
 
 
@@ -127,6 +208,8 @@ class CleanerConfig:
     target_header: str | None = None
     first_data_row: int = 2
     min_trimmed_length: int = 8
+    non_chinese_max_short_words: int = 4
+    non_chinese_max_short_unspaced_chars: int = 4
     delete_exact_texts: tuple[str, ...] = ("该用户未填写评价内容", "此用户未填写评价内容")
     delete_contains_texts: tuple[str, ...] = DEFAULT_DELETE_CONTAINS_TEXTS
     delete_contains_case_insensitive_texts: tuple[str, ...] = DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS
@@ -179,6 +262,8 @@ def load_config(path: Path) -> CleanerConfig:
         target_header=data.get("target_header"),
         first_data_row=int(data.get("first_data_row", 2)),
         min_trimmed_length=int(data.get("min_trimmed_length", 8)),
+        non_chinese_max_short_words=int(data.get("non_chinese_max_short_words", 4)),
+        non_chinese_max_short_unspaced_chars=int(data.get("non_chinese_max_short_unspaced_chars", 4)),
         delete_exact_texts=tuple(data.get("delete_exact_texts", [])),
         delete_contains_texts=tuple(data.get("delete_contains_texts", DEFAULT_DELETE_CONTAINS_TEXTS)),
         delete_contains_case_insensitive_texts=tuple(
@@ -210,6 +295,51 @@ def normalize_header(value: Any) -> str:
     if value is None:
         return ""
     return "".join(str(value).strip().split())
+
+
+def count_non_chinese_words(comment: str) -> int | None:
+    if not comment or CHINESE_CHAR_PATTERN.search(comment):
+        return None
+
+    has_latin_letter = LATIN_LETTER_PATTERN.search(comment) is not None
+    has_whitespace = any(char.isspace() for char in comment)
+    if not has_latin_letter and not has_whitespace:
+        return None
+
+    tokens = 0
+    in_token = False
+    for char in comment:
+        category = unicodedata.category(char)
+        is_token_char = category[0] in {"L", "N", "M"} and not CHINESE_CHAR_PATTERN.fullmatch(char)
+        if is_token_char:
+            if not in_token:
+                tokens += 1
+            in_token = True
+        else:
+            in_token = False
+    return tokens
+
+
+def should_delete_for_length(comment: str, config: CleanerConfig) -> str | None:
+    if CHINESE_CHAR_PATTERN.search(comment):
+        if len(comment) < config.min_trimmed_length:
+            return f"评论长度小于 {config.min_trimmed_length}"
+        return None
+
+    if re.fullmatch(r"\d+", comment):
+        if len(comment) < config.min_trimmed_length:
+            return f"评论长度小于 {config.min_trimmed_length}"
+        return None
+
+    word_count = count_non_chinese_words(comment)
+    if word_count is not None:
+        if word_count <= config.non_chinese_max_short_words:
+            return f"非中文评论词数小于等于 {config.non_chinese_max_short_words}"
+        return None
+
+    if len(comment) <= config.non_chinese_max_short_unspaced_chars:
+        return f"非中文无空格短文本长度小于等于 {config.non_chinese_max_short_unspaced_chars}"
+    return None
 
 
 def max_consonant_run(value: str) -> int:
@@ -291,8 +421,9 @@ def should_delete_comment(
     config: CleanerConfig,
     clean_words: tuple[str, ...],
 ) -> str | None:
-    if len(comment) < config.min_trimmed_length:
-        return f"评论长度小于 {config.min_trimmed_length}"
+    length_reason = should_delete_for_length(comment, config)
+    if length_reason:
+        return length_reason
 
     if comment in config.delete_exact_texts:
         return "评论等于占位文案"
@@ -511,6 +642,9 @@ def clean_workbook(
         "target_column": config.target_column,
         "target_header": config.target_header,
         "first_data_row": config.first_data_row,
+        "min_trimmed_length": config.min_trimmed_length,
+        "non_chinese_max_short_words": config.non_chinese_max_short_words,
+        "non_chinese_max_short_unspaced_chars": config.non_chinese_max_short_unspaced_chars,
         "clean_words": list(clean_words),
         "delete_contains_texts": list(config.delete_contains_texts),
         "delete_contains_case_insensitive_texts": list(config.delete_contains_case_insensitive_texts),

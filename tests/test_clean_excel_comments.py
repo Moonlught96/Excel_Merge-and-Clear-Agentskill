@@ -252,6 +252,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         sheet = workbook.active
         sheet.title = "SheetA"
         sheet.append(["评论日期", "评论内容", "点赞数"])
+        sheet.append(["2026/01/01", "good product works well today", 1])
         sheet.append(["2026/01/01", "good product works well", 1])
         sheet.append(["2026/01/02", "jdsklafjskl", 1])
         sheet.append(["2026/01/03", "123123123", 1])
@@ -271,8 +272,79 @@ class CleanExcelCommentsTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                ("2026/01/01", "good product works well", 1),
+                ("2026/01/01", "good product works well today", 1),
                 ("2026/01/05", "中文夹着 jdsklafjskl 不按纯英文数字堆砌删除", 1),
+            ],
+            rows[1:],
+        )
+        self.assertEqual(4, result.rows_deleted)
+
+    def test_deletes_non_chinese_comments_with_four_or_fewer_words(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-non-chinese-short-word-limit"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "SheetA"
+        sheet.append(["date", "comment", "likes"])
+        sheet.append(["2026/01/01", "This works very well", 1])
+        sheet.append(["2026/01/02", "This monitor light works very well", 1])
+        sheet.append(["2026/01/03", "muy buen producto", 1])
+        sheet.append(["2026/01/04", "esta lámpara funciona muy bien", 1])
+        sheet.append(["2026/01/05", "\u0e42\u0e04\u0e21\u0e44\u0e1f\u0e15\u0e31\u0e49\u0e07\u0e42\u0e15\u0e4a\u0e30\u0e19\u0e35\u0e49\u0e14\u0e35\u0e21\u0e32\u0e01", 1])
+        workbook.save(input_path)
+
+        result = clean_workbook(
+            input_path=input_path,
+            config=CleanerConfig(target_column=2),
+            clean_words=(),
+            output_dir=tmp / "out",
+        )
+
+        cleaned = load_workbook(result.output_xlsx, read_only=True, data_only=True)
+        rows = list(cleaned["SheetA"].iter_rows(values_only=True))
+
+        self.assertEqual(
+            [
+                ("2026/01/02", "This monitor light works very well", 1),
+                ("2026/01/04", "esta lámpara funciona muy bien", 1),
+                ("2026/01/05", "\u0e42\u0e04\u0e21\u0e44\u0e1f\u0e15\u0e31\u0e49\u0e07\u0e42\u0e15\u0e4a\u0e30\u0e19\u0e35\u0e49\u0e14\u0e35\u0e21\u0e32\u0e01", 1),
+            ],
+            rows[1:],
+        )
+        self.assertEqual(2, result.rows_deleted)
+
+    def test_deletes_thai_hindi_and_spanish_fixed_spam_words(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-thai-hindi-spanish-fixed-contains"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "SheetA"
+        sheet.append(["date", "comment", "likes"])
+        sheet.append(["2026/01/01", "This monitor light works great on my desk", 1])
+        sheet.append(["2026/01/02", "pásame el link por favor", 1])
+        sheet.append(["2026/01/03", "\u0e02\u0e2d\u0e25\u0e34\u0e07\u0e01\u0e4c\u0e2a\u0e34\u0e19\u0e04\u0e49\u0e32\u0e2b\u0e19\u0e48\u0e2d\u0e22", 1])
+        sheet.append(["2026/01/04", "\u0932\u093f\u0902\u0915 \u092d\u0947\u091c\u094b \u092a\u094d\u0932\u0940\u091c", 1])
+        sheet.append(["2026/01/05", "\u0e42\u0e04\u0e21\u0e44\u0e1f\u0e19\u0e35\u0e49\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19\u0e14\u0e35\u0e21\u0e32\u0e01", 1])
+        workbook.save(input_path)
+
+        result = clean_workbook(
+            input_path=input_path,
+            config=CleanerConfig(target_column=2),
+            clean_words=(),
+            output_dir=tmp / "out",
+        )
+
+        cleaned = load_workbook(result.output_xlsx, read_only=True, data_only=True)
+        rows = list(cleaned["SheetA"].iter_rows(values_only=True))
+
+        self.assertEqual(
+            [
+                ("2026/01/01", "This monitor light works great on my desk", 1),
+                ("2026/01/05", "\u0e42\u0e04\u0e21\u0e44\u0e1f\u0e19\u0e35\u0e49\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19\u0e14\u0e35\u0e21\u0e32\u0e01", 1),
             ],
             rows[1:],
         )
