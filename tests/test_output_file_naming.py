@@ -137,6 +137,24 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertIn("product_name", tiktok_plan.missing_fields)
         self.assertEqual({}, tiktok_plan.filenames)
 
+    def test_product_override_does_not_open_input_workbook(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-output-name-product-override"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "TTCommentExporter-7371053582810008864-51-comments-replies.xlsx"
+        input_path.write_bytes(b"not an xlsx archive")
+
+        plan = build_naming_plan(
+            [input_path],
+            product_name="ScreenBar Series",
+            data_source="TikTok评论数据",
+            today=datetime(2026, 7, 10, 9, 30),
+        )
+
+        self.assertEqual("ScreenBar Series", plan.product_name)
+        self.assertEqual([], plan.product_candidates)
+        self.assertEqual([], plan.missing_fields)
+
+
 
 if __name__ == "__main__":
     unittest.main()

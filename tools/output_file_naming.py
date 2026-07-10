@@ -237,14 +237,20 @@ def build_naming_plan(
     today: datetime | None = None,
 ) -> NamingPlan:
     date_text = beijing_date_text(today)
-    source_candidates = source_candidates_from_paths(input_paths)
-    detected_source, source_candidates, source_ambiguous = choose_single(source_candidates, data_source)
+    if data_source:
+        detected_source, source_candidates, source_ambiguous = choose_single([], data_source)
+    else:
+        source_candidates = source_candidates_from_paths(input_paths)
+        detected_source, source_candidates, source_ambiguous = choose_single(source_candidates, None)
 
-    product_candidates = product_candidates_from_names(input_paths)
-    if not product_candidates:
-        for path in input_paths:
-            product_candidates.extend(product_candidates_from_workbook(path))
-    detected_product, product_candidates, product_ambiguous = choose_single(product_candidates, product_name)
+    if product_name:
+        detected_product, product_candidates, product_ambiguous = choose_single([], product_name)
+    else:
+        product_candidates = product_candidates_from_names(input_paths)
+        if not product_candidates:
+            for path in input_paths:
+                product_candidates.extend(product_candidates_from_workbook(path))
+        detected_product, product_candidates, product_ambiguous = choose_single(product_candidates, None)
 
     missing_fields: list[str] = []
     if not detected_product or product_ambiguous:
