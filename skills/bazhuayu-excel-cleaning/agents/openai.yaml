@@ -1,0 +1,7 @@
+interface:
+  display_name: "八爪鱼 Excel 评论清洗"
+  short_description: "确定性完成 Excel 评论合并、表头标准化与多语言数据清洗"
+  default_prompt: "Use $bazhuayu-excel-cleaning to process the provided Excel or CSV comment exports with the confirmed deterministic workflow."
+
+policy:
+  allow_implicit_invocation: true
