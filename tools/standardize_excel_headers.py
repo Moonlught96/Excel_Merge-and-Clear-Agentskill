@@ -508,7 +508,7 @@ def standardize_workbook(
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
 
-    input_workbook = load_workbook_for_processing(input_path, read_only=True, data_only=True)
+    input_workbook = load_workbook_for_processing(input_path, read_only=True, data_only=False)
     output_workbook = Workbook()
 
     sheet_summaries: list[SheetStandardizeSummary] = []
@@ -518,6 +518,8 @@ def standardize_workbook(
         sheet_summaries.append(standardize_sheet(source_sheet, output_sheet, config, today=today))
 
     output_workbook.save(output_xlsx)
+    input_workbook.close()
+    output_workbook.close()
 
     summary = {
         "input_path": str(input_path),

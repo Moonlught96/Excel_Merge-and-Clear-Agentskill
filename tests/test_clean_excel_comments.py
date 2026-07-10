@@ -99,6 +99,28 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(output_path.with_suffix(".csv").resolve(), result.output_csv)
         self.assertTrue(output_path.exists())
 
+    def test_clean_workbook_rejects_output_path_that_would_overwrite_input_file(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-clean-output-conflict"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "dirty.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["id", "name", "comment"])
+        sheet.append([1, "keep", "正常评论内容很完整"])
+        workbook.save(input_path)
+
+        with self.assertRaisesRegex(ValueError, "new workbook path"):
+            clean_workbook(
+                input_path=input_path,
+                config=CleanerConfig(),
+                clean_words=(),
+                output_path=input_path,
+            )
+
+        original = load_workbook(input_path, read_only=True, data_only=True)
+        self.assertEqual("正常评论内容很完整", original.active.cell(row=2, column=3).value)
+
     def test_comments_with_seven_or_fewer_characters_are_deleted(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-length-limit"
         tmp.mkdir(parents=True, exist_ok=True)

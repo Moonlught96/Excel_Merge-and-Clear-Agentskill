@@ -8,6 +8,11 @@ class WorkflowDocsTest(unittest.TestCase):
     def test_skill_records_validated_multi_file_workflow(self) -> None:
         skill = Path("skills/bazhuayu-excel-cleaning/SKILL.md").read_text(encoding="utf-8")
 
+        self.assertRegex(
+            skill,
+            r"\A---\nname: bazhuayu-excel-cleaning\ndescription: Use when ",
+        )
+
         self.assertIn("## Validated Multi-File Workflow", skill)
         self.assertIn("Confirm product name and data source once before merging.", skill)
         self.assertIn("Use `YYYYMMDD_产品名_数据来源_步骤名` for all main workbook filenames.", skill)
@@ -82,6 +87,7 @@ class WorkflowDocsTest(unittest.TestCase):
         self.assertIn(
             "After cleaned outputs are generated and verified, immediately delete intermediate workflow files",
             skill,
+        self.assertIn("Load workbook formulas as formulas (`data_only=False`)", skill)
         )
         self.assertIn("Do not ask for a separate cleanup confirmation after cleaning.", skill)
         self.assertIn("Delete cleaning logs and summary files by default unless the user explicitly asks to keep them for audit.", skill)
@@ -106,9 +112,14 @@ class WorkflowDocsTest(unittest.TestCase):
         )
         cleanup_command = (
             'python tools\\cleanup_intermediate_outputs.py --intermediate "<raw-merged.xlsx>" '
-            '--intermediate "<reply-prefix-stripped-merged.xlsx>" --intermediate "<confirmed-standardized.xlsx>" '
+            '--intermediate "<raw-merged.summary.json>" '
+            '--intermediate "<reply-prefix-stripped-merged.xlsx>" '
+            '--intermediate "<reply-prefix-stripped-merged.summary.json>" '
+            '--intermediate "<confirmed-standardized.xlsx>" '
+            '--intermediate "<confirmed-standardized.standardized.summary.json>" '
             '--intermediate "<confirmed-cleaned.deletions.csv>" --intermediate "<confirmed-cleaned.summary.json>" '
-            '--protect "<confirmed-cleaned.xlsx>" --protect "<confirmed-cleaned.csv>" --summary "<cleanup-summary.json>"'
+            '--protect "<original-input1.xlsx-or-csv>" --protect "<confirmed-cleaned.xlsx>" '
+            '--protect "<confirmed-cleaned.csv>"'
         )
 
         self.assertIn(merge_command, skill)
@@ -128,6 +139,14 @@ class WorkflowDocsTest(unittest.TestCase):
             skill.index("Return the standardized merged workbook and wait for the user to confirm it before cleaning."),
             skill.index(clean_command),
         )
+
+        readme = Path("README.md").read_text(encoding="utf-8")
+        self.assertNotIn("你确认清洗结果成功后", readme)
+        self.assertNotIn("你确认清洗成功后", readme)
+        self.assertIn("清洗后的 `.xlsx` 和 `.csv` 生成并核对成功后立即", readme)
+
+        gitignore = Path(".gitignore").read_text(encoding="utf-8")
+        self.assertIn("outputs/", gitignore)
 
     def test_agents_records_non_destructive_merge_then_standardize_flow(self) -> None:
         agents = Path("AGENTS.md").read_text(encoding="utf-8")
@@ -184,6 +203,10 @@ class WorkflowDocsTest(unittest.TestCase):
         self.assertIn("“暂无评价”", agents)
         self.assertIn("“蹲一个”", agents)
         self.assertIn("“交朋友”", agents)
+        self.assertIn("缺少必需标准列的已登记别名时必须停止", agents)
+        self.assertIn("未登记且不在保留清单内的额外列按删除规则省略", agents)
+        self.assertIn("不得猜测为标准列", agents)
+        self.assertNotIn("未知表头必须停止", agents)
         self.assertIn("“加v”以及英文固定清理词必须按大小写不敏感方式匹配", agents)
         self.assertIn("“link in bio”", agents)
         self.assertIn("“内容なし”", agents)

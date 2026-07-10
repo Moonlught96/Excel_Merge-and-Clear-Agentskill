@@ -94,6 +94,45 @@ class CleanupIntermediateOutputsTest(unittest.TestCase):
 
         self.assertTrue(cleaned_xlsx.exists())
 
+    def test_can_cleanup_without_creating_an_extra_summary_file(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-without-summary"
+        tmp.mkdir(parents=True, exist_ok=True)
+        intermediate = tmp / "standardized.xlsx"
+        cleaned_xlsx = tmp / "cleaned.xlsx"
+        intermediate.write_text("intermediate", encoding="utf-8")
+        cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+
+        try:
+            result = cleanup_intermediate_outputs(
+                intermediate_paths=[intermediate],
+                protected_paths=[cleaned_xlsx],
+                summary_path=None,
+            )
+        except Exception as error:  # pragma: no cover - makes the RED failure explicit
+            self.fail(f"summary_path=None should be supported: {error}")
+
+        self.assertIsNone(result.summary_json)
+        self.assertFalse(intermediate.exists())
+        self.assertTrue(cleaned_xlsx.exists())
+        self.assertEqual([], list(tmp.glob("*.json")))
+
+    def test_refuses_summary_path_that_would_overwrite_protected_output(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-summary-conflict"
+        tmp.mkdir(parents=True, exist_ok=True)
+        intermediate = tmp / "standardized.xlsx"
+        cleaned_xlsx = tmp / "cleaned.xlsx"
+        intermediate.write_text("intermediate", encoding="utf-8")
+        cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+
+        with self.assertRaisesRegex(ProtectedOutputError, "protected output"):
+            cleanup_intermediate_outputs(
+                intermediate_paths=[intermediate],
+                protected_paths=[cleaned_xlsx],
+                summary_path=cleaned_xlsx,
+            )
+
+        self.assertEqual("cleaned", cleaned_xlsx.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

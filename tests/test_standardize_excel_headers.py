@@ -285,6 +285,26 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(("2025-10", "Nine months old comment", None, 3, 0, None, None, None), rows[3])
         self.assertEqual(("2026-03", "Four months old comment", None, 4, 0, None, None, None), rows[4])
 
+    def test_preserves_formula_cells_in_retained_columns(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-preserves-formulas"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "SheetA"
+        sheet.append(["评论日期", "评论内容", "点赞数"])
+        sheet.append(["2026-07-08", "评论内容足够完整", "=1+1"])
+        workbook.save(input_path)
+
+        result = standardize_workbook(input_path, load_config(), output_dir=tmp / "out")
+
+        standardized = load_workbook(result.output_xlsx, read_only=True, data_only=False)
+        rows = list(standardized["SheetA"].iter_rows(values_only=True))
+        self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
+        self.assertEqual("=1+1", rows[1][3])
+
+
 
 if __name__ == "__main__":
     unittest.main()

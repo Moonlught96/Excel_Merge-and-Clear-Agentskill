@@ -50,6 +50,26 @@ class StripBilibiliReplyPrefixesTest(unittest.TestCase):
         self.assertEqual(3, summary["reply_prefixes_stripped"])
         self.assertEqual(["content"], summary["sheets"][0]["target_headers"])
 
+    def test_preserves_formula_cells_outside_the_content_column(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-strip-preserves-formulas"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "merged.xlsx"
+        output_path = tmp / "prefix-stripped.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "总表"
+        sheet.append(["content", "like_count", "timestamp"])
+        sheet.append(["回复@user：真实评论内容", "=1+1", "1547698468"])
+        workbook.save(input_path)
+
+        result = strip_bilibili_reply_prefixes(input_path, output_path)
+
+        normalized = load_workbook(result.output_xlsx, read_only=True, data_only=False)
+        self.assertEqual("真实评论内容", normalized["总表"].cell(row=2, column=1).value)
+        self.assertEqual("=1+1", normalized["总表"].cell(row=2, column=2).value)
+
+
 
 if __name__ == "__main__":
     unittest.main()

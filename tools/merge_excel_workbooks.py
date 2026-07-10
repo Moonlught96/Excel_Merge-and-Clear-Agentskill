@@ -101,7 +101,7 @@ def merge_workbooks(
     file_summaries: list[dict[str, Any]] = []
 
     for path in paths:
-        workbook = load_workbook_for_processing(path, read_only=True, data_only=True)
+        workbook = load_workbook_for_processing(path, read_only=True, data_only=False)
         file_rows = 0
         sheet_summaries: list[dict[str, Any]] = []
 
@@ -156,11 +156,13 @@ def merge_workbooks(
             }
         )
         data_rows_written += file_rows
+        workbook.close()
 
     if canonical_header is None:
         raise ValueError("No non-empty worksheets were found in the provided files.")
 
     output_workbook.save(output_path)
+    output_workbook.close()
     summary_path = output_path.with_suffix(".summary.json")
     summary = {
         "output_path": str(output_path),

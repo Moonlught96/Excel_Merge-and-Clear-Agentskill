@@ -607,10 +607,16 @@ def clean_workbook(
     output_dir: Path | None = None,
     output_path: Path | None = None,
 ) -> CleanResult:
+    input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
         raise ValueError(unsupported_input_message())
+    if not input_path.exists():
+        raise FileNotFoundError(input_path)
 
     output_xlsx, output_csv, deletion_log_csv, summary_json = make_output_paths(input_path, output_dir, output_path)
+    if output_xlsx.resolve() == input_path:
+        raise ValueError("Output path must be a new workbook path, not the input file.")
+
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
 
     workbook = load_workbook_for_processing(input_path, read_only=False, data_only=False)
@@ -659,6 +665,7 @@ def clean_workbook(
         "subcomment_min_trimmed_length": config.subcomment_min_trimmed_length,
     }
     summary_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    workbook.close()
 
     return CleanResult(
         input_path=input_path,

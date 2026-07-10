@@ -167,7 +167,7 @@ def strip_bilibili_reply_prefixes(
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
 
-    input_workbook = load_workbook_for_processing(input_path, read_only=True, data_only=True)
+    input_workbook = load_workbook_for_processing(input_path, read_only=True, data_only=False)
     output_workbook = Workbook()
 
     sheet_summaries: list[SheetStripSummary] = []
@@ -177,6 +177,8 @@ def strip_bilibili_reply_prefixes(
         sheet_summaries.append(strip_sheet_reply_prefixes(source_sheet, output_sheet, target_aliases))
 
     output_workbook.save(output_xlsx)
+    input_workbook.close()
+    output_workbook.close()
 
     summary = {
         "input_path": str(input_path),

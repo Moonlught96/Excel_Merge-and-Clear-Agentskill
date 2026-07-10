@@ -125,6 +125,23 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         self.assertEqual(2, result.files_processed)
         self.assertEqual(2, result.data_rows_written)
 
+    def test_preserves_formula_cells_instead_of_turning_them_into_blanks(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-merge-preserves-formulas"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "merged.xlsx"
+
+        write_workbook(
+            input_path,
+            {"main": [["评论日期", "评论内容", "点赞数"], ["2026-07-08", "评论内容足够完整", "=1+1"]]},
+        )
+
+        result = merge_workbooks([input_path], output_path)
+
+        merged = load_workbook(result.output_path, read_only=True, data_only=False)
+        self.assertEqual("=1+1", merged["总表"].cell(row=2, column=3).value)
+
+
 
 if __name__ == "__main__":
     unittest.main()

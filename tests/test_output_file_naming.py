@@ -112,6 +112,21 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual("20260707_ScreenBar系列_TikTok评论数据_合并总表.xlsx", tiktok_plan.filenames["merge"])
         self.assertEqual("20260707_ScreenBar系列_YouTube评论数据_合并总表.xlsx", youtube_plan.filenames["merge"])
 
+    def test_uses_bilibili_parent_folder_as_product_and_preserves_release_year(self) -> None:
+        plan = build_naming_plan(
+            [
+                Path(
+                    "D:/project/产品数据/2017_ScreenBar/B站/"
+                    "comments_BV1kt411h7i1_0ffa5872.csv"
+                )
+            ],
+            today=datetime(2026, 7, 8, 9, 30),
+        )
+
+        self.assertEqual("2017_ScreenBar", plan.product_name)
+        self.assertEqual("B站评论数据", plan.data_source)
+        self.assertEqual("20260708_2017_ScreenBar_B站评论数据_合并总表.xlsx", plan.filenames["merge"])
+
     def test_does_not_treat_platform_exporter_names_as_product_names(self) -> None:
         tiktok_plan = build_naming_plan(
             [Path("D:/专案/ScreenBar十周年专案/产品数据/Tiktok/TTCommentExporter-7371053582810008864-51-comments-replies.csv")],

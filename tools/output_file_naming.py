@@ -64,6 +64,8 @@ GENERIC_FILENAME_PATTERNS = (
     r"【[^】]+】",
     r"TTCommentExporter",
     r"yt-comments",
+    r"BV[0-9A-Za-z]+",
+    r"[0-9a-fA-F]{8}$",
     r"comments[-_ ]?replies",
     r"comments",
     r"根据链接采集笔记评论",
@@ -126,6 +128,18 @@ def normalize_stem_for_product(stem: str) -> str:
     return sanitize_filename_component(value)
 
 
+def normalize_parent_for_product(part: str) -> str:
+    value = part
+    for pattern in GENERIC_FILENAME_PATTERNS:
+        value = re.sub(pattern, "", value)
+    for keyword, source_name in SOURCE_RULES:
+        value = value.replace(source_name, "")
+        value = value.replace(keyword, "")
+    value = re.sub(r"[-_]+$", "", value)
+    value = re.sub(r"^[-_]+", "", value)
+    return sanitize_filename_component(value)
+
+
 def source_candidates_from_paths(paths: list[Path]) -> list[str]:
     candidates: list[str] = []
     for path in paths:
@@ -153,7 +167,7 @@ def product_candidates_from_names(paths: list[Path]) -> list[str]:
                 continue
             if any(keyword in part for keyword, _ in SOURCE_RULES):
                 continue
-            part_candidate = normalize_stem_for_product(part)
+            part_candidate = normalize_parent_for_product(part)
             if part_candidate:
                 candidates.append(part_candidate)
                 break
