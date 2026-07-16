@@ -7,11 +7,12 @@ Standardization outputs only these columns, in this exact order:
 1. `评论日期`
 2. `评论内容`
 3. `产品名`
-4. `点赞数`
-5. `子评论数/追评数`
-6. `一级评论`
-7. `二级评论`
-8. `三级评论`
+4. `哈希ID`
+5. `点赞数`
+6. `子评论数/追评数`
+7. `一级评论`
+8. `二级评论`
+9. `三级评论`
 
 Standardization must move the matched header and its complete column data together. It must not merely rename or reorder header text.
 
@@ -77,3 +78,13 @@ Unknown columns that are not configured standard aliases are omitted. They are n
 - Preserve formulas as formulas with `data_only=False`.
 - Export a separate standardized `.xlsx`.
 - Record selected, omitted, and configured dropped headers in `.standardized.summary.json`.
+
+## Hash ID Derivation
+
+- `哈希ID` is always generated; never map or preserve a source column named `哈希ID`.
+- Platform and research-project context are required when a registered real account-ID header is present.
+- Verified mappings: YouTube `author_channel_id`, `authorChannelId`, `Author Channel ID`; Xiaohongshu `用户ID`.
+- Bilibili, TikTok, Taobao, JD, and YouTube exports without a verified account-ID header keep the column blank.
+- `rpid`, `parent_rpid`, comment IDs, usernames, nicknames, and profile URLs are not account-ID substitutes.
+- Hashing uses project-scoped, platform-isolated HMAC-SHA256 and emits 64 lowercase hexadecimal characters.
+- The summary may contain project ID/name, platform, key version/fingerprint, source header, and counts. It must not contain the raw ID or secret key.

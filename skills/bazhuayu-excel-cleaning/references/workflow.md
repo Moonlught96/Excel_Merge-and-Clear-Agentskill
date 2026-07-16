@@ -4,7 +4,7 @@
 
 The fixed workflow is:
 
-1. Confirm product name, data source, and planned filenames once.
+1. Confirm research project name, product name, data source, and planned filenames once.
 2. Confirm whether the supplied file list is complete enough to enter merge or, for one file, whether it is the only intended input.
 3. Merge multiple raw inputs into a new raw merged workbook.
 4. Return the raw merged workbook and wait for merge-completion confirmation.
@@ -22,7 +22,7 @@ Do not collapse or reorder the confirmation gates.
 - If no file path is provided, ask the user to provide the files.
 - Accept `.xlsx`, `.xlsm`, and `.csv`.
 - Use only files explicitly provided by the user. Never scan a folder for additional files.
-- Confirm product name and data source once per workflow. Later phases change only the step name in the output filename.
+- Confirm research project name, product name, and data source once per workflow. Reuse the existing protected key until the user explicitly identifies a new research project. Later phases change only the step name in the output filename.
 
 ## Single-File Workflow
 

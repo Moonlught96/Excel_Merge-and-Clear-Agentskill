@@ -7,7 +7,7 @@ All confirmed merge, standardization, cleaning, naming, confirmation, output, an
 Examples of locked behavior include:
 
 - deterministic processing without AI data judgment;
-- the eight-column standard output order;
+- the nine-column standard output order including `哈希ID`;
 - Chinese main-comment threshold of 7 or fewer characters;
 - non-Chinese threshold of 4 or fewer words and unspaced fallback of 4 or fewer characters;
 - pure numeric legacy threshold;
@@ -62,3 +62,11 @@ Use `assets/rule-extension-template.md` to record:
 - Run the Skill bundle consistency check.
 - Run the isolated-copy smoke test.
 - Do not claim completion while any validation fails.
+
+## Adding A Verified User-ID Header
+
+1. Accept only an explicit platform account-ID field confirmed from the exporter schema; do not infer from values.
+2. Add it to the matching platform in `config/hash-id.json`.
+3. Never register comment IDs, parent IDs, usernames, nicknames, profile URLs, or ambiguous identity fields.
+4. Add positive, blank-fallback, cross-platform, and raw-ID non-disclosure tests.
+5. Synchronize the bundled scripts/config and update the header reference.

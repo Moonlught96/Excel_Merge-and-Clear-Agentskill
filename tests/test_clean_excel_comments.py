@@ -462,6 +462,29 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(0, result.rows_deleted)
         self.assertEqual(2, result.cells_cleared)
 
+    def test_cleaning_preserves_hash_id_column_values(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-preserve-hash-id"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "standardized.xlsx"
+        hash_id = "a" * 64
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容", "产品名", "哈希ID", "点赞数"])
+        sheet.append(["2026-07-16", "这是一条足够长的正常评论内容", "ScreenBar", hash_id, 3])
+        workbook.save(input_path)
+
+        result = clean_workbook(
+            input_path=input_path,
+            config=CleanerConfig(target_header="评论内容"),
+            clean_words=(),
+            output_dir=tmp / "out",
+        )
+        cleaned = load_workbook(result.output_xlsx, read_only=True, data_only=True)
+        rows = list(cleaned.active.iter_rows(values_only=True))
+        self.assertEqual(hash_id, rows[1][3])
+        csv_text = result.output_csv.read_text(encoding="utf-8-sig")
+        self.assertIn(hash_id, csv_text)
 
 if __name__ == "__main__":
     unittest.main()

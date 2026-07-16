@@ -17,6 +17,7 @@ EXPECTED_HEADERS = (
     "评论日期",
     "评论内容",
     "产品名",
+    "哈希ID",
     "点赞数",
     "子评论数/追评数",
     "一级评论",
@@ -82,7 +83,7 @@ class EndToEndWorkflowTest(unittest.TestCase):
             cleaned_workbook = load_workbook(cleaned, read_only=True, data_only=False)
             cleaned_rows = list(cleaned_workbook["总表"].iter_rows(values_only=True))
             self.assertEqual(EXPECTED_HEADERS, cleaned_rows[0])
-            self.assertEqual("=1+1", cleaned_rows[1][3])
+            self.assertEqual("=1+1", cleaned_rows[1][4])
             self.assertEqual("这是另一条足够长的正常回复内容", cleaned_rows[2][1])
             self.assertNotIn("user1", cleaned_rows[1])
             self.assertNotIn("未知", cleaned_rows[1])

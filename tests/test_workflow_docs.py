@@ -42,7 +42,7 @@ class WorkflowDocsTest(unittest.TestCase):
             "scripts/standardize_excel_headers.py",
             "scripts/clean_excel_comments.py",
             "scripts/cleanup_intermediate_outputs.py",
-            "`评论日期`、`评论内容`、`产品名`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
+            "`评论日期`、`评论内容`、`产品名`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
             "`评论日期与产品`",
             "`timestamp`",
             "`parent_rpid` is a parent-comment ID, not a subcomment count.",
@@ -74,7 +74,7 @@ class WorkflowDocsTest(unittest.TestCase):
 
         required_instructions = (
             "多文件流程必须先合并原始输入文件",
-            "合并之前必须先确认产品名和数据来源",
+            "合并之前必须先确认研究项目名、产品名和数据来源",
             "文件名格式固定为 `YYYYMMDD_产品名_数据来源_步骤名`",
             "同一流程只确认一次产品名和数据来源",
             "请确认以上产品名、数据来源和文件命名是否正确，并确认是否可以进入合并流程。",

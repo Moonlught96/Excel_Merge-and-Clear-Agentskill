@@ -3,6 +3,8 @@
 ## Naming And Merge Entry
 
 ```text
+研究项目名：{{RESEARCH_PROJECT_NAME}}
+是否为新研究项目：{{IS_NEW_RESEARCH_PROJECT}}
 产品名：{{PRODUCT_NAME}}
 数据来源：{{DATA_SOURCE}}
 合并总表：{{MERGED_FILENAME}}

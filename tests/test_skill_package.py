@@ -28,6 +28,8 @@ SCRIPT_FILES = (
     "compare_cleaned_workbooks.py",
     "csv_excel_compat.py",
     "merge_excel_workbooks.py",
+    "hash_id_project_store.py",
+    "hash_id_pseudonymizer.py",
     "output_file_naming.py",
     "standardize_excel_headers.py",
     "strip_bilibili_reply_prefixes.py",
@@ -35,6 +37,7 @@ SCRIPT_FILES = (
 
 CONFIG_FILES = (
     "comment-cleaner.json",
+    "hash-id.json",
     "header-standardizer.json",
 )
 
@@ -79,7 +82,7 @@ class SkillPackageTest(unittest.TestCase):
             "请确认以上产品名、数据来源和文件命名是否正确，并确认是否可以进入合并流程。",
             "是否已经提供并合并完所有需要合并的表格？你确认后我再进行标准化。",
             "是否已经提供完成所有 KOL 清理词？你确认后我再进行清洗。",
-            "`评论日期`、`评论内容`、`产品名`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
+            "`评论日期`、`评论内容`、`产品名`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
             "`评论日期与产品`",
             "Beijing date (`UTC+8`)",
             "Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.",
@@ -140,8 +143,8 @@ class SkillPackageTest(unittest.TestCase):
         cleaned_path = temp_root / "cleaned.xlsx"
         workbook = Workbook()
         sheet = workbook.active
-        sheet.append(["timestamp", "content", "like_count"])
-        sheet.append(["1678870952", "这个显示器挂灯使用体验确实很好", "2"])
+        sheet.append(["timestamp", "content", "like_count", "author_channel_id"])
+        sheet.append(["1678870952", "这个显示器挂灯使用体验确实很好", "2", "UC-portable-user"])
         workbook.save(input_path)
 
         subprocess.run(
@@ -151,6 +154,13 @@ class SkillPackageTest(unittest.TestCase):
                 str(input_path),
                 "--output",
                 str(standardized_path),
+                "--platform",
+                "YouTube",
+                "--project-name",
+                "portable-test-project",
+                "--initialize-project",
+                "--project-store",
+                str(temp_root / "project-store"),
             ],
             cwd=temp_root,
             check=True,
@@ -177,6 +187,7 @@ class SkillPackageTest(unittest.TestCase):
         self.assertEqual("评论日期", cleaned.active.cell(row=1, column=1).value)
         self.assertEqual("2023-03-15", cleaned.active.cell(row=2, column=1).value)
         self.assertEqual("这个显示器挂灯使用体验确实很好", cleaned.active.cell(row=2, column=2).value)
+        self.assertRegex(cleaned.active.cell(row=2, column=4).value, r"^[0-9a-f]{64}$")
 
         shutil.rmtree(temp_root)
 

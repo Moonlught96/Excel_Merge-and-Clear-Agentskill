@@ -17,11 +17,42 @@ try:
 except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
 
+try:
+    from tools.hash_id_pseudonymizer import (
+        DEFAULT_CONFIG_PATH as DEFAULT_HASH_ID_CONFIG_PATH,
+        HashIdConfig,
+        HashProjectContext,
+        InvalidUserIdError,
+        SelectedIdentityHeader,
+        hash_user_id,
+        load_hash_id_config,
+        normalize_platform,
+        select_user_id_header,
+    )
+except ModuleNotFoundError:
+    from hash_id_pseudonymizer import (
+        DEFAULT_CONFIG_PATH as DEFAULT_HASH_ID_CONFIG_PATH,
+        HashIdConfig,
+        HashProjectContext,
+        InvalidUserIdError,
+        SelectedIdentityHeader,
+        hash_user_id,
+        load_hash_id_config,
+        normalize_platform,
+        select_user_id_header,
+    )
+
+try:
+    from tools.hash_id_project_store import ProjectStore
+except ModuleNotFoundError:
+    from hash_id_project_store import ProjectStore
+
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "header-standardizer.json"
 COMMENT_DATE_AND_PRODUCT_HEADER = "评论日期与产品"
 COMMENT_DATE_HEADER = "评论日期"
 PRODUCT_NAME_HEADER = "产品名"
+HASH_ID_HEADER = "哈希ID"
 TIMESTAMP_HEADER = "timestamp"
 BEIJING_TZ = timezone(timedelta(hours=8))
 BEIJING_TIMESTAMP_FORMAT = "%Y-%m-%d"
@@ -68,6 +99,14 @@ class OutputPathConflictError(ValueError):
     pass
 
 
+class MissingHashContextError(ValueError):
+    pass
+
+
+class UnsafeUserIdValueError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class StandardColumn:
     header: str
@@ -90,12 +129,21 @@ class SelectedColumn:
 
 
 @dataclass(frozen=True)
+class HashIdSheetSummary:
+    source_header: str | None
+    source_column: int | None
+    hashed_count: int
+    blank_count: int
+
+
+@dataclass(frozen=True)
 class SheetStandardizeSummary:
     sheet_name: str
     data_rows_written: int
     selected_columns: tuple[SelectedColumn, ...]
     omitted_headers: tuple[str, ...]
     configured_drop_headers_found: tuple[str, ...]
+    hash_id: HashIdSheetSummary
 
 
 @dataclass(frozen=True)
@@ -393,6 +441,16 @@ def select_columns(headers: list[Any], config: HeaderStandardizerConfig) -> tupl
     selected: list[SelectedColumn] = []
 
     for output_column in config.output_columns:
+        if normalize_header(output_column.header) == normalize_header(HASH_ID_HEADER):
+            selected.append(
+                SelectedColumn(
+                    output_header=output_column.header,
+                    source_header=None,
+                    source_column=None,
+                )
+            )
+            continue
+
         alias_keys = [normalize_header(output_column.header)]
         alias_keys.extend(normalize_header(alias) for alias in output_column.aliases)
         matched_columns: list[int] = []
@@ -431,11 +489,56 @@ def select_columns(headers: list[Any], config: HeaderStandardizerConfig) -> tupl
     return tuple(selected)
 
 
+def _all_registered_identity_headers(config: HashIdConfig) -> set[str]:
+    return {
+        header
+        for platform_config in config.platforms
+        for header in platform_config.user_id_headers
+    }
+
+
+def resolve_identity_selection(
+    headers: list[Any],
+    platform: str | None,
+    hash_context: HashProjectContext | None,
+    hash_config: HashIdConfig,
+) -> tuple[str | None, SelectedIdentityHeader | None]:
+    registered_headers = _all_registered_identity_headers(hash_config)
+    present_registered_headers = [
+        header
+        for header in headers
+        if isinstance(header, str) and header in registered_headers
+    ]
+
+    if platform is None:
+        if hash_context is not None or present_registered_headers:
+            raise MissingHashContextError(
+                "A registered user ID column requires both platform and project context"
+            )
+        return None, None
+
+    canonical_platform = normalize_platform(platform, hash_config)
+    selected_identity = select_user_id_header(
+        headers,
+        canonical_platform,
+        hash_config,
+    )
+    if selected_identity is not None and hash_context is None:
+        raise MissingHashContextError(
+            "A registered user ID column requires both platform and project context"
+        )
+    return canonical_platform, selected_identity
+
+
 def standardize_sheet(
     source_sheet: Worksheet,
     output_sheet: Worksheet,
     config: HeaderStandardizerConfig,
     today: date | None = None,
+    *,
+    platform: str | None = None,
+    hash_context: HashProjectContext | None = None,
+    hash_config: HashIdConfig | None = None,
 ) -> SheetStandardizeSummary:
     header_values = next(
         source_sheet.iter_rows(
@@ -451,18 +554,71 @@ def standardize_sheet(
 
     headers = list(header_values)
     selected_columns = select_columns(headers, config)
-    selected_column_indexes = {column.source_column for column in selected_columns if column.source_column is not None}
+    effective_hash_config = hash_config if hash_config else load_hash_id_config()
+    canonical_platform, selected_identity = resolve_identity_selection(
+        headers,
+        platform,
+        hash_context,
+        effective_hash_config,
+    )
+    selected_column_indexes = {
+        column.source_column
+        for column in selected_columns
+        if column.source_column is not None
+    }
 
     output_sheet.append([column.output_header for column in selected_columns])
     data_rows_written = 0
+    hashed_count = 0
+    blank_count = 0
 
-    for row in source_sheet.iter_rows(
-        min_row=config.header_row + 1,
-        max_row=source_sheet.max_row,
-        max_col=source_sheet.max_column,
-        values_only=True,
+    for excel_row_number, row in enumerate(
+        source_sheet.iter_rows(
+            min_row=config.header_row + 1,
+            max_row=source_sheet.max_row,
+            max_col=source_sheet.max_column,
+            values_only=True,
+        ),
+        start=config.header_row + 1,
     ):
-        output_sheet.append([value_for_selected_column(row, column, today=today) for column in selected_columns])
+        output_row: list[Any] = []
+        for column in selected_columns:
+            if normalize_header(column.output_header) != normalize_header(HASH_ID_HEADER):
+                output_row.append(
+                    value_for_selected_column(row, column, today=today)
+                )
+                continue
+
+            if selected_identity is None:
+                output_row.append(None)
+                blank_count += 1
+                continue
+
+            raw_user_id = (
+                row[selected_identity.source_column - 1]
+                if selected_identity.source_column - 1 < len(row)
+                else None
+            )
+            try:
+                hashed_id = hash_user_id(
+                    raw_user_id,
+                    canonical_platform,
+                    hash_context,
+                    effective_hash_config,
+                )
+            except InvalidUserIdError as exc:
+                raise UnsafeUserIdValueError(
+                    f"Invalid user ID at sheet {source_sheet.title!r}, "
+                    f"row {excel_row_number}, header "
+                    f"{selected_identity.source_header!r}"
+                ) from exc
+            output_row.append(hashed_id)
+            if hashed_id is None:
+                blank_count += 1
+            else:
+                hashed_count += 1
+
+        output_sheet.append(output_row)
         data_rows_written += 1
 
     omitted_headers = tuple(
@@ -472,7 +628,9 @@ def standardize_sheet(
     )
     drop_header_keys = {normalize_header(header) for header in config.drop_headers}
     configured_drop_headers_found = tuple(
-        header for header in omitted_headers if normalize_header(header) in drop_header_keys
+        header
+        for header in omitted_headers
+        if normalize_header(header) in drop_header_keys
     )
 
     return SheetStandardizeSummary(
@@ -481,6 +639,20 @@ def standardize_sheet(
         selected_columns=selected_columns,
         omitted_headers=omitted_headers,
         configured_drop_headers_found=configured_drop_headers_found,
+        hash_id=HashIdSheetSummary(
+            source_header=(
+                selected_identity.source_header
+                if selected_identity is not None
+                else None
+            ),
+            source_column=(
+                selected_identity.source_column
+                if selected_identity is not None
+                else None
+            ),
+            hashed_count=hashed_count,
+            blank_count=blank_count,
+        ),
     )
 
 
@@ -490,6 +662,10 @@ def standardize_workbook(
     output_dir: Path | None = None,
     output_path: Path | None = None,
     today: date | None = None,
+    *,
+    platform: str | None = None,
+    hash_context: HashProjectContext | None = None,
+    hash_config: HashIdConfig | None = None,
 ) -> StandardizeResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -504,31 +680,70 @@ def standardize_workbook(
         summary_json = output_xlsx.with_suffix(".standardized.summary.json")
 
     if output_xlsx.resolve() == input_path:
-        raise OutputPathConflictError("Output path must be a new workbook path, not the input file.")
+        raise OutputPathConflictError(
+            "Output path must be a new workbook path, not the input file."
+        )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
+    effective_hash_config = hash_config if hash_config else load_hash_id_config()
+    canonical_platform = (
+        normalize_platform(platform, effective_hash_config)
+        if platform is not None
+        else None
+    )
 
-    input_workbook = load_workbook_for_processing(input_path, read_only=True, data_only=False)
+    input_workbook = load_workbook_for_processing(
+        input_path,
+        read_only=True,
+        data_only=False,
+    )
     output_workbook = Workbook()
-
     sheet_summaries: list[SheetStandardizeSummary] = []
-    for sheet_index, source_sheet in enumerate(input_workbook.worksheets):
-        output_sheet = output_workbook.active if sheet_index == 0 else output_workbook.create_sheet()
-        output_sheet.title = source_sheet.title
-        sheet_summaries.append(standardize_sheet(source_sheet, output_sheet, config, today=today))
-
-    output_workbook.save(output_xlsx)
-    input_workbook.close()
-    output_workbook.close()
+    try:
+        for sheet_index, source_sheet in enumerate(input_workbook.worksheets):
+            output_sheet = (
+                output_workbook.active
+                if sheet_index == 0
+                else output_workbook.create_sheet()
+            )
+            output_sheet.title = source_sheet.title
+            sheet_summaries.append(
+                standardize_sheet(
+                    source_sheet,
+                    output_sheet,
+                    config,
+                    today=today,
+                    platform=canonical_platform,
+                    hash_context=hash_context,
+                    hash_config=effective_hash_config,
+                )
+            )
+        output_workbook.save(output_xlsx)
+    finally:
+        input_workbook.close()
+        output_workbook.close()
 
     summary = {
         "input_path": str(input_path),
         "output_xlsx": str(output_xlsx),
         "sheets_processed": len(sheet_summaries),
-        "data_rows_written": sum(sheet.data_rows_written for sheet in sheet_summaries),
+        "data_rows_written": sum(
+            sheet.data_rows_written for sheet in sheet_summaries
+        ),
         "header_row": config.header_row,
         "output_headers": [column.header for column in config.output_columns],
         "drop_headers": list(config.drop_headers),
+        "hash_id": {
+            "enabled": hash_context is not None and canonical_platform is not None,
+            "platform": canonical_platform,
+            "project_id": hash_context.project_id if hash_context else None,
+            "project_name": hash_context.project_name if hash_context else None,
+            "key_version": hash_context.key_version if hash_context else None,
+            "key_fingerprint": (
+                hash_context.key_fingerprint if hash_context else None
+            ),
+            "algorithm_version": effective_hash_config.algorithm_version,
+        },
         "sheets": [
             {
                 "sheet_name": sheet.sheet_name,
@@ -541,41 +756,119 @@ def standardize_workbook(
                     }
                     for column in sheet.selected_columns
                 ],
-                "omitted_headers": [value_for_json(header) for header in sheet.omitted_headers],
-                "configured_drop_headers_found": [
-                    value_for_json(header) for header in sheet.configured_drop_headers_found
+                "omitted_headers": [
+                    value_for_json(header) for header in sheet.omitted_headers
                 ],
+                "configured_drop_headers_found": [
+                    value_for_json(header)
+                    for header in sheet.configured_drop_headers_found
+                ],
+                "hash_id": {
+                    "source_header": sheet.hash_id.source_header,
+                    "source_column": sheet.hash_id.source_column,
+                    "hashed_count": sheet.hash_id.hashed_count,
+                    "blank_count": sheet.hash_id.blank_count,
+                },
             }
             for sheet in sheet_summaries
         ],
     }
-    summary_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    summary_json.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     return StandardizeResult(
         input_path=input_path,
         output_xlsx=output_xlsx,
         summary_json=summary_json,
         sheets_processed=len(sheet_summaries),
-        data_rows_written=sum(sheet.data_rows_written for sheet in sheet_summaries),
+        data_rows_written=sum(
+            sheet.data_rows_written for sheet in sheet_summaries
+        ),
     )
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Standardize Bazhuayu Excel/CSV headers into a fixed safe schema.")
-    parser.add_argument("input_path", type=Path, help="需要整理表头的 .xlsx/.xlsm/.csv 文件")
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="表头标准化配置文件")
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Standardize Bazhuayu Excel/CSV headers into a fixed safe schema."
+    )
+    parser.add_argument(
+        "input_path",
+        type=Path,
+        help="需要整理表头的 .xlsx/.xlsm/.csv 文件",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG_PATH,
+        help="表头标准化配置文件",
+    )
     parser.add_argument("--output-dir", type=Path, default=None, help="输出目录")
-    parser.add_argument("--output", type=Path, default=None, help="输出 .xlsx 文件路径")
-    return parser.parse_args()
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="输出 .xlsx 文件路径",
+    )
+    parser.add_argument(
+        "--platform",
+        default=None,
+        help="已登记的数据平台，例如 YouTube 或 小红书",
+    )
+    project_group = parser.add_mutually_exclusive_group()
+    project_group.add_argument("--project-name", default=None)
+    project_group.add_argument("--project-id", default=None)
+    parser.add_argument(
+        "--initialize-project",
+        action="store_true",
+        help="首次使用项目名时创建受保护项目密钥",
+    )
+    parser.add_argument(
+        "--project-store",
+        type=Path,
+        default=None,
+        help="可选的项目密钥仓库目录",
+    )
+    parser.add_argument(
+        "--hash-config",
+        type=Path,
+        default=DEFAULT_HASH_ID_CONFIG_PATH,
+        help="哈希ID平台配置文件",
+    )
+    args = parser.parse_args(argv)
+
+    has_project_selector = bool(args.project_name or args.project_id)
+    if args.initialize_project and not args.project_name:
+        parser.error("--initialize-project requires --project-name")
+    if has_project_selector and not args.platform:
+        parser.error("a project selector requires --platform")
+    if args.platform and not has_project_selector:
+        parser.error("--platform requires --project-name or --project-id")
+    return args
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    hash_context = None
+    if args.project_name or args.project_id:
+        project_store = ProjectStore(registry_root=args.project_store)
+        if args.initialize_project:
+            hash_context = project_store.initialize_project(args.project_name)
+        else:
+            hash_context = project_store.load_project(
+                project_name=args.project_name,
+                project_id=args.project_id,
+            )
+
     result = standardize_workbook(
         input_path=args.input_path,
         config=load_config(args.config),
         output_dir=args.output_dir,
         output_path=args.output,
+        platform=args.platform,
+        hash_context=hash_context,
+        hash_config=load_hash_id_config(args.hash_config),
     )
     print(f"Standardized xlsx: {result.output_xlsx}")
     print(f"Summary: {result.summary_json}")

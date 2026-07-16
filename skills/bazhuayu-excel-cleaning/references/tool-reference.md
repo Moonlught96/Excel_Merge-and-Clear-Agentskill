@@ -7,7 +7,9 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - `scripts/output_file_naming.py`: deterministically discover product/source candidates and plan the three output names.
 - `scripts/merge_excel_workbooks.py`: merge explicit `.xlsx`, `.xlsm`, and `.csv` inputs into a new raw merged `.xlsx`.
 - `scripts/strip_bilibili_reply_prefixes.py`: remove only fixed B站 `回复@xxx：`/`回复 @xxx:` prefixes in a separate workbook.
-- `scripts/standardize_excel_headers.py`: map fixed aliases, reorder complete columns, convert configured dates, and omit non-standard columns.
+- `scripts/hash_id_pseudonymizer.py`: normalize verified account IDs and compute project/platform-isolated HMAC-SHA256 values.
+- `scripts/hash_id_project_store.py`: create/load protected project keys; Windows uses current-user DPAPI.
+- `scripts/standardize_excel_headers.py`: map fixed aliases, derive `哈希ID`, reorder complete columns, convert configured dates, and omit non-standard columns.
 - `scripts/clean_excel_comments.py`: apply deterministic main-comment, KOL, fixed-word, random-heap, duplicate, and subcomment rules.
 - `scripts/cleanup_intermediate_outputs.py`: delete only explicitly supplied current-run intermediates while protecting inputs and final outputs.
 - `scripts/compare_cleaned_workbooks.py`: optional audit-only workbook comparison; it is not part of the default workflow.
@@ -17,6 +19,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 
 - `config/comment-cleaner.json`: active cleaning thresholds, exact text, fixed contains terms, random-heap thresholds, duplicate policy, subcomment rules, and CSV encoding.
 - `config/header-standardizer.json`: exact standard output order, fixed aliases, required/optional columns, and known dropped headers.
+- `config/hash-id.json`: platform aliases and verified real account-ID headers; do not add ambiguous identity fields.
 
 ## Command Reference
 
@@ -41,7 +44,10 @@ python scripts\strip_bilibili_reply_prefixes.py "<raw-merged.xlsx>" --output "<r
 Standardize:
 
 ```powershell
-python scripts\standardize_excel_headers.py "<input.xlsx-or-csv>" --output "<confirmed-standardized.xlsx>"
+python scripts\standardize_excel_headers.py "<input.xlsx-or-csv>" --output "<confirmed-standardized.xlsx>" --platform "<platform>" --project-name "<research-project>"
+
+# Only when the user confirms this is a new research project:
+python scripts\standardize_excel_headers.py "<input.xlsx-or-csv>" --output "<confirmed-standardized.xlsx>" --platform "<platform>" --project-name "<research-project>" --initialize-project
 ```
 
 Clean without KOL words:

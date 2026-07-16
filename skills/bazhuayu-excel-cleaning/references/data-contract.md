@@ -22,10 +22,10 @@
 
 The standardized workbook contains exactly these columns in this order:
 
-`评论日期`、`评论内容`、`产品名`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`
+`评论日期`、`评论内容`、`产品名`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`
 
 - Move each matched source header and all values below it together. Standardization must not only rename header text.
-- Omit all non-configured columns, including nickname, account, ID, IP, profile, and link metadata.
+- Omit nickname, account name, raw ID, IP, profile, and link metadata. `哈希ID` is generated only from a verified platform account-ID header and never copied from the source.
 - Missing allowed columns remain present and blank according to the header-standardization reference.
 - Do not dynamically infer a fourth or deeper comment level.
 
@@ -57,3 +57,13 @@ The standardized workbook contains exactly these columns in this order:
 - Do not delete final cleaned `.xlsx` or `.csv` files.
 - Cleanup may delete only explicitly passed current-run intermediate paths.
 - Never scan a directory to decide what to delete.
+
+## Hash ID Pseudonymization Contract
+
+- `哈希ID` is deterministic pseudonymization, not legal anonymization.
+- Use HMAC-SHA256 with the protected key for the confirmed research project and a platform namespace.
+- The same project, platform, and raw account ID produces the same 64-character lowercase hexadecimal value. Different projects or platforms produce different values.
+- Current verified inputs are YouTube `author_channel_id`, `authorChannelId`, `Author Channel ID`, and Xiaohongshu `用户ID`.
+- Never hash comment IDs, parent IDs, usernames, nicknames, profile URLs, or a source-provided `哈希ID`. If no verified account ID exists, leave `哈希ID` blank.
+- Do not expose the raw ID or secret key in output, logs, summaries, errors, tests, or Git. Keep raw source files access-controlled.
+- The transformation and header selection are deterministic tools only; do not use AI.

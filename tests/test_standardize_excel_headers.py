@@ -7,13 +7,45 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
-from tools.standardize_excel_headers import HeaderNotFoundError, load_config, standardize_workbook
+from tools.hash_id_pseudonymizer import HashProjectContext, load_hash_id_config
+from tools.standardize_excel_headers import (
+    HeaderNotFoundError,
+    MissingHashContextError,
+    UnsafeUserIdValueError,
+    load_config,
+    standardize_workbook,
+)
 
 
-EXPECTED_HEADER = ["评论日期", "评论内容", "产品名", "点赞数", "子评论数/追评数", "一级评论", "二级评论", "三级评论"]
+EXPECTED_HEADER = ["评论日期", "评论内容", "产品名", "哈希ID", "点赞数", "子评论数/追评数", "一级评论", "二级评论", "三级评论"]
 
 
 class StandardizeExcelHeadersTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.hash_context = HashProjectContext(
+            project_id="project-screenbar",
+            project_name="ScreenBar",
+            key_version=1,
+            key_fingerprint="test-fingerprint",
+            secret_key=b"k" * 32,
+        )
+        self.hash_config = load_hash_id_config()
+
+    def standardize_with_hash(
+        self,
+        input_path: Path,
+        output_dir: Path,
+        platform: str,
+    ):
+        return standardize_workbook(
+            input_path,
+            load_config(),
+            output_dir=output_dir,
+            platform=platform,
+            hash_context=self.hash_context,
+            hash_config=self.hash_config,
+        )
+
     def test_standardizes_header_order_and_removes_risk_columns(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-headers"
         tmp.mkdir(parents=True, exist_ok=True)
@@ -33,7 +65,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2026/01/05", "评论 A", None, 3, 2, "一级 A", "二级 A", None), rows[1])
+        self.assertEqual(("2026/01/05", "评论 A", None, None, 3, 2, "一级 A", "二级 A", None), rows[1])
         self.assertTrue(result.summary_json.exists())
 
         original = load_workbook(input_path, read_only=True, data_only=True)
@@ -76,7 +108,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(
-            ("2026年6月21日", "评论 A", "触摸开关 / 黑", 3, 2, "一级 A", "二级 A", "三级 A"),
+            ("2026年6月21日", "评论 A", "触摸开关 / 黑", None, 3, 2, "一级 A", "二级 A", "三级 A"),
             rows[1],
         )
 
@@ -97,7 +129,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2026/06/21", "评论 A", "无线护眼屏幕挂灯", 3, 2, "一级 A", "二级 A", "三级 A"), rows[1])
+        self.assertEqual(("2026/06/21", "评论 A", "无线护眼屏幕挂灯", None, 3, 2, "一级 A", "二级 A", "三级 A"), rows[1])
 
     def test_maps_confirmed_taobao_aliases_to_standard_columns(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-confirmed-taobao-aliases"
@@ -117,7 +149,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(
-            ("2026年2月12日", "评论 A", "浅灰色[MA270U(27英寸4K)]", 3, 5, "追评 A", None, None),
+            ("2026年2月12日", "评论 A", "浅灰色[MA270U(27英寸4K)]", None, 3, 5, "追评 A", None, None),
             rows[1],
         )
 
@@ -138,7 +170,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2023-03-15", "评论 A", None, 2, 0, None, None, None), rows[1])
+        self.assertEqual(("2023-03-15", "评论 A", None, None, 2, 0, None, None, None), rows[1])
 
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         self.assertEqual(
@@ -163,7 +195,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2023-03-15", "评论 A", None, "2", None, None, None, None), rows[1])
+        self.assertEqual(("2023-03-15", "评论 A", None, None, "2", None, None, None, None), rows[1])
 
     def test_standardizes_csv_input_with_same_header_mapping_rules(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-csv-input"
@@ -180,7 +212,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["raw"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2023-03-15", "评论 A", None, "2", "0", None, None, None), rows[1])
+        self.assertEqual(("2023-03-15", "评论 A", None, None, "2", "0", None, None, None), rows[1])
 
     def test_maps_tiktok_comment_exporter_aliases_without_ai(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-aliases"
@@ -197,7 +229,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["raw"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2023-03-15", "This monitor light works great", None, "4", "7", None, None, None), rows[1])
+        self.assertEqual(("2023-03-15", "This monitor light works great", None, None, "4", "7", None, None, None), rows[1])
 
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         self.assertEqual(["id", "uniqueId"], summary["sheets"][0]["configured_drop_headers_found"])
@@ -217,7 +249,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["raw"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2023-03-15", "This monitor light works great", None, "4", "7", None, None, None), rows[1])
+        self.assertEqual(("2023-03-15", "This monitor light works great", None, None, "4", "7", None, None, None), rows[1])
 
     def test_maps_confirmed_tiktok_chinese_datetime_without_time_output(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-chinese-datetime"
@@ -234,7 +266,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["raw"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2026-07-07", "This monitor light works great", None, "4", "7", None, None, None), rows[1])
+        self.assertEqual(("2026-07-07", "This monitor light works great", None, None, "4", "7", None, None, None), rows[1])
 
     def test_maps_youtube_comment_aliases_and_iso_time_to_beijing_date(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-youtube-aliases"
@@ -253,7 +285,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2026-07-09", "Great light for my desk", None, 12, 3, "Thanks for sharing", None, None), rows[1])
+        self.assertEqual(("2026-07-09", "Great light for my desk", None, None, 12, 3, "Thanks for sharing", None, None), rows[1])
 
     def test_maps_youtube_relative_published_at_to_beijing_year_or_month(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-youtube-relative-published-at"
@@ -280,11 +312,102 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2025", "One year old comment", None, 1, 0, None, None, None), rows[1])
-        self.assertEqual(("2024", "Two years old comment", None, 2, 0, None, None, None), rows[2])
-        self.assertEqual(("2025-10", "Nine months old comment", None, 3, 0, None, None, None), rows[3])
-        self.assertEqual(("2026-03", "Four months old comment", None, 4, 0, None, None, None), rows[4])
+        self.assertEqual(("2025", "One year old comment", None, None, 1, 0, None, None, None), rows[1])
+        self.assertEqual(("2024", "Two years old comment", None, None, 2, 0, None, None, None), rows[2])
+        self.assertEqual(("2025-10", "Nine months old comment", None, None, 3, 0, None, None, None), rows[3])
+        self.assertEqual(("2026-03", "Four months old comment", None, None, 4, 0, None, None, None), rows[4])
 
+    def test_hashes_verified_youtube_user_id_without_exposing_raw_id_in_summary(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-user-id"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "SheetA"
+        sheet.append(["publishedAt", "commentText", "likeCount", "author_channel_id"])
+        sheet.append(["2026-07-08T23:30:00Z", "Great light for my desk", 12, "UC-secret-user"])
+        workbook.save(input_path)
+
+        result = self.standardize_with_hash(input_path, tmp / "out", "YouTube")
+        standardized = load_workbook(result.output_xlsx, read_only=True, data_only=True)
+        rows = list(standardized["SheetA"].iter_rows(values_only=True))
+
+        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
+        summary_text = result.summary_json.read_text(encoding="utf-8")
+        self.assertNotIn("UC-secret-user", summary_text)
+        summary = json.loads(summary_text)
+        self.assertEqual("youtube", summary["hash_id"]["platform"])
+        self.assertEqual("author_channel_id", summary["sheets"][0]["hash_id"]["source_header"])
+        self.assertEqual(1, summary["sheets"][0]["hash_id"]["hashed_count"])
+
+    def test_hashes_xiaohongshu_user_id_stably_across_runs(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-hash-xiaohongshu-user-id"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容", "点赞数", "用户ID"])
+        sheet.append(["2026-07-08", "评论内容足够完整", 3, "xhs-user-001"])
+        workbook.save(input_path)
+
+        first = self.standardize_with_hash(input_path, tmp / "first", "小红书")
+        second = self.standardize_with_hash(input_path, tmp / "second", "xiaohongshu")
+        first_rows = list(load_workbook(first.output_xlsx, read_only=True, data_only=True).active.iter_rows(values_only=True))
+        second_rows = list(load_workbook(second.output_xlsx, read_only=True, data_only=True).active.iter_rows(values_only=True))
+        self.assertEqual(first_rows[1][3], second_rows[1][3])
+
+    def test_leaves_hash_blank_for_unverified_tiktok_and_bilibili_fields(self) -> None:
+        cases = [
+            ("tiktok", ["评论ID", "用户身份", "评论", "评论时间", "Digg Count"], ["1001", "user-a", "Long enough comment", "1678870952", "4"]),
+            ("bilibili", ["rpid", "parent_rpid", "username", "content", "like_count", "timestamp"], ["1001", "0", "user-a", "评论内容足够完整", "4", "1678870952"]),
+        ]
+        for platform, headers, row in cases:
+            with self.subTest(platform=platform):
+                tmp = Path.cwd() / ".tmp-tests" / f"case-hash-blank-{platform}"
+                tmp.mkdir(parents=True, exist_ok=True)
+                input_path = tmp / "raw.xlsx"
+                workbook = Workbook()
+                sheet = workbook.active
+                sheet.append(headers)
+                sheet.append(row)
+                workbook.save(input_path)
+                result = self.standardize_with_hash(input_path, tmp / "out", platform)
+                rows = list(load_workbook(result.output_xlsx, read_only=True, data_only=True).active.iter_rows(values_only=True))
+                self.assertIsNone(rows[1][3])
+
+    def test_registered_real_user_id_requires_platform_and_project_context(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-hash-context-required"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["publishedAt", "commentText", "likeCount", "author_channel_id"])
+        sheet.append(["2026-07-08T23:30:00Z", "Great light for my desk", 12, "UC-secret-user"])
+        workbook.save(input_path)
+
+        with self.assertRaises(MissingHashContextError):
+            standardize_workbook(input_path, load_config(), output_dir=tmp / "without-context")
+
+    def test_invalid_user_id_error_reports_location_without_raw_value(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-invalid-hash-user-id"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Comments"
+        sheet.append(["publishedAt", "commentText", "likeCount", "author_channel_id"])
+        sheet.append(["2026-07-08T23:30:00Z", "Great light for my desk", 12, "=SECRET_RAW_ID"])
+        workbook.save(input_path)
+
+        with self.assertRaises(UnsafeUserIdValueError) as raised:
+            self.standardize_with_hash(input_path, tmp / "out", "youtube")
+        message = str(raised.exception)
+        self.assertIn("Comments", message)
+        self.assertIn("row 2", message)
+        self.assertIn("author_channel_id", message)
+        self.assertNotIn("SECRET_RAW_ID", message)
     def test_preserves_formula_cells_in_retained_columns(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-preserves-formulas"
         tmp.mkdir(parents=True, exist_ok=True)
@@ -302,7 +425,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         standardized = load_workbook(result.output_xlsx, read_only=True, data_only=False)
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual("=1+1", rows[1][3])
+        self.assertEqual("=1+1", rows[1][4])
 
 
 

@@ -54,6 +54,11 @@
       "required": false
     },
     {
+      "header": "哈希ID",
+      "aliases": [],
+      "required": false
+    },
+    {
       "header": "点赞数",
       "aliases": [
         "点赞数",
