@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = PROJECT_ROOT / "skills" / "bazhuayu-excel-cleaning"
+SKILL_ROOT = PROJECT_ROOT / "skills" / "product-user-comment-data-merge-cleaning"
 
 SCRIPT_FILES = (
     "cleanup_intermediate_outputs.py",
@@ -14,6 +14,8 @@ SCRIPT_FILES = (
     "compare_cleaned_workbooks.py",
     "csv_excel_compat.py",
     "merge_excel_workbooks.py",
+    "hash_id_project_store.py",
+    "hash_id_pseudonymizer.py",
     "output_file_naming.py",
     "standardize_excel_headers.py",
     "strip_bilibili_reply_prefixes.py",
@@ -21,6 +23,7 @@ SCRIPT_FILES = (
 
 CONFIG_FILES = (
     "comment-cleaner.json",
+    "hash-id.json",
     "header-standardizer.json",
 )
 

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 
-SKILL_ROOT = Path("skills/bazhuayu-excel-cleaning")
+SKILL_ROOT = Path("skills/product-user-comment-data-merge-cleaning")
 
 
 class SkillReferenceCoverageTest(unittest.TestCase):

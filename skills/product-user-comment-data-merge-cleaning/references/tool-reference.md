@@ -84,7 +84,7 @@ From the project root during development:
 ```powershell
 python tools\sync_skill_bundle.py --check
 python -m unittest discover -s tests
-python -m compileall tools skills\bazhuayu-excel-cleaning\scripts tests
+python -m compileall tools skills\product-user-comment-data-merge-cleaning\scripts tests
 git diff --check
 ```
 

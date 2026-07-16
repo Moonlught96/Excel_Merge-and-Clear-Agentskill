@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 
-SKILL_ROOT = Path("skills/bazhuayu-excel-cleaning")
+SKILL_ROOT = Path("skills/product-user-comment-data-merge-cleaning")
 REFERENCE_FILES = (
     "workflow.md",
     "data-contract.md",
@@ -27,7 +27,7 @@ class WorkflowDocsTest(unittest.TestCase):
 
         self.assertRegex(
             skill,
-            r"\A---\nname: bazhuayu-excel-cleaning\ndescription: Use when ",
+            r"\A---\nname: product-user-comment-data-merge-cleaning\ndescription: Use when ",
         )
 
         required_contract = (

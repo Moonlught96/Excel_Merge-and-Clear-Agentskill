@@ -185,7 +185,7 @@ def merge_workbooks(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Merge explicit Bazhuayu Excel/CSV files into one workbook.")
+    parser = argparse.ArgumentParser(description="Merge explicitly provided user-comment Excel/CSV files into one workbook.")
     parser.add_argument("input_paths", type=Path, nargs="+", help="Explicit .xlsx/.xlsm/.csv files to merge.")
     parser.add_argument("--output", type=Path, default=None, help="Output .xlsx path.")
     parser.add_argument(

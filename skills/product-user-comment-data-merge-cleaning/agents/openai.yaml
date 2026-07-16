@@ -1,0 +1,7 @@
+interface:
+  display_name: "产品用户评论数据合并与清洗 Skill"
+  short_description: "为抓取的大量用户评论数据进行文档合并、标准化和清洗，并输出 XLSX 与 CSV"
+  default_prompt: "Use $product-user-comment-data-merge-cleaning to merge, standardize, and clean the provided user-comment Excel or CSV files, then return XLSX and CSV outputs."
+
+policy:
+  allow_implicit_invocation: true

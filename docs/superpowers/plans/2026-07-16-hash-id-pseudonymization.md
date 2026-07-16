@@ -21,8 +21,8 @@
 - Modify `tests/test_standardize_excel_headers.py`: nine-column contract and workbook/CSV integration tests.
 - Modify `tests/test_clean_excel_comments.py`: verify `哈希ID` survives row cleaning and CSV export.
 - Modify `tests/test_skill_package.py`: require new scripts/config/reference coverage and independent-copy execution.
-- Mirror executable files under `skills/bazhuayu-excel-cleaning/scripts/` and `skills/bazhuayu-excel-cleaning/config/`.
-- Modify `skills/bazhuayu-excel-cleaning/SKILL.md`, references, assets, `README.md`, and `AGENTS.md`: document project confirmation, privacy boundary, field mappings, and invocation.
+- Mirror executable files under `skills/product-user-comment-data-merge-cleaning/scripts/` and `skills/product-user-comment-data-merge-cleaning/config/`.
+- Modify `skills/product-user-comment-data-merge-cleaning/SKILL.md`, references, assets, `README.md`, and `AGENTS.md`: document project confirmation, privacy boundary, field mappings, and invocation.
 
 ### Task 1: Pure Hash ID Transformation
 
@@ -391,11 +391,11 @@ git commit -m "接入哈希ID项目确认与命令入口"
 **Files:**
 - Modify: `tests/test_clean_excel_comments.py`
 - Modify: `tests/test_skill_package.py`
-- Create: `skills/bazhuayu-excel-cleaning/scripts/hash_id_pseudonymizer.py`
-- Create: `skills/bazhuayu-excel-cleaning/scripts/hash_id_project_store.py`
-- Create: `skills/bazhuayu-excel-cleaning/config/hash-id.json`
-- Modify: `skills/bazhuayu-excel-cleaning/scripts/standardize_excel_headers.py`
-- Modify: `skills/bazhuayu-excel-cleaning/config/header-standardizer.json`
+- Create: `skills/product-user-comment-data-merge-cleaning/scripts/hash_id_pseudonymizer.py`
+- Create: `skills/product-user-comment-data-merge-cleaning/scripts/hash_id_project_store.py`
+- Create: `skills/product-user-comment-data-merge-cleaning/config/hash-id.json`
+- Modify: `skills/product-user-comment-data-merge-cleaning/scripts/standardize_excel_headers.py`
+- Modify: `skills/product-user-comment-data-merge-cleaning/config/header-standardizer.json`
 
 - [ ] **Step 1: Write failing cleaning and package tests**
 
@@ -429,7 +429,7 @@ Expected: all tests PASS, including independent-copy execution.
 - [ ] **Step 5: Commit portable package behavior**
 
 ```bash
-git add tests/test_clean_excel_comments.py tests/test_skill_package.py skills/bazhuayu-excel-cleaning
+git add tests/test_clean_excel_comments.py tests/test_skill_package.py skills/product-user-comment-data-merge-cleaning
 git commit -m "同步可移植哈希ID标准化工具"
 ```
 
@@ -438,14 +438,14 @@ git commit -m "同步可移植哈希ID标准化工具"
 **Files:**
 - Modify: `AGENTS.md`
 - Modify: `README.md`
-- Modify: `skills/bazhuayu-excel-cleaning/SKILL.md`
-- Modify: `skills/bazhuayu-excel-cleaning/references/workflow.md`
-- Modify: `skills/bazhuayu-excel-cleaning/references/data-contract.md`
-- Modify: `skills/bazhuayu-excel-cleaning/references/header-standardization.md`
-- Modify: `skills/bazhuayu-excel-cleaning/references/tool-reference.md`
-- Modify: `skills/bazhuayu-excel-cleaning/references/extension-policy.md`
-- Modify: `skills/bazhuayu-excel-cleaning/assets/workflow-confirmation-template.md`
-- Modify: `skills/bazhuayu-excel-cleaning/assets/rule-extension-template.md`
+- Modify: `skills/product-user-comment-data-merge-cleaning/SKILL.md`
+- Modify: `skills/product-user-comment-data-merge-cleaning/references/workflow.md`
+- Modify: `skills/product-user-comment-data-merge-cleaning/references/data-contract.md`
+- Modify: `skills/product-user-comment-data-merge-cleaning/references/header-standardization.md`
+- Modify: `skills/product-user-comment-data-merge-cleaning/references/tool-reference.md`
+- Modify: `skills/product-user-comment-data-merge-cleaning/references/extension-policy.md`
+- Modify: `skills/product-user-comment-data-merge-cleaning/assets/workflow-confirmation-template.md`
+- Modify: `skills/product-user-comment-data-merge-cleaning/assets/rule-extension-template.md`
 - Modify: `tests/test_skill_package.py`
 
 - [ ] **Step 1: Add failing documentation coverage assertions**
@@ -488,7 +488,7 @@ Expected: all tests PASS.
 - [ ] **Step 5: Commit documentation and policy updates**
 
 ```bash
-git add AGENTS.md README.md skills/bazhuayu-excel-cleaning tests/test_skill_package.py
+git add AGENTS.md README.md skills/product-user-comment-data-merge-cleaning tests/test_skill_package.py
 git commit -m "固化哈希ID隐私与项目确认规则"
 ```
 
@@ -505,7 +505,7 @@ Expected: all tests PASS with no unexpected warnings or tracebacks.
 
 - [ ] **Step 2: Run syntax compilation for project and Skill scripts**
 
-Run: `python -m compileall -q tools skills/bazhuayu-excel-cleaning/scripts`
+Run: `python -m compileall -q tools skills/product-user-comment-data-merge-cleaning/scripts`
 
 Expected: exit code 0.
 

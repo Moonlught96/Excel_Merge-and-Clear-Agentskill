@@ -1,9 +1,13 @@
 ---
-name: bazhuayu-excel-cleaning
-description: Use when handling Bazhuayu/Octoparse or platform-exported Excel and CSV comment data that must be merged, standardized, cleaned, renamed, or extended through deterministic rules without AI data judgment.
+name: product-user-comment-data-merge-cleaning
+description: Use when one or more Excel or CSV files containing collected user comments need deterministic processing, privacy-safe standardization, cleaning, or reusable workflow extensions.
 ---
 
-# Bazhuayu Excel Cleaning
+# 产品用户评论数据合并与清洗 Skill
+
+**功能描述：** 为抓取的大量用户评论数据进行文档合并、标准化和清洗工作，并输出为 XLSX 与 CSV 格式文档。
+
+**输入描述：** 目前输入不受限制，支持 Excel 与 CSV 文件。
 
 ## Skill Responsibilities
 
@@ -80,4 +84,4 @@ Retain logs or summaries only when the user requested them before cleaning. Neve
 - `assets/`: reusable confirmation and rule-extension templates.
 - `agents/openai.yaml`: Agent interface metadata.
 
-This Skill folder is self-contained. It must remain runnable after the entire `bazhuayu-excel-cleaning` directory is copied outside this repository.
+This Skill folder is self-contained. It must remain runnable after the entire `product-user-comment-data-merge-cleaning` directory is copied outside this repository.

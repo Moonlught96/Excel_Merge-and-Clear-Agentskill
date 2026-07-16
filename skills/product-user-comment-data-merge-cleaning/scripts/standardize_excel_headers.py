@@ -791,7 +791,7 @@ def standardize_workbook(
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Standardize Bazhuayu Excel/CSV headers into a fixed safe schema."
+        description="Standardize user-comment Excel/CSV headers into a fixed safe schema."
     )
     parser.add_argument(
         "input_path",

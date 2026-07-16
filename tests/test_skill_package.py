@@ -10,7 +10,8 @@ from openpyxl import Workbook, load_workbook
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = PROJECT_ROOT / "skills" / "bazhuayu-excel-cleaning"
+SKILL_NAME = "product-user-comment-data-merge-cleaning"
+SKILL_ROOT = PROJECT_ROOT / "skills" / SKILL_NAME
 
 REFERENCE_FILES = (
     "workflow.md",
@@ -60,7 +61,16 @@ class SkillPackageTest(unittest.TestCase):
     def test_skill_entrypoint_is_concise_and_uses_progressive_disclosure(self) -> None:
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
 
-        self.assertRegex(skill, r"\A---\nname: bazhuayu-excel-cleaning\ndescription: Use when ")
+        self.assertRegex(
+            skill,
+            r"\A---\nname: product-user-comment-data-merge-cleaning\ndescription: Use when ",
+        )
+        self.assertIn("# 产品用户评论数据合并与清洗 Skill", skill)
+        self.assertIn(
+            "为抓取的大量用户评论数据进行文档合并、标准化和清洗工作，并输出为 XLSX 与 CSV 格式文档。",
+            skill,
+        )
+        self.assertIn("目前输入不受限制，支持 Excel 与 CSV 文件。", skill)
         self.assertLessEqual(len(skill.splitlines()), 180)
         for heading in ("## Skill Responsibilities", "## Trigger Scenarios", "## Execution Steps", "## Output Standard"):
             self.assertIn(heading, skill)
@@ -118,6 +128,13 @@ class SkillPackageTest(unittest.TestCase):
             bundled_source = (SKILL_ROOT / "config" / filename).read_bytes()
             self.assertEqual(project_source, bundled_source, f"Bundled config is stale: {filename}")
 
+    def test_sync_tool_covers_all_bundled_scripts_and_configs(self) -> None:
+        sync_tool = (PROJECT_ROOT / "tools" / "sync_skill_bundle.py").read_text(
+            encoding="utf-8"
+        )
+
+        for filename in (*SCRIPT_FILES, *CONFIG_FILES):
+            self.assertIn(f'"{filename}"', sync_tool, f"Sync tool omits: {filename}")
     def test_project_instructions_enforce_standard_skill_packaging(self) -> None:
         agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
@@ -134,7 +151,7 @@ class SkillPackageTest(unittest.TestCase):
         temp_root = PROJECT_ROOT / ".tmp-tests" / "standalone-skill"
         if temp_root.exists():
             shutil.rmtree(temp_root)
-        copied_skill = temp_root / "bazhuayu-excel-cleaning"
+        copied_skill = temp_root / SKILL_NAME
         copied_skill.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(SKILL_ROOT, copied_skill)
 

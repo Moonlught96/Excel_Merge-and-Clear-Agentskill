@@ -680,7 +680,7 @@ def clean_workbook(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="清洗八爪鱼导出的 Excel/CSV 评论表")
+    parser = argparse.ArgumentParser(description="清洗抓取或导出的用户评论 Excel/CSV 表")
     parser.add_argument("input_path", type=Path, help="需要清洗的 .xlsx/.xlsm/.csv 文件")
     parser.add_argument(
         "--config",

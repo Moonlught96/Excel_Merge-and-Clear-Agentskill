@@ -23,15 +23,15 @@
 ### Task 2: Create the standardized Skill documentation
 
 **Files:**
-- Modify: `skills/bazhuayu-excel-cleaning/SKILL.md`
-- Create: `skills/bazhuayu-excel-cleaning/agents/openai.yaml`
-- Create: `skills/bazhuayu-excel-cleaning/references/workflow.md`
-- Create: `skills/bazhuayu-excel-cleaning/references/data-contract.md`
-- Create: `skills/bazhuayu-excel-cleaning/references/header-standardization.md`
-- Create: `skills/bazhuayu-excel-cleaning/references/cleaning-rules.md`
-- Create: `skills/bazhuayu-excel-cleaning/references/naming-and-retention.md`
-- Create: `skills/bazhuayu-excel-cleaning/references/tool-reference.md`
-- Create: `skills/bazhuayu-excel-cleaning/references/extension-policy.md`
+- Modify: `skills/product-user-comment-data-merge-cleaning/SKILL.md`
+- Create: `skills/product-user-comment-data-merge-cleaning/agents/openai.yaml`
+- Create: `skills/product-user-comment-data-merge-cleaning/references/workflow.md`
+- Create: `skills/product-user-comment-data-merge-cleaning/references/data-contract.md`
+- Create: `skills/product-user-comment-data-merge-cleaning/references/header-standardization.md`
+- Create: `skills/product-user-comment-data-merge-cleaning/references/cleaning-rules.md`
+- Create: `skills/product-user-comment-data-merge-cleaning/references/naming-and-retention.md`
+- Create: `skills/product-user-comment-data-merge-cleaning/references/tool-reference.md`
+- Create: `skills/product-user-comment-data-merge-cleaning/references/extension-policy.md`
 
 - [ ] Replace the oversized entrypoint with a concise progressive-disclosure document.
 - [ ] Move every confirmed rule into exactly one focused reference document and preserve all deterministic/no-AI constraints.
@@ -41,10 +41,10 @@
 ### Task 3: Bundle automation and reusable assets
 
 **Files:**
-- Create: `skills/bazhuayu-excel-cleaning/scripts/*.py`
-- Create: `skills/bazhuayu-excel-cleaning/config/*.json`
-- Create: `skills/bazhuayu-excel-cleaning/assets/workflow-confirmation-template.md`
-- Create: `skills/bazhuayu-excel-cleaning/assets/rule-extension-template.md`
+- Create: `skills/product-user-comment-data-merge-cleaning/scripts/*.py`
+- Create: `skills/product-user-comment-data-merge-cleaning/config/*.json`
+- Create: `skills/product-user-comment-data-merge-cleaning/assets/workflow-confirmation-template.md`
+- Create: `skills/product-user-comment-data-merge-cleaning/assets/rule-extension-template.md`
 - Create: `tools/sync_skill_bundle.py`
 
 - [ ] Add a failing test that bundled scripts and configuration are byte-identical to the project development source.
@@ -68,8 +68,8 @@
 **Files:**
 - Modify: `tests/test_workflow_docs.py`
 
-- [ ] Add an isolated test that copies only `skills/bazhuayu-excel-cleaning` into a temporary directory.
+- [ ] Add an isolated test that copies only `skills/product-user-comment-data-merge-cleaning` into a temporary directory.
 - [ ] Generate a representative workbook, run the copied standardization and cleaning scripts, and verify the expected `.xlsx` and `.csv` outputs.
 - [ ] Run `python -m unittest discover -s tests` and require a clean pass.
-- [ ] Run `python -m compileall tools skills/bazhuayu-excel-cleaning/scripts tests`.
+- [ ] Run `python -m compileall tools skills/product-user-comment-data-merge-cleaning/scripts tests`.
 - [ ] Review `git diff --check` and repository status before committing.
