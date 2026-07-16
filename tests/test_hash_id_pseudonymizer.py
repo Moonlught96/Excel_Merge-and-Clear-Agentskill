@@ -18,6 +18,7 @@ from tools.hash_id_pseudonymizer import (
     load_hash_id_config,
     normalize_platform,
     normalize_raw_user_id,
+    select_identity_header,
     select_user_id_header,
 )
 
@@ -209,6 +210,56 @@ class HashIdPseudonymizerTest(unittest.TestCase):
 
                 with self.assertRaises(HashIdConfigError):
                     load_hash_id_config(config_path)
+
+    def test_config_loads_exact_display_name_header_priorities(self) -> None:
+        expected = {
+            "youtube": ("author",),
+            "xiaohongshu": ("用户名称",),
+            "bilibili": ("username",),
+            "tiktok": ("用户名", "昵称"),
+            "taobao": ("用户名称", "用户名"),
+            "jd": ("用户名",),
+        }
+
+        self.assertEqual(
+            expected,
+            {
+                platform.namespace: platform.display_name_headers
+                for platform in self.config.platforms
+            },
+        )
+
+    def test_config_rejects_invalid_display_name_headers(self) -> None:
+        source_path = PROJECT_ROOT / "config" / "hash-id.json"
+        base_config = json.loads(source_path.read_text(encoding="utf-8"))
+        output_dir = PROJECT_ROOT / ".tmp-tests" / "hash-id-display-name-validation"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        invalid_values = (
+            ("missing", None),
+            ("not-list", "author"),
+            ("non-string", [123]),
+            ("blank", [" "]),
+            ("duplicate", ["author", "author"]),
+            ("overlap", ["author_channel_id"]),
+        )
+
+        for case_name, invalid_value in invalid_values:
+            with self.subTest(case_name=case_name):
+                invalid_config = json.loads(json.dumps(base_config))
+                youtube = invalid_config["platforms"][0]
+                if case_name == "missing":
+                    youtube.pop("display_name_headers", None)
+                else:
+                    youtube["display_name_headers"] = invalid_value
+                config_path = output_dir / f"{case_name}.json"
+                config_path.write_text(
+                    json.dumps(invalid_config, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaises(HashIdConfigError):
+                    load_hash_id_config(config_path)
+
     def test_youtube_header_selection_uses_only_verified_aliases(self) -> None:
         headers = ["评论内容", "authorChannelId", "点赞数"]
 
@@ -218,6 +269,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
         assert selected is not None
         self.assertEqual("authorChannelId", selected.source_header)
         self.assertEqual(2, selected.source_column)
+        self.assertEqual("account_id", selected.identity_type)
 
     def test_each_verified_youtube_header_can_be_selected(self) -> None:
         for user_id_header in (
@@ -297,6 +349,60 @@ class HashIdPseudonymizerTest(unittest.TestCase):
                         platform,
                         self.config,
                     )
+                )
+
+    def test_bilibili_username_is_selected_as_display_name(self) -> None:
+        selected = select_identity_header(
+            ["评论内容", "点赞数", "username"],
+            "B站",
+            self.config,
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual("username", selected.source_header)
+        self.assertEqual(3, selected.source_column)
+        self.assertEqual("display_name", selected.identity_type)
+
+    def test_youtube_account_id_beats_earlier_display_name(self) -> None:
+        selected = select_identity_header(
+            ["author", "评论内容", "Author Channel ID"],
+            "YouTube",
+            self.config,
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual("Author Channel ID", selected.source_header)
+        self.assertEqual(3, selected.source_column)
+        self.assertEqual("account_id", selected.identity_type)
+
+    def test_tiktok_display_name_priority_ignores_user_identity(self) -> None:
+        selected = select_identity_header(
+            ["用户身份", "昵称", "用户名"],
+            "TikTok",
+            self.config,
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual("用户名", selected.source_header)
+        self.assertEqual(3, selected.source_column)
+        self.assertEqual("display_name", selected.identity_type)
+
+    def test_unapproved_identity_fields_select_nothing(self) -> None:
+        unapproved_headers = [
+            "用户身份",
+            "comment_id",
+            "parent_rpid",
+            "profileUrl",
+            "ip_location",
+        ]
+
+        for platform in ("YouTube", "小红书", "B站", "TikTok", "淘宝", "京东"):
+            with self.subTest(platform=platform):
+                self.assertIsNone(
+                    select_identity_header(unapproved_headers, platform, self.config)
                 )
 
 
