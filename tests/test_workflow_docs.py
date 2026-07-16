@@ -57,6 +57,7 @@ class WorkflowDocsTest(unittest.TestCase):
             "data_only=False",
             "Do not use AI",
             "Keep only the final cleaned `.xlsx` and `.csv`",
+            "返回文件链接时，链接文字必须使用实际完整文件名（含扩展名），不得使用泛化标签。",
         )
         for item in required_contract:
             self.assertIn(item, documented_contract)

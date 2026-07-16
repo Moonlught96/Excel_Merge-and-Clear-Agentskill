@@ -42,6 +42,8 @@ If product name or data source is absent or ambiguous, ask the user. Do not use 
 
 Before multi-file merge, show product name, data source, and all three planned filenames, then use the exact prompt from `workflow.md`.
 
+返回文件链接时，链接文字必须使用实际完整文件名（含扩展名），不得使用泛化标签。
+
 ## Phase Outputs
 
 At the merge checkpoint, return:
