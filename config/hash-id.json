@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "algorithm_version": "bazhuayu-hash-id-v1",
+  "platforms": [
+    {
+      "namespace": "youtube",
+      "aliases": ["YouTube", "YouTube Shorts", "youtube", "yt-comments"],
+      "user_id_headers": ["author_channel_id", "authorChannelId", "Author Channel ID"]
+    },
+    {
+      "namespace": "xiaohongshu",
+      "aliases": ["小红书"],
+      "user_id_headers": ["用户ID"]
+    },
+    {
+      "namespace": "bilibili",
+      "aliases": ["B站", "哔哩哔哩", "bilibili"],
+      "user_id_headers": []
+    },
+    {
+      "namespace": "tiktok",
+      "aliases": ["TikTok", "TTCommentExporter"],
+      "user_id_headers": []
+    },
+    {
+      "namespace": "taobao",
+      "aliases": ["淘宝"],
+      "user_id_headers": []
+    },
+    {
+      "namespace": "jd",
+      "aliases": ["京东"],
+      "user_id_headers": []
+    }
+  ]
+}
