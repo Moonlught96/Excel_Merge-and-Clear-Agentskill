@@ -53,6 +53,7 @@ COMMENT_DATE_AND_PRODUCT_HEADER = "评论日期与产品"
 COMMENT_DATE_HEADER = "评论日期"
 PRODUCT_NAME_HEADER = "产品名"
 HASH_ID_HEADER = "哈希ID"
+NO_REGISTERED_IDENTITY_HEADER_REASON = "no_registered_identity_header"
 TIMESTAMP_HEADER = "timestamp"
 BEIJING_TZ = timezone(timedelta(hours=8))
 BEIJING_TIMESTAMP_FORMAT = "%Y-%m-%d"
@@ -136,6 +137,7 @@ class HashIdSheetSummary:
     identity_type: str | None
     source_header: str | None
     source_column: int | None
+    reason: str | None
     hashed_count: int
     blank_count: int
 
@@ -685,6 +687,15 @@ def standardize_sheet(
                 if selected_identity is not None
                 else None
             ),
+            reason=(
+                NO_REGISTERED_IDENTITY_HEADER_REASON
+                if (
+                    canonical_platform is not None
+                    and hash_context is not None
+                    and selected_identity is None
+                )
+                else None
+            ),
             hashed_count=hashed_count,
             blank_count=blank_count,
         ),
@@ -804,7 +815,13 @@ def standardize_workbook(
                     "source_column": sheet.hash_id.source_column,
                     "hashed_count": sheet.hash_id.hashed_count,
                     "blank_count": sheet.hash_id.blank_count,
+                    **(
+                        {"reason": sheet.hash_id.reason}
+                        if sheet.hash_id.reason is not None
+                        else {}
+                    ),
                 },
+
             }
             for sheet in sheet_summaries
         ],

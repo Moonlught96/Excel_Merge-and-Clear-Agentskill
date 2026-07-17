@@ -368,6 +368,50 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("account_id", summary["sheets"][0]["hash_id"]["identity_type"])
         self.assertEqual(1, summary["sheets"][0]["hash_id"]["hashed_count"])
 
+    def test_hash_summary_records_reason_only_when_no_identity_header_exists(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-hash-no-registered-identity-header"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+
+        workbook = Workbook()
+        without_identity = workbook.active
+        without_identity.title = "WithoutIdentity"
+        without_identity.append(
+            ["publishedAt", "commentText", "likeCount", "profileUrl"]
+        )
+        without_identity.append(
+            [
+                "2026-07-08",
+                "Comment without a registered identity header",
+                1,
+                "https://example.invalid/raw-profile-secret",
+            ]
+        )
+        with_identity = workbook.create_sheet("WithIdentity")
+        with_identity.append(["publishedAt", "commentText", "likeCount", "author"])
+        with_identity.append(
+            [
+                "2026-07-09",
+                "Comment with a registered identity header",
+                2,
+                "raw-name-secret",
+            ]
+        )
+        workbook.save(input_path)
+
+        result = self.standardize_with_hash(input_path, tmp / "out", "YouTube")
+        summary_text = result.summary_json.read_text(encoding="utf-8")
+        self.assertNotIn("raw-profile-secret", summary_text)
+        self.assertNotIn("raw-name-secret", summary_text)
+        summary = json.loads(summary_text)
+        sheets = {sheet["sheet_name"]: sheet for sheet in summary["sheets"]}
+
+        self.assertEqual(
+            "no_registered_identity_header",
+            sheets["WithoutIdentity"]["hash_id"]["reason"],
+        )
+        self.assertNotIn("reason", sheets["WithIdentity"]["hash_id"])
+
     def test_hashes_xiaohongshu_user_id_stably_across_runs(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-hash-xiaohongshu-user-id"
         tmp.mkdir(parents=True, exist_ok=True)
