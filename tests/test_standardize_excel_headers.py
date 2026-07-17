@@ -7,10 +7,15 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
-from tools.hash_id_pseudonymizer import HashProjectContext, load_hash_id_config
+from tools.hash_id_pseudonymizer import (
+    HashProjectContext,
+    hash_display_name,
+    load_hash_id_config,
+)
 from tools.standardize_excel_headers import (
     HeaderNotFoundError,
     MissingHashContextError,
+    UnsafeIdentityValueError,
     UnsafeUserIdValueError,
     load_config,
     standardize_workbook,
@@ -481,7 +486,22 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
                 result = self.standardize_with_hash(input_path, tmp / "out", "TikTok")
                 rows = self.read_standardized_rows(result.output_xlsx)
-                self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
+                selected_value = identity_values[identity_headers.index(expected_header)]
+                expected_hash = hash_display_name(
+                    selected_value,
+                    "TikTok",
+                    self.hash_context,
+                    self.hash_config,
+                )
+                self.assertEqual(expected_hash, rows[1][3])
+                if case_name == "username-present":
+                    fallback_hash = hash_display_name(
+                        "fallback-name",
+                        "TikTok",
+                        self.hash_context,
+                        self.hash_config,
+                    )
+                    self.assertNotEqual(fallback_hash, rows[1][3])
                 summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
                 hash_summary = summary["sheets"][0]["hash_id"]
                 self.assertEqual(expected_header, hash_summary["source_header"])
@@ -505,11 +525,52 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
                 result = self.standardize_with_hash(input_path, tmp / "out", platform)
                 rows = self.read_standardized_rows(result.output_xlsx)
-                self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
+                selected_value = identity_values[identity_headers.index(expected_header)]
+                expected_hash = hash_display_name(
+                    selected_value,
+                    platform,
+                    self.hash_context,
+                    self.hash_config,
+                )
+                self.assertEqual(expected_hash, rows[1][3])
+                if platform == "taobao":
+                    fallback_hash = hash_display_name(
+                        "other-name",
+                        platform,
+                        self.hash_context,
+                        self.hash_config,
+                    )
+                    self.assertNotEqual(fallback_hash, rows[1][3])
                 summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
                 hash_summary = summary["sheets"][0]["hash_id"]
                 self.assertEqual(expected_header, hash_summary["source_header"])
                 self.assertEqual("display_name", hash_summary["identity_type"])
+
+    def test_supplied_platform_ignores_identity_header_from_other_platform(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cross-platform-identity-header"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Comments"
+        sheet.append(["评论", "评论时间", "Digg Count", "author"])
+        sheet.append(["Long enough comment", "1678870952", 4, "youtube-only-name"])
+        workbook.save(input_path)
+
+        result = standardize_workbook(
+            input_path,
+            load_config(),
+            output_dir=tmp / "out",
+            platform="TikTok",
+            hash_config=self.hash_config,
+        )
+
+        rows = self.read_standardized_rows(result.output_xlsx, "Comments")
+        self.assertIsNone(rows[1][3])
+        summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
+        hash_summary = summary["sheets"][0]["hash_id"]
+        self.assertIsNone(hash_summary["identity_type"])
+        self.assertIsNone(hash_summary["source_header"])
 
     def test_registered_real_user_id_requires_platform_and_project_context(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-hash-context-required"
@@ -523,6 +584,24 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         with self.assertRaises(MissingHashContextError):
             standardize_workbook(input_path, load_config(), output_dir=tmp / "without-context")
+
+    def test_registered_author_without_platform_still_requires_context(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-author-context-required"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Comments"
+        sheet.append(["publishedAt", "commentText", "likeCount", "author"])
+        sheet.append(["2026-07-08", "Useful comment text", 1, "SECRET-AUTHOR"])
+        workbook.save(input_path)
+
+        with self.assertRaises(MissingHashContextError) as raised:
+            standardize_workbook(input_path, load_config(), output_dir=tmp / "out")
+        message = str(raised.exception)
+        self.assertIn("Comments", message)
+        self.assertIn("author", message)
+        self.assertNotIn("SECRET-AUTHOR", message)
 
     def test_registered_display_name_requires_context_without_exposing_raw_value(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-display-name-context-required"
@@ -543,7 +622,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertIn("identity value/column", message)
         self.assertNotIn("SECRET-DISPLAY-NAME", message)
 
-    def test_invalid_user_id_error_reports_location_without_raw_value(self) -> None:
+    def test_invalid_identity_error_is_safe_and_legacy_compatible(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-invalid-hash-user-id"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
@@ -554,9 +633,14 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         sheet.append(["2026-07-08T23:30:00Z", "Great light for my desk", 12, "=SECRET_RAW_ID"])
         workbook.save(input_path)
 
-        with self.assertRaises(UnsafeUserIdValueError) as raised:
+        self.assertTrue(issubclass(UnsafeIdentityValueError, UnsafeUserIdValueError))
+        self.assertIs(UnsafeIdentityValueError, UnsafeUserIdValueError)
+        with self.assertRaises(UnsafeIdentityValueError) as raised:
             self.standardize_with_hash(input_path, tmp / "out", "youtube")
+        self.assertIsInstance(raised.exception, UnsafeUserIdValueError)
         message = str(raised.exception)
+        self.assertIn("identity value/column", message)
+        self.assertNotIn("user ID", message)
         self.assertIn("Comments", message)
         self.assertIn("row 2", message)
         self.assertIn("author_channel_id", message)

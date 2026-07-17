@@ -103,8 +103,11 @@ class MissingHashContextError(ValueError):
     pass
 
 
-class UnsafeUserIdValueError(ValueError):
+class UnsafeIdentityValueError(ValueError):
     pass
+
+
+UnsafeUserIdValueError = UnsafeIdentityValueError
 
 
 @dataclass(frozen=True)
@@ -524,14 +527,13 @@ def resolve_identity_selection(
     hash_config: HashIdConfig,
     sheet_name: str | None = None,
 ) -> tuple[str | None, SelectedIdentityHeader | None]:
-    registered_headers = _all_registered_identity_headers(hash_config)
-    present_registered_headers = [
-        header
-        for header in headers
-        if isinstance(header, str) and header in registered_headers
-    ]
-
     if platform is None:
+        registered_headers = _all_registered_identity_headers(hash_config)
+        present_registered_headers = [
+            header
+            for header in headers
+            if isinstance(header, str) and header in registered_headers
+        ]
         if hash_context is not None or present_registered_headers:
             raise MissingHashContextError(
                 _missing_hash_context_message(sheet_name, present_registered_headers)
@@ -539,15 +541,18 @@ def resolve_identity_selection(
         return None, None
 
     canonical_platform = normalize_platform(platform, hash_config)
-    if hash_context is None and present_registered_headers:
-        raise MissingHashContextError(
-            _missing_hash_context_message(sheet_name, present_registered_headers)
-        )
     selected_identity = select_identity_header(
         headers,
         canonical_platform,
         hash_config,
     )
+    if selected_identity is not None and hash_context is None:
+        raise MissingHashContextError(
+            _missing_hash_context_message(
+                sheet_name,
+                [selected_identity.source_header],
+            )
+        )
     return canonical_platform, selected_identity
 
 
@@ -630,7 +635,7 @@ def standardize_sheet(
                     effective_hash_config,
                 )
             except InvalidUserIdError as exc:
-                raise UnsafeUserIdValueError(
+                raise UnsafeIdentityValueError(
                     f"Invalid identity value/column at sheet {source_sheet.title!r}, "
                     f"row {excel_row_number}, header "
                     f"{selected_identity.source_header!r}, identity type "
