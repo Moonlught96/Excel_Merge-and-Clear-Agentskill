@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import unittest
 from contextlib import nullcontext
 from pathlib import Path
@@ -8,7 +9,7 @@ from openpyxl import Workbook, load_workbook
 
 from tools.clean_excel_comments import CleanerConfig, clean_workbook
 from tools.cleanup_intermediate_outputs import cleanup_intermediate_outputs
-from tools.hash_id_pseudonymizer import HashProjectContext, load_hash_id_config
+from tools.hash_id_pseudonymizer import HashProjectContext, hash_display_name, load_hash_id_config
 from tools.merge_excel_workbooks import merge_workbooks
 from tools.standardize_excel_headers import load_config, standardize_workbook
 from tools.strip_bilibili_reply_prefixes import strip_bilibili_reply_prefixes
@@ -58,11 +59,11 @@ class EndToEndWorkflowTest(unittest.TestCase):
 
             write_source(
                 first,
-                [["1", "0", "user1", "这是一条足够长的正常主评论内容", "=1+1", "1547698467", "未知", "1"]],
+                [["1", "0", "user1", "这是一条足够长的正常主评论内容", "=1+1", "1547698467", "北京", "1"]],
             )
             write_source(
                 second,
-                [["2", "1", "user1", "回复@user1：这是另一条足够长的正常回复内容", "3", "1547698468", "未知", "0"]],
+                [["2", "1", "user1", "回复@user1：这是另一条足够长的正常回复内容", "3", "1547698468", "上海", "0"]],
             )
             original_bytes = {first: first.read_bytes(), second: second.read_bytes()}
             hash_context = HashProjectContext(
@@ -71,6 +72,12 @@ class EndToEndWorkflowTest(unittest.TestCase):
                 key_version=1,
                 key_fingerprint="test-fingerprint",
                 secret_key=b"e" * 32,
+            )
+            expected_hash = hash_display_name(
+                "user1",
+                "B站",
+                hash_context,
+                load_hash_id_config(),
             )
 
             merge_result = merge_workbooks([first, second], merged)
@@ -92,20 +99,33 @@ class EndToEndWorkflowTest(unittest.TestCase):
 
             self.assertTrue(clean_result.output_csv and clean_result.output_csv.exists())
             cleaned_workbook = load_workbook(cleaned, read_only=True, data_only=False)
-            cleaned_rows = list(cleaned_workbook["总表"].iter_rows(values_only=True))
+            try:
+                cleaned_rows = list(cleaned_workbook["总表"].iter_rows(values_only=True))
+            finally:
+                cleaned_workbook.close()
             self.assertEqual(EXPECTED_HEADERS, cleaned_rows[0])
             self.assertEqual("=1+1", cleaned_rows[1][4])
             self.assertEqual("这是另一条足够长的正常回复内容", cleaned_rows[2][1])
-            self.assertNotIn("user1", cleaned_rows[1])
             first_hash = cleaned_rows[1][3]
             second_hash = cleaned_rows[2][3]
             self.assertRegex(first_hash, r"^[0-9a-f]{64}$")
             self.assertRegex(second_hash, r"^[0-9a-f]{64}$")
             self.assertEqual(first_hash, second_hash)
+            self.assertEqual(expected_hash, first_hash)
+            self.assertEqual(expected_hash, second_hash)
             for row in cleaned_rows[1:]:
                 self.assertNotIn("user1", row)
-                self.assertNotIn("\u672a\u77e5", row)
-            self.assertNotIn("未知", cleaned_rows[1])
+                self.assertNotIn("北京", row)
+                self.assertNotIn("上海", row)
+
+            with clean_result.output_csv.open("r", encoding="utf-8-sig", newline="") as csv_file:
+                csv_rows = list(csv.reader(csv_file))
+            self.assertEqual(list(EXPECTED_HEADERS), csv_rows[0])
+            self.assertEqual([expected_hash, expected_hash], [row[3] for row in csv_rows[1:]])
+            csv_cells = [cell for row in csv_rows for cell in row]
+            self.assertNotIn("user1", csv_cells)
+            self.assertNotIn("北京", csv_cells)
+            self.assertNotIn("上海", csv_cells)
 
             intermediate_paths = [
                 merge_result.output_path,
