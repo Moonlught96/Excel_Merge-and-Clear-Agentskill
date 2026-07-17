@@ -67,6 +67,8 @@ The standardized workbook omits every column outside the standard schema. Confir
 
 `IP地址`, `IP属地`, `用户名称`, `用户昵称`, `昵称`, `rpid`, `parent_rpid`, `username`, `ip_location`, `id`, `comment_id`, `commentId`, `cid`, `uid`, `user_id`, `userId`, `uniqueId`, `author`, `authorName`, `author_name`, `authorDisplayName`, `authorChannelId`, `authorChannelUrl`, `channelId`, `channel_id`, `channelUrl`, `profileUrl`, `profile_url`, `avatar`, `videoId`, `video_id`, `videoUrl`, `url`, and `permalink`.
 
+These raw columns remain omitted from standardized and cleaned outputs even when `config/hash-id.json` registers one of them as an in-memory identity source. Registration permits only deterministic hashing; it never preserves the raw column.
+
 `parent_rpid` is a parent-comment ID, not a subcomment count. Never map it to `子评论数/追评数`.
 
 Unknown columns that are not configured standard aliases are omitted. They are not guessed into the standard schema.
@@ -82,9 +84,25 @@ Unknown columns that are not configured standard aliases are omitted. They are n
 ## Hash ID Derivation
 
 - `哈希ID` is always generated; never map or preserve a source column named `哈希ID`.
-- Platform and research-project context are required when a registered real account-ID header is present.
-- Verified mappings: YouTube `author_channel_id`, `authorChannelId`, `Author Channel ID`; Xiaohongshu `用户ID`.
-- Bilibili, TikTok, Taobao, JD, and YouTube exports without a verified account-ID header keep the column blank.
-- `rpid`, `parent_rpid`, comment IDs, usernames, nicknames, and profile URLs are not account-ID substitutes.
+- Platform and research-project context are required whenever a registered account-ID or display-name column is selected.
+- Stable account ID is selected first for the whole worksheet.
+- Display-name fallback is allowed only when no registered account-ID column exists.
+- Header selection is worksheet-wide and follows configuration order. It never falls back per row.
+- Exact account-ID mappings:
+  - YouTube: `author_channel_id`, then `authorChannelId`, then `Author Channel ID`.
+  - 小红书: `用户ID`.
+- Exact display-name fallback mappings:
+  - YouTube: `author`.
+  - 小红书: `用户名称`.
+  - B站: `username`.
+  - TikTok: `用户名`, then `昵称`; never `用户身份`.
+  - 淘宝: `用户名称`, then `用户名`.
+  - 京东: `用户名`.
+- The same normalized display name in the same research project and platform produces the same hash regardless of which registered display-name header supplied it.
+- Account-ID and display-name hashes use separate identity domains. Cross-project, cross-platform, and account-ID/display-name hashes differ.
+- Display-name linkage is weak pseudonymization, not legal anonymization: nickname changes can split the same user, and different users with the same normalized name can merge.
+- Raw account IDs, usernames, and nicknames remain omitted from standardized and cleaned outputs, logs, and summaries; approved identity values are read only in memory for hashing.
+- `rpid`, `parent_rpid`, all comment IDs and parent IDs, URLs, profile links, IP fields, `用户身份`, source-provided `哈希ID`, and other ambiguous fields are never identity sources.
+- Hashing and identity selection use deterministic tooling only; do not use AI.
 - Hashing uses project-scoped, platform-isolated HMAC-SHA256 and emits 64 lowercase hexadecimal characters.
-- The summary may contain project ID/name, platform, key version/fingerprint, source header, and counts. It must not contain the raw ID or secret key.
+- The summary may contain project ID/name, platform, key version/fingerprint, identity type, source header, and counts. It must not contain a raw identity value or secret key.

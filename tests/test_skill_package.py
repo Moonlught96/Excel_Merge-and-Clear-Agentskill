@@ -160,8 +160,8 @@ class SkillPackageTest(unittest.TestCase):
         cleaned_path = temp_root / "cleaned.xlsx"
         workbook = Workbook()
         sheet = workbook.active
-        sheet.append(["timestamp", "content", "like_count", "author_channel_id"])
-        sheet.append(["1678870952", "这个显示器挂灯使用体验确实很好", "2", "UC-portable-user"])
+        sheet.append(["timestamp", "content", "like_count", "author"])
+        sheet.append(["1678870952", "这个显示器挂灯使用体验确实很好", "2", "Portable User"])
         workbook.save(input_path)
 
         subprocess.run(
@@ -204,8 +204,11 @@ class SkillPackageTest(unittest.TestCase):
         self.assertEqual("评论日期", cleaned.active.cell(row=1, column=1).value)
         self.assertEqual("2023-03-15", cleaned.active.cell(row=2, column=1).value)
         self.assertEqual("这个显示器挂灯使用体验确实很好", cleaned.active.cell(row=2, column=2).value)
-        self.assertRegex(cleaned.active.cell(row=2, column=4).value, r"^[0-9a-f]{64}$")
+        hash_id = cleaned.active.cell(row=2, column=4).value
+        self.assertIsInstance(hash_id, str)
+        self.assertRegex(hash_id, r"^[0-9a-f]{64}$")
 
+        self.assertNotIn("author", [cell.value for cell in cleaned.active[1]])
         shutil.rmtree(temp_root)
 
 

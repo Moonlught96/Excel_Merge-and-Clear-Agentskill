@@ -17,6 +17,18 @@ The fixed workflow is:
 
 Do not collapse or reorder the confirmation gates.
 
+## Identity Selection During Standardization
+
+For each worksheet, the deterministic standardizer applies this order before processing rows:
+
+1. Select the first registered stable account-ID column for the confirmed platform.
+2. Only when no registered account-ID column exists, select the first configured display-name fallback.
+3. Use that one selected column for the whole worksheet; never switch identity sources row-by-row.
+4. Keep `哈希ID` blank when the selected cell is blank.
+5. Omit raw account IDs, usernames, and nicknames from standardized and cleaned outputs, logs, and summaries.
+
+Do not use AI to choose, normalize, or hash an identity source. The exact mappings and risk limits are in `header-standardization.md` and `data-contract.md`.
+
 ## Initial File Handling
 
 - If no file path is provided, ask the user to provide the files.

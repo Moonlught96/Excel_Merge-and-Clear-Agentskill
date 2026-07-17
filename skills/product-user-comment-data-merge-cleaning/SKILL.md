@@ -12,7 +12,7 @@ description: Use when one or more Excel or CSV files containing collected user c
 ## Skill Responsibilities
 
 - Merge only the Excel/CSV files explicitly supplied by the user into a new workbook.
-- Standardize platform-specific headers, derive project-scoped hash IDs from verified account IDs, and move complete columns into the fixed output schema.
+- Standardize platform-specific headers, derive project-scoped hash IDs from a worksheet-wide registered account ID or approved display-name fallback, and move complete columns into the fixed output schema.
 - Clean main comments and subcomments with deterministic configuration and scripts only.
 - Preserve every original input file and enforce confirmation gates between workflow phases.
 - Produce confirmed output filenames, verify artifacts, and remove only current-run intermediates.
@@ -53,7 +53,7 @@ The executable configuration is in `config/comment-cleaner.json`, `config/header
 2. Confirm the research project name once, then determine the product name and data source by the fixed rules in `references/naming-and-retention.md`, show all planned output filenames, and obtain the required confirmation.
 3. For one input file, obtain confirmation that it is the only intended file, then skip merge. For multiple files, run `scripts/merge_excel_workbooks.py`, return the raw merged workbook, and wait for merge-completion confirmation.
 4. For B站 merged data only, run `scripts/strip_bilibili_reply_prefixes.py` before standardization. Do not infer or move reply hierarchy.
-5. Run `scripts/standardize_excel_headers.py` with the confirmed project and platform. Create a protected project key only for a user-confirmed new research project; otherwise load the existing project. Return the standardized workbook and wait for explicit approval before cleaning.
+5. Run `scripts/standardize_excel_headers.py` with the confirmed project and platform. Create a protected project key only for a user-confirmed new research project; otherwise load the existing project. The tool selects a stable account ID first for the whole worksheet and uses a configured display-name fallback only when no registered account-ID column exists; details and risks are in `references/header-standardization.md` and `references/data-contract.md`. Return the standardized workbook and wait for explicit approval before cleaning.
 6. Ask whether KOL clean words exist. If words are provided, wait for confirmation that the list is complete. Pass each word as a separate `--clean-word`; pass none when the user says there are no words.
 7. Run `scripts/clean_excel_comments.py` against the standardized `评论内容` column. Do not perform any AI review or rewriting of table values.
 8. Verify the cleaned `.xlsx` and `.csv`, then run `scripts/cleanup_intermediate_outputs.py` with explicit intermediate and protected paths.

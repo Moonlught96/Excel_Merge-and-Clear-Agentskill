@@ -7,7 +7,7 @@ import math
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "hash-id.json"
@@ -63,6 +63,7 @@ class PlatformIdentityConfig:
     namespace: str
     aliases: tuple[str, ...]
     user_id_headers: tuple[str, ...]
+    display_name_headers: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -76,12 +77,22 @@ class HashIdConfig:
 class SelectedIdentityHeader:
     source_header: str
     source_column: int
+    identity_type: Literal["account_id", "display_name"]
 
 
 def _require_string_list(value: Any, field_name: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise HashIdConfigError(f"{field_name} must be a list of strings")
     return tuple(value)
+
+
+def _require_identity_headers(value: Any, field_name: str) -> tuple[str, ...]:
+    headers = _require_string_list(value, field_name)
+    if any(not header.strip() for header in headers):
+        raise HashIdConfigError(f"{field_name} must not contain blank headers")
+    if len(set(headers)) != len(headers):
+        raise HashIdConfigError(f"{field_name} must not contain duplicate headers")
+    return headers
 
 
 def load_hash_id_config(path: Path | str = DEFAULT_CONFIG_PATH) -> HashIdConfig:
@@ -117,10 +128,19 @@ def load_hash_id_config(path: Path | str = DEFAULT_CONFIG_PATH) -> HashIdConfig:
         if not isinstance(namespace, str) or not namespace:
             raise HashIdConfigError(f"platforms[{index}].namespace must be a non-empty string")
         aliases = _require_string_list(raw_platform.get("aliases"), f"platforms[{index}].aliases")
-        headers = _require_string_list(
+        headers = _require_identity_headers(
             raw_platform.get("user_id_headers"),
             f"platforms[{index}].user_id_headers",
         )
+        display_name_headers = _require_identity_headers(
+            raw_platform.get("display_name_headers"),
+            f"platforms[{index}].display_name_headers",
+        )
+        overlapping_headers = set(headers).intersection(display_name_headers)
+        if overlapping_headers:
+            raise HashIdConfigError(
+                f"platforms[{index}] identity header lists must not overlap"
+            )
         platform_names = set((namespace, *aliases))
         duplicate_names = registered_names.intersection(platform_names)
         if duplicate_names:
@@ -132,6 +152,7 @@ def load_hash_id_config(path: Path | str = DEFAULT_CONFIG_PATH) -> HashIdConfig:
                 namespace=namespace,
                 aliases=aliases,
                 user_id_headers=headers,
+                display_name_headers=display_name_headers,
             )
         )
 
@@ -175,6 +196,22 @@ def normalize_raw_user_id(value: Any) -> str | None:
     raise InvalidUserIdError("Invalid user ID value")
 
 
+def _select_configured_identity_header(
+    headers: list[Any],
+    configured_headers: tuple[str, ...],
+    identity_type: Literal["account_id", "display_name"],
+) -> SelectedIdentityHeader | None:
+    for configured_header in configured_headers:
+        for source_column, header in enumerate(headers, start=1):
+            if isinstance(header, str) and header == configured_header:
+                return SelectedIdentityHeader(
+                    source_header=header,
+                    source_column=source_column,
+                    identity_type=identity_type,
+                )
+    return None
+
+
 def select_user_id_header(
     headers: list[Any],
     platform: str,
@@ -184,14 +221,34 @@ def select_user_id_header(
     platform_config = next(
         item for item in config.platforms if item.namespace == namespace
     )
-    for configured_header in platform_config.user_id_headers:
-        for source_column, header in enumerate(headers, start=1):
-            if isinstance(header, str) and header == configured_header:
-                return SelectedIdentityHeader(
-                    source_header=header,
-                    source_column=source_column,
-                )
-    return None
+    return _select_configured_identity_header(
+        headers,
+        platform_config.user_id_headers,
+        "account_id",
+    )
+
+
+def select_identity_header(
+    headers: list[Any],
+    platform: str,
+    config: HashIdConfig,
+) -> SelectedIdentityHeader | None:
+    namespace = normalize_platform(platform, config)
+    platform_config = next(
+        item for item in config.platforms if item.namespace == namespace
+    )
+    account_id_header = _select_configured_identity_header(
+        headers,
+        platform_config.user_id_headers,
+        "account_id",
+    )
+    if account_id_header is not None:
+        return account_id_header
+    return _select_configured_identity_header(
+        headers,
+        platform_config.display_name_headers,
+        "display_name",
+    )
 
 
 def _encode_length_prefixed(parts: tuple[str, ...]) -> bytes:
@@ -238,3 +295,42 @@ def hash_user_id(
         )
     )
     return hmac.new(context.secret_key, message, hashlib.sha256).hexdigest()
+
+
+def hash_display_name(
+    value: Any,
+    platform: str,
+    context: HashProjectContext,
+    config: HashIdConfig,
+) -> str | None:
+    _validate_project_context(context)
+    namespace = normalize_platform(platform, config)
+    normalized_display_name = normalize_raw_user_id(value)
+    if normalized_display_name is None:
+        return None
+
+    message = _encode_length_prefixed(
+        (
+            config.algorithm_version,
+            context.project_id,
+            str(context.key_version),
+            namespace,
+            "display_name",
+            normalized_display_name,
+        )
+    )
+    return hmac.new(context.secret_key, message, hashlib.sha256).hexdigest()
+
+
+def hash_selected_identity(
+    value: Any,
+    selected: SelectedIdentityHeader,
+    platform: str,
+    context: HashProjectContext,
+    config: HashIdConfig,
+) -> str | None:
+    if selected.identity_type == "account_id":
+        return hash_user_id(value, platform, context, config)
+    if selected.identity_type == "display_name":
+        return hash_display_name(value, platform, context, config)
+    raise HashIdConfigError("Unsupported identity type")

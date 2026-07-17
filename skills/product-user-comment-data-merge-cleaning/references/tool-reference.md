@@ -7,7 +7,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - `scripts/output_file_naming.py`: deterministically discover product/source candidates and plan the three output names.
 - `scripts/merge_excel_workbooks.py`: merge explicit `.xlsx`, `.xlsm`, and `.csv` inputs into a new raw merged `.xlsx`.
 - `scripts/strip_bilibili_reply_prefixes.py`: remove only fixed B站 `回复@xxx：`/`回复 @xxx:` prefixes in a separate workbook.
-- `scripts/hash_id_pseudonymizer.py`: normalize verified account IDs and compute project/platform-isolated HMAC-SHA256 values.
+- `scripts/hash_id_pseudonymizer.py`: select a worksheet-wide registered account ID or display-name fallback, normalize the value, and compute project/platform/identity-type-isolated HMAC-SHA256 values.
 - `scripts/hash_id_project_store.py`: create/load protected project keys; Windows uses current-user DPAPI.
 - `scripts/standardize_excel_headers.py`: map fixed aliases, derive `哈希ID`, reorder complete columns, convert configured dates, and omit non-standard columns.
 - `scripts/clean_excel_comments.py`: apply deterministic main-comment, KOL, fixed-word, random-heap, duplicate, and subcomment rules.
@@ -19,8 +19,19 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 
 - `config/comment-cleaner.json`: active cleaning thresholds, exact text, fixed contains terms, random-heap thresholds, duplicate policy, subcomment rules, and CSV encoding.
 - `config/header-standardizer.json`: exact standard output order, fixed aliases, required/optional columns, and known dropped headers.
-- `config/hash-id.json`: platform aliases and verified real account-ID headers; do not add ambiguous identity fields.
+- `config/hash-id.json`: platform aliases plus ordered `user_id_headers` and `display_name_headers`; do not add ambiguous identity fields.
 
+
+## Hash Identity Tool Contract
+
+- Stable account ID is selected first for the whole worksheet.
+- Display-name fallback is allowed only when no registered account-ID column exists.
+- The selected header applies to all rows in that worksheet; blank account-ID cells do not fall back row-by-row.
+- Display-name hashes include a separate identity domain, so they cannot equal account-ID hashes for the same normalized text.
+- The exact registered mappings and priority order are defined in `config/hash-id.json` and documented in `header-standardization.md`.
+- Raw account IDs, usernames, and nicknames are read only in memory and remain omitted from outputs, logs, and summaries.
+- Comment IDs, parent IDs, URLs, IP fields, `用户身份`, and ambiguous fields are never identity sources.
+- Identity selection, normalization, and hashing are deterministic tooling only; do not use AI.
 ## Command Reference
 
 Plan output names:

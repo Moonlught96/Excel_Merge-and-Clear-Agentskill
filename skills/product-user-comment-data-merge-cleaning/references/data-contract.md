@@ -25,7 +25,7 @@ The standardized workbook contains exactly these columns in this order:
 `评论日期`、`评论内容`、`产品名`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`
 
 - Move each matched source header and all values below it together. Standardization must not only rename header text.
-- Omit nickname, account name, raw ID, IP, profile, and link metadata. `哈希ID` is generated only from a verified platform account-ID header and never copied from the source.
+- Omit raw account IDs, usernames, nicknames, IP, profile, and link metadata. A registered identity column may be read only in memory to generate `哈希ID`; its raw column is never copied to standardized or cleaned output.
 - Missing allowed columns remain present and blank according to the header-standardization reference.
 - Do not dynamically infer a fourth or deeper comment level.
 
@@ -61,9 +61,18 @@ The standardized workbook contains exactly these columns in this order:
 ## Hash ID Pseudonymization Contract
 
 - `哈希ID` is deterministic pseudonymization, not legal anonymization.
+- Stable account ID is selected first for the whole worksheet.
+- Display-name fallback is allowed only when no registered account-ID column exists.
+- Selection is worksheet-wide, not row-by-row. When an account-ID column exists, a blank account-ID cell stays blank and must not fall back to a display name from that row.
 - Use HMAC-SHA256 with the protected key for the confirmed research project and a platform namespace.
-- The same project, platform, and raw account ID produces the same 64-character lowercase hexadecimal value. Different projects or platforms produce different values.
-- Current verified inputs are YouTube `author_channel_id`, `authorChannelId`, `Author Channel ID`, and Xiaohongshu `用户ID`.
-- Never hash comment IDs, parent IDs, usernames, nicknames, profile URLs, or a source-provided `哈希ID`. If no verified account ID exists, leave `哈希ID` blank.
-- Do not expose the raw ID or secret key in output, logs, summaries, errors, tests, or Git. Keep raw source files access-controlled.
+- The same project, platform, identity type, and normalized identity value produces the same 64-character lowercase hexadecimal value.
+- The same normalized display name in the same research project and platform produces the same hash regardless of whether the registered source header is `username`, `用户名`, `昵称`, `用户名称`, or `author`.
+- Account-ID and display-name hashes use separate identity domains, so the same text hashed once as an account ID and once as a display name produces different values.
+- Cross-project and cross-platform hashes differ.
+- Display-name linkage is weak pseudonymization, not legal anonymization: nickname changes can split the same user, and different users with the same normalized name can merge.
+- Raw account IDs, usernames, and nicknames remain omitted from standardized and cleaned outputs, logs, and summaries, even when an approved source field is read only in memory for hashing.
+- Comment IDs, parent-comment IDs, URLs, profile links, IP fields, source-provided `哈希ID`, `用户身份`, and other ambiguous identity fields are never identity sources.
+- `用户身份` is never an identity source.
+- Do not expose raw identity values or secret keys in output, logs, summaries, errors, tests, or Git. Keep raw source files access-controlled.
+- Existing merge, cleaning, naming, confirmation, and retention rules remain unchanged.
 - The transformation and header selection are deterministic tools only; do not use AI.

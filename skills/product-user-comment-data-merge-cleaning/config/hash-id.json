@@ -5,32 +5,38 @@
     {
       "namespace": "youtube",
       "aliases": ["YouTube", "YouTube Shorts", "youtube", "yt-comments"],
-      "user_id_headers": ["author_channel_id", "authorChannelId", "Author Channel ID"]
+      "user_id_headers": ["author_channel_id", "authorChannelId", "Author Channel ID"],
+      "display_name_headers": ["author"]
     },
     {
       "namespace": "xiaohongshu",
       "aliases": ["小红书"],
-      "user_id_headers": ["用户ID"]
+      "user_id_headers": ["用户ID"],
+      "display_name_headers": ["用户名称"]
     },
     {
       "namespace": "bilibili",
       "aliases": ["B站", "哔哩哔哩", "bilibili"],
-      "user_id_headers": []
+      "user_id_headers": [],
+      "display_name_headers": ["username"]
     },
     {
       "namespace": "tiktok",
       "aliases": ["TikTok", "TTCommentExporter"],
-      "user_id_headers": []
+      "user_id_headers": [],
+      "display_name_headers": ["用户名", "昵称"]
     },
     {
       "namespace": "taobao",
       "aliases": ["淘宝"],
-      "user_id_headers": []
+      "user_id_headers": [],
+      "display_name_headers": ["用户名称", "用户名"]
     },
     {
       "namespace": "jd",
       "aliases": ["京东"],
-      "user_id_headers": []
+      "user_id_headers": [],
+      "display_name_headers": ["用户名"]
     }
   ]
 }

@@ -63,10 +63,15 @@ Use `assets/rule-extension-template.md` to record:
 - Run the isolated-copy smoke test.
 - Do not claim completion while any validation fails.
 
-## Adding A Verified User-ID Header
+## Adding An Identity Header
 
-1. Accept only an explicit platform account-ID field confirmed from the exporter schema; do not infer from values.
-2. Add it to the matching platform in `config/hash-id.json`.
-3. Never register comment IDs, parent IDs, usernames, nicknames, profile URLs, or ambiguous identity fields.
-4. Add positive, blank-fallback, cross-platform, and raw-ID non-disclosure tests.
-5. Synchronize the bundled scripts/config and update the header reference.
+1. Require explicit user confirmation and platform-specific evidence from the exporter schema or a representative platform export.
+2. Classify the new field explicitly as a stable account ID or a display-name fallback; never infer identity type from values.
+3. Add it only to the matching platform and ordered list in `config/hash-id.json`.
+4. Preserve worksheet-wide priority: all registered `user_id_headers` outrank every `display_name_headers` entry, and display-name entries follow their configured order.
+5. Never register comment IDs, parent IDs, URLs, profile links, IP fields, `用户身份`, source-provided `哈希ID`, or other ambiguous identity fields.
+6. A username or nickname may be added only as a platform-confirmed display-name fallback, never as a stable account ID.
+7. Add positive, priority, blank, same-name, cross-project, cross-platform, account-ID/display-name separation, and raw-value non-disclosure tests.
+8. Update `references/data-contract.md`, `references/header-standardization.md`, `references/tool-reference.md`, and the rule-extension record.
+9. Keep every existing merge, cleaning, naming, confirmation, and retention rule unchanged.
+10. Synchronize the bundled scripts/config and verify the isolated Skill package.

@@ -25,6 +25,56 @@ class SkillReferenceCoverageTest(unittest.TestCase):
         for header in config["drop_headers"]:
             self.assertIn(f"`{header}`", reference, f"Undocumented dropped header: {header}")
 
+    def test_hash_identity_config_is_fully_documented_in_references(self) -> None:
+        config = json.loads(
+            (SKILL_ROOT / "config" / "hash-id.json").read_text(encoding="utf-8")
+        )
+        references = "\n".join(
+            (SKILL_ROOT / "references" / name).read_text(encoding="utf-8")
+            for name in (
+                "data-contract.md",
+                "header-standardization.md",
+                "tool-reference.md",
+                "extension-policy.md",
+            )
+        )
+
+        expected_display_name_headers = {
+            "youtube": ("author",),
+            "xiaohongshu": ("用户名称",),
+            "bilibili": ("username",),
+            "tiktok": ("用户名", "昵称"),
+            "taobao": ("用户名称", "用户名"),
+            "jd": ("用户名",),
+        }
+        platforms = {platform["namespace"]: platform for platform in config["platforms"]}
+
+        self.assertEqual(set(expected_display_name_headers), set(platforms))
+        for namespace, expected_headers in expected_display_name_headers.items():
+            actual_headers = tuple(platforms[namespace].get("display_name_headers", ()))
+            self.assertEqual(
+                expected_headers,
+                actual_headers,
+            )
+            for header in (*platforms[namespace]["user_id_headers"], *expected_headers):
+                self.assertIn(
+                    f"`{header}`",
+                    references,
+                    f"Undocumented {namespace} identity header: {header}",
+                )
+
+        for phrase in (
+            "Stable account ID is selected first for the whole worksheet.",
+            "Display-name fallback is allowed only when no registered account-ID column exists.",
+            "weak pseudonymization, not legal anonymization",
+            "nickname changes can split the same user",
+            "different users with the same normalized name can merge",
+            "platform-specific evidence",
+        ):
+            self.assertIn(phrase, references)
+
+        self.assertNotIn("`用户身份` as a display-name", references)
+
     def test_cleaner_config_content_rules_are_fully_documented_in_references(self) -> None:
         config = json.loads(
             (SKILL_ROOT / "config" / "comment-cleaner.json").read_text(encoding="utf-8")

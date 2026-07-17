@@ -56,6 +56,14 @@ class WorkflowDocsTest(unittest.TestCase):
             "`一级评论`, `二级评论`, and `三级评论` cells whose trimmed length is less than or equal to 5 characters",
             "data_only=False",
             "Do not use AI",
+            "Stable account ID is selected first for the whole worksheet.",
+            "Display-name fallback is allowed only when no registered account-ID column exists.",
+            "The same normalized display name in the same research project and platform produces the same hash",
+            "Account-ID and display-name hashes use separate identity domains",
+            "Raw account IDs, usernames, and nicknames remain omitted from standardized and cleaned outputs, logs, and summaries",
+            "nickname changes can split the same user",
+            "different users with the same normalized name can merge",
+            "`用户身份` is never an identity source",
             "Keep only the final cleaned `.xlsx` and `.csv`",
             "返回文件链接时，链接文字必须使用实际完整文件名（含扩展名），不得使用泛化标签。",
         )
@@ -66,6 +74,10 @@ class WorkflowDocsTest(unittest.TestCase):
         self.assertNotIn("你确认清洗结果成功后", readme)
         self.assertNotIn("你确认清洗成功后", readme)
         self.assertIn("清洗后的 `.xlsx` 和 `.csv` 生成并核对成功后立即", readme)
+        self.assertIn("整张工作表优先选择已登记的稳定账号 ID 列", readme)
+        self.assertIn("只有不存在已登记账号 ID 列时", readme)
+        self.assertIn("显示名关联属于弱伪名化，不是法律意义上的匿名化", readme)
+        self.assertIn("原始账号 ID、用户名、昵称", readme)
 
         gitignore = Path(".gitignore").read_text(encoding="utf-8")
         self.assertIn("outputs/", gitignore)
@@ -111,6 +123,13 @@ class WorkflowDocsTest(unittest.TestCase):
             "`assets/`",
             "单独复制",
             "独立运行",
+            "整张工作表优先选择已登记的稳定账号 ID 列",
+            "只有整张工作表不存在已登记账号 ID 列时",
+            "显示名关联属于弱伪名化，不是法律意义上的匿名化",
+            "同一标准化显示名",
+            "账号 ID 与显示名哈希必须不同",
+            "原始账号 ID、用户名、昵称不得进入标准化或清洗输出、日志或摘要",
+            "新增账号 ID 或显示名别名必须先获得用户确认和平台专属证据",
         )
         for instruction in required_instructions:
             self.assertIn(instruction, agents)
