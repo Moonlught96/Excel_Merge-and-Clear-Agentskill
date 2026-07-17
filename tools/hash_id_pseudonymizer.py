@@ -295,3 +295,42 @@ def hash_user_id(
         )
     )
     return hmac.new(context.secret_key, message, hashlib.sha256).hexdigest()
+
+
+def hash_display_name(
+    value: Any,
+    platform: str,
+    context: HashProjectContext,
+    config: HashIdConfig,
+) -> str | None:
+    _validate_project_context(context)
+    namespace = normalize_platform(platform, config)
+    normalized_display_name = normalize_raw_user_id(value)
+    if normalized_display_name is None:
+        return None
+
+    message = _encode_length_prefixed(
+        (
+            config.algorithm_version,
+            context.project_id,
+            str(context.key_version),
+            namespace,
+            "display_name",
+            normalized_display_name,
+        )
+    )
+    return hmac.new(context.secret_key, message, hashlib.sha256).hexdigest()
+
+
+def hash_selected_identity(
+    value: Any,
+    selected: SelectedIdentityHeader,
+    platform: str,
+    context: HashProjectContext,
+    config: HashIdConfig,
+) -> str | None:
+    if selected.identity_type == "account_id":
+        return hash_user_id(value, platform, context, config)
+    if selected.identity_type == "display_name":
+        return hash_display_name(value, platform, context, config)
+    raise HashIdConfigError("Unsupported identity type")

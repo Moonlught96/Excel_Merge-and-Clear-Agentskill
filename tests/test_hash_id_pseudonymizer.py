@@ -63,6 +63,206 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             hash_user_id("UC001", "YouTube", self.context, self.config),
         )
 
+    def test_existing_account_id_hash_vector_is_unchanged(self) -> None:
+        historical_context = replace(
+            self.context,
+            project_id="project-screenbar",
+            key_version=1,
+            secret_key=b"k" * 32,
+        )
+
+        self.assertEqual(
+            "72bd4fc68258026ac244e1cfbb758e603455defca92af91c577ed9f9b23082c9",
+            hash_user_id(
+                "UC-secret-user",
+                "YouTube",
+                historical_context,
+                self.config,
+            ),
+        )
+
+    def test_display_name_hash_uses_length_prefixed_identity_type(self) -> None:
+        parts = (
+            self.config.algorithm_version,
+            self.context.project_id,
+            str(self.context.key_version),
+            "youtube",
+            "display_name",
+            "same-user",
+        )
+        message = b"".join(
+            struct.pack(">I", len(part.encode("utf-8"))) + part.encode("utf-8")
+            for part in parts
+        )
+        expected = hmac.new(
+            self.context.secret_key,
+            message,
+            hashlib.sha256,
+        ).hexdigest()
+
+        self.assertEqual(
+            expected,
+            hash_id_pseudonymizer.hash_display_name(
+                "same-user",
+                "YouTube",
+                self.context,
+                self.config,
+            ),
+        )
+
+    def test_same_display_name_is_stable_across_source_header_names(self) -> None:
+        username = hash_id_pseudonymizer.SelectedIdentityHeader(
+            source_header="username",
+            source_column=1,
+            identity_type="display_name",
+        )
+        nickname = hash_id_pseudonymizer.SelectedIdentityHeader(
+            source_header="nickname",
+            source_column=2,
+            identity_type="display_name",
+        )
+
+        self.assertEqual(
+            hash_id_pseudonymizer.hash_selected_identity(
+                "same-user", username, "TikTok", self.context, self.config
+            ),
+            hash_id_pseudonymizer.hash_selected_identity(
+                "same-user", nickname, "TikTok", self.context, self.config
+            ),
+        )
+
+    def test_display_name_hash_is_isolated_from_account_id_hash(self) -> None:
+        self.assertNotEqual(
+            hash_id_pseudonymizer.hash_display_name(
+                "same-user", "YouTube", self.context, self.config
+            ),
+            hash_user_id("same-user", "YouTube", self.context, self.config),
+        )
+
+    def test_display_name_hash_differs_across_platform_and_project(self) -> None:
+        display_hash = hash_id_pseudonymizer.hash_display_name(
+            "same-user", "YouTube", self.context, self.config
+        )
+        other_project = replace(
+            self.context,
+            project_id="22222222-2222-2222-2222-222222222222",
+        )
+
+        self.assertNotEqual(
+            display_hash,
+            hash_id_pseudonymizer.hash_display_name(
+                "same-user", "bilibili", self.context, self.config
+            ),
+        )
+        self.assertNotEqual(
+            display_hash,
+            hash_id_pseudonymizer.hash_display_name(
+                "same-user", "YouTube", other_project, self.config
+            ),
+        )
+
+    def test_display_name_only_trims_outer_whitespace(self) -> None:
+        hash_display_name = hash_id_pseudonymizer.hash_display_name
+
+        self.assertEqual(
+            hash_display_name("  Same User  ", "bilibili", self.context, self.config),
+            hash_display_name("Same User", "bilibili", self.context, self.config),
+        )
+        self.assertNotEqual(
+            hash_display_name("Same User", "bilibili", self.context, self.config),
+            hash_display_name("same User", "bilibili", self.context, self.config),
+        )
+        self.assertNotEqual(
+            hash_display_name("Same User", "bilibili", self.context, self.config),
+            hash_display_name("Same  User", "bilibili", self.context, self.config),
+        )
+
+    def test_blank_display_names_return_none(self) -> None:
+        for value in (None, "", "  \t\r\n"):
+            with self.subTest(value=value):
+                self.assertIsNone(
+                    hash_id_pseudonymizer.hash_display_name(
+                        value, "YouTube", self.context, self.config
+                    )
+                )
+
+    def test_invalid_display_names_fail_without_echoing_raw_value(self) -> None:
+        invalid_values = (
+            "=private-display-name",
+            ["private-display-name"],
+            12.5,
+        )
+
+        for value in invalid_values:
+            with self.subTest(value_type=type(value).__name__):
+                with self.assertRaises(InvalidUserIdError) as caught:
+                    hash_id_pseudonymizer.hash_display_name(
+                        value, "YouTube", self.context, self.config
+                    )
+                self.assertNotIn("private-display-name", str(caught.exception))
+                self.assertNotIn("12.5", str(caught.exception))
+
+    def test_display_name_hash_validates_context_without_exposing_raw_value(self) -> None:
+        invalid_context = replace(self.context, secret_key=b"short")
+
+        with self.assertRaises(
+            hash_id_pseudonymizer.InvalidHashProjectContextError
+        ) as caught:
+            hash_id_pseudonymizer.hash_display_name(
+                "private-display-name",
+                "YouTube",
+                invalid_context,
+                self.config,
+            )
+
+        self.assertNotIn("private-display-name", str(caught.exception))
+
+    def test_hash_selected_identity_dispatches_both_identity_types(self) -> None:
+        account_id = hash_id_pseudonymizer.SelectedIdentityHeader(
+            source_header="author_channel_id",
+            source_column=1,
+            identity_type="account_id",
+        )
+        display_name = hash_id_pseudonymizer.SelectedIdentityHeader(
+            source_header="author",
+            source_column=2,
+            identity_type="display_name",
+        )
+
+        self.assertEqual(
+            hash_user_id("same-user", "YouTube", self.context, self.config),
+            hash_id_pseudonymizer.hash_selected_identity(
+                "same-user", account_id, "YouTube", self.context, self.config
+            ),
+        )
+        self.assertEqual(
+            hash_id_pseudonymizer.hash_display_name(
+                "same-user", "YouTube", self.context, self.config
+            ),
+            hash_id_pseudonymizer.hash_selected_identity(
+                "same-user", display_name, "YouTube", self.context, self.config
+            ),
+        )
+
+    def test_hash_selected_identity_rejects_unsupported_type_without_raw_value(self) -> None:
+        unsupported = hash_id_pseudonymizer.SelectedIdentityHeader(
+            source_header="private-source-header",
+            source_column=1,
+            identity_type="unsupported",  # type: ignore[arg-type]
+        )
+
+        with self.assertRaises(HashIdConfigError) as caught:
+            hash_id_pseudonymizer.hash_selected_identity(
+                "private-display-name",
+                unsupported,
+                "YouTube",
+                self.context,
+                self.config,
+            )
+
+        self.assertNotIn("private-display-name", str(caught.exception))
+        self.assertNotIn("private-source-header", str(caught.exception))
+
     def test_different_projects_produce_different_hashes(self) -> None:
         other_project = replace(
             self.context,
