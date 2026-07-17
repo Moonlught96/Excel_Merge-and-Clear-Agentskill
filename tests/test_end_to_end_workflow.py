@@ -8,6 +8,7 @@ from openpyxl import Workbook, load_workbook
 
 from tools.clean_excel_comments import CleanerConfig, clean_workbook
 from tools.cleanup_intermediate_outputs import cleanup_intermediate_outputs
+from tools.hash_id_pseudonymizer import HashProjectContext, load_hash_id_config
 from tools.merge_excel_workbooks import merge_workbooks
 from tools.standardize_excel_headers import load_config, standardize_workbook
 from tools.strip_bilibili_reply_prefixes import strip_bilibili_reply_prefixes
@@ -61,9 +62,16 @@ class EndToEndWorkflowTest(unittest.TestCase):
             )
             write_source(
                 second,
-                [["2", "1", "user2", "回复@user1：这是另一条足够长的正常回复内容", "3", "1547698468", "未知", "0"]],
+                [["2", "1", "user1", "回复@user1：这是另一条足够长的正常回复内容", "3", "1547698468", "未知", "0"]],
             )
             original_bytes = {first: first.read_bytes(), second: second.read_bytes()}
+            hash_context = HashProjectContext(
+                project_id="project-screenbar-e2e",
+                project_name="ScreenBar十周年专案",
+                key_version=1,
+                key_fingerprint="test-fingerprint",
+                secret_key=b"e" * 32,
+            )
 
             merge_result = merge_workbooks([first, second], merged)
             strip_result = strip_bilibili_reply_prefixes(merged, stripped)
@@ -71,6 +79,9 @@ class EndToEndWorkflowTest(unittest.TestCase):
                 stripped,
                 load_config(),
                 output_path=standardized,
+                platform="B站",
+                hash_context=hash_context,
+                hash_config=load_hash_id_config(),
             )
             clean_result = clean_workbook(
                 standardized,
@@ -86,6 +97,14 @@ class EndToEndWorkflowTest(unittest.TestCase):
             self.assertEqual("=1+1", cleaned_rows[1][4])
             self.assertEqual("这是另一条足够长的正常回复内容", cleaned_rows[2][1])
             self.assertNotIn("user1", cleaned_rows[1])
+            first_hash = cleaned_rows[1][3]
+            second_hash = cleaned_rows[2][3]
+            self.assertRegex(first_hash, r"^[0-9a-f]{64}$")
+            self.assertRegex(second_hash, r"^[0-9a-f]{64}$")
+            self.assertEqual(first_hash, second_hash)
+            for row in cleaned_rows[1:]:
+                self.assertNotIn("user1", row)
+                self.assertNotIn("\u672a\u77e5", row)
             self.assertNotIn("未知", cleaned_rows[1])
 
             intermediate_paths = [
