@@ -9,7 +9,7 @@ from openpyxl import Workbook, load_workbook
 
 from tools.clean_excel_comments import CleanerConfig, clean_workbook
 from tools.cleanup_intermediate_outputs import cleanup_intermediate_outputs
-from tools.hash_id_pseudonymizer import HashProjectContext, hash_display_name, load_hash_id_config
+from tools.hash_id_pseudonymizer import HashProjectContext, load_hash_id_config
 from tools.merge_excel_workbooks import merge_workbooks
 from tools.standardize_excel_headers import load_config, standardize_workbook
 from tools.strip_bilibili_reply_prefixes import strip_bilibili_reply_prefixes
@@ -73,12 +73,7 @@ class EndToEndWorkflowTest(unittest.TestCase):
                 key_fingerprint="test-fingerprint",
                 secret_key=b"e" * 32,
             )
-            expected_hash = hash_display_name(
-                "user1",
-                "B站",
-                hash_context,
-                load_hash_id_config(),
-            )
+            expected_hash = "cad6b15fb4291d29dc08a17581aec2fa0726ea09b1786dd1ef5bf95b5b224b45"
 
             merge_result = merge_workbooks([first, second], merged)
             strip_result = strip_bilibili_reply_prefixes(merged, stripped)
