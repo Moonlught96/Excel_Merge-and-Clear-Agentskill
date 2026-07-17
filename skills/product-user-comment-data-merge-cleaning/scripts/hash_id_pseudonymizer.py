@@ -111,9 +111,9 @@ def load_hash_id_config(path: Path | str = DEFAULT_CONFIG_PATH) -> HashIdConfig:
     if (
         not isinstance(schema_version, int)
         or isinstance(schema_version, bool)
-        or schema_version != 1
+        or schema_version != 2
     ):
-        raise HashIdConfigError("schema_version must be 1")
+        raise HashIdConfigError("schema_version must be 2")
     if algorithm_version != "bazhuayu-hash-id-v1":
         raise HashIdConfigError("algorithm_version must be bazhuayu-hash-id-v1")
     if not isinstance(raw_platforms, list):

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -65,6 +67,8 @@ class SkillPackageTest(unittest.TestCase):
 
         required_constraints = (
             "未经确认的身份别名不得添加。",
+            "Evidence must contain headers/schema only or be redacted.",
+            "Raw identity values must never be committed.",
             "新增平台或表头别名必须获得用户明确确认和平台专属证据。",
             "`用户身份` 禁止作为身份来源。",
             "评论 ID 和父评论 ID 禁止作为身份来源。",
@@ -165,16 +169,52 @@ class SkillPackageTest(unittest.TestCase):
         self.assertIn("独立运行", agents)
 
     def test_copied_skill_runs_without_project_root(self) -> None:
-        temp_root = PROJECT_ROOT / ".tmp-tests" / "standalone-skill"
-        if temp_root.exists():
-            shutil.rmtree(temp_root)
+        temp_directory = tempfile.TemporaryDirectory(prefix="standalone-skill-")
+        temp_root = Path(temp_directory.name).resolve()
+        self.assertFalse(temp_root.is_relative_to(PROJECT_ROOT.resolve()))
         copied_skill = temp_root / SKILL_NAME
-        copied_skill.parent.mkdir(parents=True, exist_ok=True)
+        run_root = temp_root / "run"
+        run_root.mkdir()
         shutil.copytree(SKILL_ROOT, copied_skill)
 
-        input_path = temp_root / "input.xlsx"
-        standardized_path = temp_root / "standardized.xlsx"
-        cleaned_path = temp_root / "cleaned.xlsx"
+        subprocess_env = os.environ.copy()
+        for name in (
+            "PYTHONPATH",
+            "PYTHONHOME",
+            "PYTHONSTARTUP",
+            "PYTHONUSERBASE",
+            "PYTHONINSPECT",
+            "PYTHONSAFEPATH",
+            "PYTHONPLATLIBDIR",
+        ):
+            subprocess_env.pop(name, None)
+        subprocess_env["PYTHONNOUSERSITE"] = "1"
+
+        probe_code = (
+            "from pathlib import Path\n"
+            "import sys\n"
+            f"project_root = Path({str(PROJECT_ROOT.resolve())!r})\n"
+            "resolved_paths = {Path(entry or '.').resolve() for entry in sys.path}\n"
+            "assert project_root not in resolved_paths, resolved_paths\n"
+            "try:\n"
+            "    import tools.hash_id_pseudonymizer\n"
+            "except ModuleNotFoundError:\n"
+            "    pass\n"
+            "else:\n"
+            "    raise AssertionError('project-root tools unexpectedly importable')\n"
+        )
+        subprocess.run(
+            [sys.executable, "-c", probe_code],
+            cwd=run_root,
+            env=subprocess_env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        input_path = run_root / "input.xlsx"
+        standardized_path = run_root / "standardized.xlsx"
+        cleaned_path = run_root / "cleaned.xlsx"
         workbook = Workbook()
         sheet = workbook.active
         sheet.append(["timestamp", "content", "like_count", "author"])
@@ -194,11 +234,13 @@ class SkillPackageTest(unittest.TestCase):
                 "portable-test-project",
                 "--initialize-project",
                 "--project-store",
-                str(temp_root / "project-store"),
+                str(run_root / "project-store"),
             ],
-            cwd=temp_root,
+            cwd=run_root,
+            env=subprocess_env,
             check=True,
             capture_output=True,
+            text=True,
         )
         subprocess.run(
             [
@@ -210,8 +252,10 @@ class SkillPackageTest(unittest.TestCase):
                 "--output",
                 str(cleaned_path),
             ],
-            cwd=temp_root,
+            cwd=run_root,
+            env=subprocess_env,
             check=True,
+            text=True,
             capture_output=True,
         )
 
@@ -226,7 +270,7 @@ class SkillPackageTest(unittest.TestCase):
         self.assertRegex(hash_id, r"^[0-9a-f]{64}$")
 
         self.assertNotIn("author", [cell.value for cell in cleaned.active[1]])
-        shutil.rmtree(temp_root)
+        temp_directory.cleanup()
 
 
 if __name__ == "__main__":

@@ -73,8 +73,15 @@ class WorkflowDocsTest(unittest.TestCase):
         readme = Path("README.md").read_text(encoding="utf-8")
         self.assertNotIn("你确认清洗结果成功后", readme)
         self.assertNotIn("你确认清洗成功后", readme)
+        self.assertNotIn("经你确认成功后", readme)
+        self.assertNotRegex(
+            readme,
+            r"清洗后的[^\n。]*(?:经你|用户)[^\n。]*确认[^\n。]*(?:后|再)[^\n。]*清理",
+        )
         self.assertIn("清洗后的 `.xlsx` 和 `.csv` 生成并核对成功后立即", readme)
         self.assertIn("整张工作表优先选择已登记的稳定账号 ID 列", readme)
+        self.assertIn("无需额外用户确认", readme)
+        self.assertIn("只有用户在清洗前明确要求保留时才保留", readme)
         self.assertIn("只有不存在已登记账号 ID 列时", readme)
         self.assertIn("显示名关联属于弱伪名化，不是法律意义上的匿名化", readme)
         self.assertIn("原始账号 ID、用户名、昵称", readme)

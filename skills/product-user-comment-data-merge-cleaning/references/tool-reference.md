@@ -20,6 +20,8 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - `config/comment-cleaner.json`: active cleaning thresholds, exact text, fixed contains terms, random-heap thresholds, duplicate policy, subcomment rules, and CSV encoding.
 - `config/header-standardizer.json`: exact standard output order, fixed aliases, required/optional columns, and known dropped headers.
 - `config/hash-id.json`: platform aliases plus ordered `user_id_headers` and `display_name_headers`; do not add ambiguous identity fields.
+- `schema_version` must be `2`; schema version `1` is rejected.
+- `algorithm_version` remains `bazhuayu-hash-id-v1`, and this schema migration does not change hash outputs.
 
 
 ## Hash Identity Tool Contract

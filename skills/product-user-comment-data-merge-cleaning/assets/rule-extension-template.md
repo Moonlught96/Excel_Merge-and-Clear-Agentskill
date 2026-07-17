@@ -23,6 +23,8 @@ reference 文件：
 - 评论 ID 和父评论 ID 禁止作为身份来源。
 - URL 和主页链接禁止作为身份来源。
 - IP 字段禁止作为身份来源。
+- Evidence must contain headers/schema only or be redacted.
+- Raw identity values must never be committed.
 - 来源自带的 `哈希ID` 禁止作为身份来源。
 
 使用此模板记录规则扩展。未被用户明确点名修改的基础规则必须保持不变。

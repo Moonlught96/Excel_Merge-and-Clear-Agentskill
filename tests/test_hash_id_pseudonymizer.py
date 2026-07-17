@@ -392,7 +392,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
         output_dir = PROJECT_ROOT / ".tmp-tests" / "hash-id-config-validation"
         output_dir.mkdir(parents=True, exist_ok=True)
         invalid_values = (
-            ("schema_version", 2),
+            ("schema_version", 3),
             ("schema_version", True),
             ("algorithm_version", "bazhuayu-hash-id-v2"),
             ("algorithm_version", ""),
@@ -410,6 +410,27 @@ class HashIdPseudonymizerTest(unittest.TestCase):
 
                 with self.assertRaises(HashIdConfigError):
                     load_hash_id_config(config_path)
+
+    def test_config_requires_schema_version_2_and_rejects_v1_explicitly(self) -> None:
+        self.assertEqual(2, self.config.schema_version)
+        self.assertEqual("bazhuayu-hash-id-v1", self.config.algorithm_version)
+
+        source_path = PROJECT_ROOT / "config" / "hash-id.json"
+        old_config = json.loads(source_path.read_text(encoding="utf-8"))
+        old_config["schema_version"] = 1
+        output_dir = PROJECT_ROOT / ".tmp-tests" / "hash-id-schema-v1-rejection"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        config_path = output_dir / "schema-v1.json"
+        config_path.write_text(
+            json.dumps(old_config, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(
+            HashIdConfigError,
+            "schema_version must be 2",
+        ):
+            load_hash_id_config(config_path)
 
     def test_config_loads_exact_display_name_header_priorities(self) -> None:
         expected = {
