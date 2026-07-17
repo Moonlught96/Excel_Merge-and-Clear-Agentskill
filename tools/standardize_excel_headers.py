@@ -24,10 +24,10 @@ try:
         HashProjectContext,
         InvalidUserIdError,
         SelectedIdentityHeader,
-        hash_user_id,
+        hash_selected_identity,
         load_hash_id_config,
         normalize_platform,
-        select_user_id_header,
+        select_identity_header,
     )
 except ModuleNotFoundError:
     from hash_id_pseudonymizer import (
@@ -36,10 +36,10 @@ except ModuleNotFoundError:
         HashProjectContext,
         InvalidUserIdError,
         SelectedIdentityHeader,
-        hash_user_id,
+        hash_selected_identity,
         load_hash_id_config,
         normalize_platform,
-        select_user_id_header,
+        select_identity_header,
     )
 
 try:
@@ -130,6 +130,7 @@ class SelectedColumn:
 
 @dataclass(frozen=True)
 class HashIdSheetSummary:
+    identity_type: str | None
     source_header: str | None
     source_column: int | None
     hashed_count: int
@@ -493,8 +494,27 @@ def _all_registered_identity_headers(config: HashIdConfig) -> set[str]:
     return {
         header
         for platform_config in config.platforms
-        for header in platform_config.user_id_headers
+        for header in (
+            *platform_config.user_id_headers,
+            *platform_config.display_name_headers,
+        )
     }
+
+
+def _missing_hash_context_message(
+    sheet_name: str | None,
+    present_registered_headers: list[str],
+) -> str:
+    location = f" at sheet {sheet_name!r}" if sheet_name is not None else ""
+    header = (
+        f", header {present_registered_headers[0]!r}"
+        if present_registered_headers
+        else ""
+    )
+    return (
+        "Missing platform/project context for "
+        f"identity value/column{location}{header}"
+    )
 
 
 def resolve_identity_selection(
@@ -502,6 +522,7 @@ def resolve_identity_selection(
     platform: str | None,
     hash_context: HashProjectContext | None,
     hash_config: HashIdConfig,
+    sheet_name: str | None = None,
 ) -> tuple[str | None, SelectedIdentityHeader | None]:
     registered_headers = _all_registered_identity_headers(hash_config)
     present_registered_headers = [
@@ -513,20 +534,20 @@ def resolve_identity_selection(
     if platform is None:
         if hash_context is not None or present_registered_headers:
             raise MissingHashContextError(
-                "A registered user ID column requires both platform and project context"
+                _missing_hash_context_message(sheet_name, present_registered_headers)
             )
         return None, None
 
     canonical_platform = normalize_platform(platform, hash_config)
-    selected_identity = select_user_id_header(
+    if hash_context is None and present_registered_headers:
+        raise MissingHashContextError(
+            _missing_hash_context_message(sheet_name, present_registered_headers)
+        )
+    selected_identity = select_identity_header(
         headers,
         canonical_platform,
         hash_config,
     )
-    if selected_identity is not None and hash_context is None:
-        raise MissingHashContextError(
-            "A registered user ID column requires both platform and project context"
-        )
     return canonical_platform, selected_identity
 
 
@@ -560,6 +581,7 @@ def standardize_sheet(
         platform,
         hash_context,
         effective_hash_config,
+        sheet_name=source_sheet.title,
     )
     selected_column_indexes = {
         column.source_column
@@ -594,23 +616,26 @@ def standardize_sheet(
                 blank_count += 1
                 continue
 
-            raw_user_id = (
+            raw_identity = (
                 row[selected_identity.source_column - 1]
                 if selected_identity.source_column - 1 < len(row)
                 else None
             )
             try:
-                hashed_id = hash_user_id(
-                    raw_user_id,
+                hashed_id = hash_selected_identity(
+                    raw_identity,
+                    selected_identity,
                     canonical_platform,
                     hash_context,
                     effective_hash_config,
                 )
             except InvalidUserIdError as exc:
                 raise UnsafeUserIdValueError(
-                    f"Invalid user ID at sheet {source_sheet.title!r}, "
+                    f"Invalid identity value/column at sheet {source_sheet.title!r}, "
                     f"row {excel_row_number}, header "
-                    f"{selected_identity.source_header!r}"
+                    f"{selected_identity.source_header!r}, identity type "
+                    f"{selected_identity.identity_type!r}, failure type "
+                    f"{type(exc).__name__}"
                 ) from exc
             output_row.append(hashed_id)
             if hashed_id is None:
@@ -640,6 +665,11 @@ def standardize_sheet(
         omitted_headers=omitted_headers,
         configured_drop_headers_found=configured_drop_headers_found,
         hash_id=HashIdSheetSummary(
+            identity_type=(
+                selected_identity.identity_type
+                if selected_identity is not None
+                else None
+            ),
             source_header=(
                 selected_identity.source_header
                 if selected_identity is not None
@@ -764,6 +794,7 @@ def standardize_workbook(
                     for header in sheet.configured_drop_headers_found
                 ],
                 "hash_id": {
+                    "identity_type": sheet.hash_id.identity_type,
                     "source_header": sheet.hash_id.source_header,
                     "source_column": sheet.hash_id.source_column,
                     "hashed_count": sheet.hash_id.hashed_count,
