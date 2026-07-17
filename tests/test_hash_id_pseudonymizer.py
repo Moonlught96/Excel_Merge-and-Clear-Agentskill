@@ -260,6 +260,29 @@ class HashIdPseudonymizerTest(unittest.TestCase):
                 with self.assertRaises(HashIdConfigError):
                     load_hash_id_config(config_path)
 
+    def test_config_rejects_blank_and_duplicate_user_id_headers(self) -> None:
+        source_path = PROJECT_ROOT / "config" / "hash-id.json"
+        base_config = json.loads(source_path.read_text(encoding="utf-8"))
+        output_dir = PROJECT_ROOT / ".tmp-tests" / "hash-id-user-id-validation"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        invalid_values = (
+            ("blank", [" "]),
+            ("duplicate", ["author_channel_id", "author_channel_id"]),
+        )
+
+        for case_name, invalid_value in invalid_values:
+            with self.subTest(case_name=case_name):
+                invalid_config = json.loads(json.dumps(base_config))
+                invalid_config["platforms"][0]["user_id_headers"] = invalid_value
+                config_path = output_dir / f"{case_name}.json"
+                config_path.write_text(
+                    json.dumps(invalid_config, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaises(HashIdConfigError):
+                    load_hash_id_config(config_path)
+
     def test_youtube_header_selection_uses_only_verified_aliases(self) -> None:
         headers = ["评论内容", "authorChannelId", "点赞数"]
 
@@ -376,6 +399,58 @@ class HashIdPseudonymizerTest(unittest.TestCase):
         self.assertEqual("Author Channel ID", selected.source_header)
         self.assertEqual(3, selected.source_column)
         self.assertEqual("account_id", selected.identity_type)
+
+    def test_youtube_author_fallback_is_selected_when_account_id_is_absent(self) -> None:
+        selected = select_identity_header(
+            ["评论内容", "author", "点赞数"],
+            "YouTube",
+            self.config,
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual("author", selected.source_header)
+        self.assertEqual(2, selected.source_column)
+        self.assertEqual("display_name", selected.identity_type)
+
+    def test_xiaohongshu_user_name_fallback_is_selected(self) -> None:
+        selected = select_identity_header(
+            ["评论内容", "用户名称"],
+            "小红书",
+            self.config,
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual("用户名称", selected.source_header)
+        self.assertEqual(2, selected.source_column)
+        self.assertEqual("display_name", selected.identity_type)
+
+    def test_taobao_user_name_has_priority_over_username(self) -> None:
+        selected = select_identity_header(
+            ["用户名", "评论内容", "用户名称"],
+            "淘宝",
+            self.config,
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual("用户名称", selected.source_header)
+        self.assertEqual(3, selected.source_column)
+        self.assertEqual("display_name", selected.identity_type)
+
+    def test_jd_username_fallback_is_selected(self) -> None:
+        selected = select_identity_header(
+            ["评论内容", "用户名"],
+            "京东",
+            self.config,
+        )
+
+        self.assertIsNotNone(selected)
+        assert selected is not None
+        self.assertEqual("用户名", selected.source_header)
+        self.assertEqual(2, selected.source_column)
+        self.assertEqual("display_name", selected.identity_type)
 
     def test_tiktok_display_name_priority_ignores_user_identity(self) -> None:
         selected = select_identity_header(

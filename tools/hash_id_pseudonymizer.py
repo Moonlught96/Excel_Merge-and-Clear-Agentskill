@@ -86,7 +86,7 @@ def _require_string_list(value: Any, field_name: str) -> tuple[str, ...]:
     return tuple(value)
 
 
-def _require_display_name_headers(value: Any, field_name: str) -> tuple[str, ...]:
+def _require_identity_headers(value: Any, field_name: str) -> tuple[str, ...]:
     headers = _require_string_list(value, field_name)
     if any(not header.strip() for header in headers):
         raise HashIdConfigError(f"{field_name} must not contain blank headers")
@@ -128,11 +128,11 @@ def load_hash_id_config(path: Path | str = DEFAULT_CONFIG_PATH) -> HashIdConfig:
         if not isinstance(namespace, str) or not namespace:
             raise HashIdConfigError(f"platforms[{index}].namespace must be a non-empty string")
         aliases = _require_string_list(raw_platform.get("aliases"), f"platforms[{index}].aliases")
-        headers = _require_string_list(
+        headers = _require_identity_headers(
             raw_platform.get("user_id_headers"),
             f"platforms[{index}].user_id_headers",
         )
-        display_name_headers = _require_display_name_headers(
+        display_name_headers = _require_identity_headers(
             raw_platform.get("display_name_headers"),
             f"platforms[{index}].display_name_headers",
         )
