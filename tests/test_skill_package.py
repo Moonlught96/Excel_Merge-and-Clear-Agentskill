@@ -58,6 +58,23 @@ class SkillPackageTest(unittest.TestCase):
         missing = [str(path.relative_to(PROJECT_ROOT)) for path in required_files if not path.is_file()]
         self.assertEqual([], missing, f"Skill package is missing required files: {missing}")
 
+    def test_rule_extension_template_enforces_identity_alias_safety(self) -> None:
+        template = (
+            SKILL_ROOT / "assets" / "rule-extension-template.md"
+        ).read_text(encoding="utf-8")
+
+        required_constraints = (
+            "未经确认的身份别名不得添加。",
+            "新增平台或表头别名必须获得用户明确确认和平台专属证据。",
+            "`用户身份` 禁止作为身份来源。",
+            "评论 ID 和父评论 ID 禁止作为身份来源。",
+            "URL 和主页链接禁止作为身份来源。",
+            "IP 字段禁止作为身份来源。",
+            "来源自带的 `哈希ID` 禁止作为身份来源。",
+        )
+        for constraint in required_constraints:
+            self.assertIn(constraint, template)
+
     def test_skill_entrypoint_is_concise_and_uses_progressive_disclosure(self) -> None:
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
 
