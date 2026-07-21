@@ -6,6 +6,8 @@
 - In legacy direct-cleaning mode, target column 3. In standardized mode, target the `评论内容` header.
 - Chinese comments whose trimmed length is less than or equal to 7 characters are deleted.
 - Chinese comments use character length. Non-Chinese comments use deterministic word count.
+- Script classification is deterministic and gives Japanese Kana, Korean Hangul, Thai, and Devanagari precedence over Han characters, so mixed Japanese/Korean text does not inherit the Chinese length threshold.
+- Text containing Han characters but no Kana, Hangul, Thai, or Devanagari is treated as Chinese. A Han-only Japanese comment cannot be distinguished from Chinese without semantic inference and therefore follows the Chinese threshold.
 - Non-Chinese comments with four or fewer words are deleted.
 - For unspaced non-Chinese scripts, only text with four or fewer characters is deleted by the short-text rule.
 - Pure numeric comments keep the legacy seven-character threshold for backward compatibility.
@@ -13,6 +15,9 @@
 - Delete a row when the main comment contains any user-confirmed KOL clean word.
 - Delete duplicate main comments only within the same worksheet, keeping the last occurrence and deleting earlier rows.
 - Never use AI, semantic quality review, sentiment, relevance, suspected-advertising judgment, or fuzzy matching.
+- Fixed delete words are isolated by deterministic script group. Chinese comments use only Chinese fixed words; Japanese, Korean, Thai, and Hindi comments use only their corresponding script group. English and Spanish share the Latin-script group because script inspection cannot reliably distinguish those languages without semantic inference.
+- Language-neutral URL markers such as `http://` and `https://` apply to every script group.
+- Latin-script fixed words use complete lexical boundaries with case-insensitive matching where configured. For example, `test` and `TEST` match, while `TESTV`, `contest`, and `testing` do not.
 
 ## Fixed Delete Words
 

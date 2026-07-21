@@ -125,6 +125,24 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         self.assertEqual(2, result.files_processed)
         self.assertEqual(2, result.data_rows_written)
 
+    def test_csv_formula_like_values_remain_text_after_merge(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-merge-csv-formula-text"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.csv"
+        output_path = tmp / "merged.xlsx"
+        input_path.write_text(
+            "timestamp,content,like_count\n1678870952,=1+1,=2+2\n",
+            encoding="utf-8-sig",
+        )
+
+        merge_workbooks([input_path], output_path)
+
+        merged = load_workbook(output_path, read_only=False, data_only=False)
+        self.assertEqual("=1+1", merged["总表"].cell(row=2, column=2).value)
+        self.assertEqual("s", merged["总表"].cell(row=2, column=2).data_type)
+        self.assertEqual("=2+2", merged["总表"].cell(row=2, column=3).value)
+        self.assertEqual("s", merged["总表"].cell(row=2, column=3).data_type)
+
     def test_preserves_formula_cells_instead_of_turning_them_into_blanks(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-merge-preserves-formulas"
         tmp.mkdir(parents=True, exist_ok=True)

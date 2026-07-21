@@ -56,8 +56,10 @@ def workbook_from_csv(path: Path) -> Workbook:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = safe_sheet_title(path)
-    for row in csv_rows.rows:
-        sheet.append(row)
+    for row_index, row in enumerate(csv_rows.rows, start=1):
+        for column_index, value in enumerate(row, start=1):
+            cell = sheet.cell(row=row_index, column=column_index, value=value)
+            cell.data_type = "s"
     return workbook
 
 

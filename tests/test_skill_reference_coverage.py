@@ -148,6 +148,22 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             self.assertIn(config_key, config)
             self.assertIn(documented_rule, reference)
 
+        for language_isolation_rule in (
+            "Fixed delete words are isolated by deterministic script group.",
+            "Latin-script fixed words use complete lexical boundaries",
+            "`TESTV`, `contest`, and `testing` do not",
+            "A Han-only Japanese comment cannot be distinguished from Chinese without semantic inference",
+        ):
+            self.assertIn(language_isolation_rule, reference)
+
+        data_contract = (SKILL_ROOT / "references" / "data-contract.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "CSV values beginning with `=` must remain text cells when written to XLSX",
+            data_contract,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

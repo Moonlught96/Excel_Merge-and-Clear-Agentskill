@@ -106,13 +106,13 @@ def merge_workbooks(
         sheet_summaries: list[dict[str, Any]] = []
 
         for sheet in workbook.worksheets:
-            rows = sheet.iter_rows(values_only=True)
+            rows = sheet.iter_rows(values_only=False)
             try:
-                header_tuple = next(rows)
+                header_cells = next(rows)
             except StopIteration:
                 continue
 
-            header = list(header_tuple)
+            header = [cell.value for cell in header_cells]
             header_key = [normalize_for_header(value) for value in header]
 
             if canonical_header_key is None:
@@ -129,13 +129,18 @@ def merge_workbooks(
                 )
 
             sheet_rows = 0
-            for row_tuple in rows:
+            for row_cells in rows:
+                row_tuple = tuple(cell.value for cell in row_cells)
                 if is_blank_row(row_tuple):
                     continue
                 row = list(row_tuple)
                 if add_source_columns:
                     row.extend([path.name, sheet.title])
                 output_sheet.append(row)
+                output_row_number = output_sheet.max_row
+                for column_index, source_cell in enumerate(row_cells, start=1):
+                    if source_cell.data_type == "s" and isinstance(source_cell.value, str):
+                        output_sheet.cell(row=output_row_number, column=column_index).data_type = "s"
                 sheet_rows += 1
 
             if sheet_rows:

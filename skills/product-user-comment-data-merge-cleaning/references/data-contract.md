@@ -13,6 +13,7 @@
 - Supported inputs are `.xlsx`, `.xlsm`, and `.csv`.
 - CSV inputs must use the deterministic compatibility layer.
 - Preserve CSV cell values as text. Do not infer numeric, date, ID, or timestamp types while loading CSV.
+- CSV values beginning with `=` must remain text cells when written to XLSX during merge, reply-prefix processing, standardization, or direct cleaning; they must not be promoted to Excel formulas. Genuine formula cells from XLSX/XLSM inputs remain formulas because Excel inputs are read with `data_only=False`.
 - Process every worksheet in each workbook.
 - Treat row 1 as the header row and data as beginning at row 2.
 - During merge, B站 reply-prefix stripping, and standardization, load workbook formulas as formulas (`data_only=False`) so missing cached values do not turn formulas into blanks.

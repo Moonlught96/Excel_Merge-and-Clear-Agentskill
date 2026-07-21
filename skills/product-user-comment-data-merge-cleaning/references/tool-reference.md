@@ -89,6 +89,8 @@ Do not include `--summary` in cleanup unless the user requested a cleanup audit 
 - `openpyxl` is required.
 - Use a Python runtime that includes `zoneinfo` timezone data for deterministic Beijing naming.
 - When global `python` lacks dependencies, use the Codex bundled Python returned by `load_workspace_dependencies`.
+- Automatic initialization and persistent storage of a new hash-ID research project requires Windows DPAPI under the current Windows user. On non-Windows systems, the Skill can load a securely pre-provisioned project key through the documented environment provider but cannot securely initialize and persist a new project key.
+- Folder portability means the complete Skill can run outside the repository with its bundled scripts and configuration; it does not mean that a Windows DPAPI-protected project key can be moved to another operating system or Windows user.
 
 ## Validation
 

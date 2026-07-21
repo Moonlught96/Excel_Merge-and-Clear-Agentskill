@@ -5,10 +5,119 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
-from tools.clean_excel_comments import CleanerConfig, clean_workbook
+from tools.clean_excel_comments import CleanerConfig, clean_workbook, should_delete_comment
 
 
 class CleanExcelCommentsTest(unittest.TestCase):
+    def test_case_insensitive_latin_fixed_word_requires_word_boundaries(self) -> None:
+        config = CleanerConfig(
+            delete_contains_texts=(),
+            delete_contains_case_insensitive_texts=("test",),
+        )
+
+        self.assertIsNone(
+            should_delete_comment(
+                "This monitor light uses TESTV for custom firmware",
+                set(),
+                config,
+                (),
+            )
+        )
+        self.assertEqual(
+            "评论包含固定删除词: test",
+            should_delete_comment(
+                "This monitor light is only a TEST comment",
+                set(),
+                config,
+                (),
+            ),
+        )
+
+    def test_chinese_comments_do_not_use_latin_fixed_delete_words(self) -> None:
+        config = CleanerConfig(
+            delete_contains_texts=(),
+            delete_contains_case_insensitive_texts=("test", "加v"),
+        )
+
+        self.assertIsNone(
+            should_delete_comment(
+                "这条中文评论提到 test 但仍然是正常产品说明",
+                set(),
+                config,
+                (),
+            )
+        )
+        self.assertEqual(
+            "评论包含固定删除词: 加v",
+            should_delete_comment(
+                "这条中文广告要求用户加V领取优惠资料",
+                set(),
+                config,
+                (),
+            ),
+        )
+
+    def test_fixed_delete_words_are_isolated_by_script_group(self) -> None:
+        config = CleanerConfig(
+            delete_contains_texts=("https://",),
+            delete_contains_case_insensitive_texts=("test", "テスト", "테스트"),
+        )
+
+        self.assertIsNone(
+            should_delete_comment(
+                "これは test を含む通常の製品レビューです",
+                set(),
+                config,
+                (),
+            )
+        )
+        self.assertEqual(
+            "评论包含固定删除词: テスト",
+            should_delete_comment(
+                "これはテスト投稿なので削除してください",
+                set(),
+                config,
+                (),
+            ),
+        )
+        self.assertIsNone(
+            should_delete_comment(
+                "이 한국어 제품 설명에는 test 문자가 있습니다",
+                set(),
+                config,
+                (),
+            )
+        )
+        self.assertEqual(
+            "评论包含固定删除词: https://",
+            should_delete_comment(
+                "这条中文评论包含网址 https://example.com",
+                set(),
+                config,
+                (),
+            ),
+        )
+
+    def test_japanese_with_kanji_does_not_use_chinese_length_threshold(self) -> None:
+        config = CleanerConfig(
+            delete_contains_texts=(),
+            delete_contains_case_insensitive_texts=(),
+        )
+
+        self.assertIsNone(should_delete_comment("照明最高です", set(), config, ()))
+        self.assertEqual(
+            "非中文无空格短文本长度小于等于 4",
+            should_delete_comment("最高です", set(), config, ()),
+        )
+
+    def test_korean_with_hanja_does_not_use_chinese_length_threshold(self) -> None:
+        config = CleanerConfig(
+            delete_contains_texts=(),
+            delete_contains_case_insensitive_texts=(),
+        )
+
+        self.assertIsNone(should_delete_comment("漢字좋아요", set(), config, ()))
+
     def test_clean_workbook_matches_rpa_rules_and_keeps_last_duplicate(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-rules"
         tmp.mkdir(parents=True, exist_ok=True)

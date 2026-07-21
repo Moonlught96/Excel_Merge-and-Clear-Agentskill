@@ -110,27 +110,32 @@ def strip_sheet_reply_prefixes(
     output_sheet: Worksheet,
     target_aliases: tuple[str, ...],
 ) -> SheetStripSummary:
-    rows = source_sheet.iter_rows(values_only=True)
+    rows = source_sheet.iter_rows(values_only=False)
     try:
-        header = next(rows)
+        header_cells = next(rows)
     except StopIteration:
         raise TargetHeaderNotFoundError(f"Worksheet has no header row: {source_sheet.title}")
 
+    header = tuple(cell.value for cell in header_cells)
     target_column, target_headers = find_target_column(header, target_aliases)
     output_sheet.append(list(header))
 
     input_rows = 0
     output_rows = 0
     reply_prefixes_stripped = 0
-    for row_tuple in rows:
+    for row_cells in rows:
         input_rows += 1
-        row = list(row_tuple)
+        row = [cell.value for cell in row_cells]
         if target_column - 1 < len(row):
             stripped_value, changed = strip_reply_prefix(row[target_column - 1])
             if changed:
                 row[target_column - 1] = stripped_value
                 reply_prefixes_stripped += 1
         output_sheet.append(row)
+        output_row_number = output_sheet.max_row
+        for column_index, source_cell in enumerate(row_cells, start=1):
+            if source_cell.data_type == "s" and isinstance(row[column_index - 1], str):
+                output_sheet.cell(row=output_row_number, column=column_index).data_type = "s"
         output_rows += 1
 
     return SheetStripSummary(

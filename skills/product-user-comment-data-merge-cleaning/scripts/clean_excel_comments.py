@@ -20,6 +20,10 @@ except ModuleNotFoundError:
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "comment-cleaner.json"
 CHINESE_CHAR_PATTERN = re.compile(r"[\u4e00-\u9fff]")
+JAPANESE_KANA_PATTERN = re.compile(r"[\u3040-\u30ff]")
+KOREAN_HANGUL_PATTERN = re.compile(r"[\uac00-\ud7af\u1100-\u11ff]")
+THAI_PATTERN = re.compile(r"[\u0e00-\u0e7f]")
+DEVANAGARI_PATTERN = re.compile(r"[\u0900-\u097f]")
 ALNUM_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
 LATIN_LETTER_PATTERN = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿĀ-ž]")
 DEFAULT_DELETE_CONTAINS_TEXTS = (
@@ -321,7 +325,7 @@ def count_non_chinese_words(comment: str) -> int | None:
 
 
 def should_delete_for_length(comment: str, config: CleanerConfig) -> str | None:
-    if CHINESE_CHAR_PATTERN.search(comment):
+    if fixed_term_script_group(comment) == "chinese":
         if len(comment) < config.min_trimmed_length:
             return f"评论长度小于 {config.min_trimmed_length}"
         return None
@@ -415,6 +419,44 @@ def resolve_optional_header_columns(sheet: Worksheet, config: CleanerConfig, hea
     return columns
 
 
+def fixed_term_script_group(text: str) -> str:
+    normalized = text.casefold()
+    if normalized in {"http://", "https://"}:
+        return "neutral"
+    if JAPANESE_KANA_PATTERN.search(text):
+        return "japanese"
+    if KOREAN_HANGUL_PATTERN.search(text):
+        return "korean"
+    if THAI_PATTERN.search(text):
+        return "thai"
+    if DEVANAGARI_PATTERN.search(text):
+        return "hindi"
+    if CHINESE_CHAR_PATTERN.search(text):
+        return "chinese"
+
+    letters = [character for character in text if unicodedata.category(character).startswith("L")]
+    if letters and all("LATIN" in unicodedata.name(character, "") for character in letters):
+        return "latin"
+    return "neutral"
+
+
+def contains_configured_fixed_term(comment: str, term: str, *, case_sensitive: bool) -> bool:
+    term_group = fixed_term_script_group(term)
+    comment_group = fixed_term_script_group(comment)
+    if term_group != "neutral" and term_group != comment_group:
+        return False
+
+    if term_group == "latin":
+        prefix = r"(?<!\w)" if term[0].isalnum() else ""
+        suffix = r"(?!\w)" if term[-1].isalnum() else ""
+        flags = 0 if case_sensitive else re.IGNORECASE
+        return re.search(f"{prefix}{re.escape(term)}{suffix}", comment, flags) is not None
+
+    if case_sensitive:
+        return term in comment
+    return term.casefold() in comment.casefold()
+
+
 def should_delete_comment(
     comment: str,
     seen_comments: set[str],
@@ -433,12 +475,11 @@ def should_delete_comment(
             return f"评论包含清理词: {clean_word}"
 
     for text in config.delete_contains_texts:
-        if text and text in comment:
+        if text and contains_configured_fixed_term(comment, text, case_sensitive=True):
             return f"评论包含固定删除词: {text}"
 
-    casefolded_comment = comment.casefold()
     for text in config.delete_contains_case_insensitive_texts:
-        if text and text.casefold() in casefolded_comment:
+        if text and contains_configured_fixed_term(comment, text, case_sensitive=False):
             return f"评论包含固定删除词: {text}"
 
     if config.delete_random_alnum_without_chinese and is_random_alnum_without_chinese(comment, config):

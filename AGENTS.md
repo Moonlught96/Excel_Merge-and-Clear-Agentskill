@@ -18,6 +18,7 @@
 
 当用户提供抓取或导出的 Excel/CSV 用户评论文件进行合并或清洗时，必须执行表头标准化：新建一个独立的标准化 Excel 文档，只保留并排序为 `评论日期`、`评论内容`、`产品名`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`。昵称、IP 数据以及其它不在保留清单内的列不得进入后续文件。该过程必须使用确定性工具，不接入 AI 判断。源表头名称不一致时，只能通过固定别名映射处理；缺少必需标准列的已登记别名时必须停止并让用户确认映射。未登记且不在保留清单内的额外列按删除规则省略，不得猜测为标准列。
 CSV 输入必须先通过确定性兼容层读取；CSV 单元格值按文本保留，不得自动推断数字、日期、ID 或时间戳类型。CSV 原文件不得修改，后续标准化、合并和清洗输出仍然生成新的 `.xlsx` 工作簿，并按既有规则导出清洗后的 `.csv`。
+CSV 中以 `=` 开头的值在合并、B站回复前缀处理、标准化和直接清洗生成 XLSX 时必须保持文本类型，不得被 `openpyxl` 提升为公式；XLSX/XLSM 源文件中的真实公式仍按 `data_only=False` 保留。
 合并、B站回复前缀处理和表头标准化读取 Excel 时必须保留公式文本（`data_only=False`），不得把没有缓存值的公式单元格静默转换为空值。
 若源表头为淘宝 `评论日期与产品`，只能按固定格式拆分：开头的 `YYYY年M月D日`、`YYYY/M/D` 或 `YYYY-M-D` 进入 `评论日期`，日期后可选的 `已购：` 之后的文本进入 `产品名`。若源表已有 `购买产品`、`产品名`、`商品名称` 或 `商品` 列，则直接映射到 `产品名`。`子评论数/追评数` 是标准输出必保留列，但源文件没有对应表头时允许保留空列。不得使用 AI 或语义判断拆分产品名。
 
@@ -32,7 +33,7 @@ CSV 输入必须先通过确定性兼容层读取；CSV 单元格值按文本保
 项目密钥必须由 Windows DPAPI 保护并保存在用户本地项目密钥仓库，不得进入仓库、输出文件、日志或摘要。新增显示名兜底不得改变任何既有合并、清洗、命名、确认或留存规则。
 当前已确认的 TikTok/YouTube 平台表头映射包括：`createTime`、`publishedAt`、`published_at`、`publishedTime`、`createdAt`、`created_at`、`date`、`time` -> `评论日期`；`评论`、`text`、`comment`、`commentText`、`comment_text`、`Comment Text`、`message`、`body` -> `评论内容`；`Digg Count`、`likeCount`、`likes`、`diggCount` -> `点赞数`；`回复数`、`replyCount`、`replyCommentTotal`、`replies` -> `子评论数/追评数`；`replyText`、`reply_text` -> `一级评论`。这些平台时间字段必须按确定性规则转换为北京时间 `YYYY-MM-DD`，支持 Unix 秒/毫秒时间戳和 ISO 时间；不得使用 AI 判断。中文 `评论时间` 或 `评论日期` 源列只在值为数字时间戳或带时分秒的日期时间文本时转换为 `YYYY-MM-DD`；纯日期文本保持原值。Relative platform time values such as `1年前`, `9个月前`, `1 year ago`, and `9 months ago` are converted deterministically from the current Beijing date. Relative year values output only `YYYY`; relative month values output only `YYYY-MM`. Relative day/week values output `YYYY-MM-DD`, and missing month/day must not be inferred beyond that fixed granularity. `id`、`comment_id`、`commentId`、`cid`、`uid`、`user_id`、`userId`、`uniqueId`、`author`、`authorName`、`authorDisplayName`、`authorChannelId`、`channelId`、`profileUrl`、`avatar`、`videoId`、`videoUrl`、`url`、`permalink` 必须作为 ID、昵称、账号或链接相关列丢弃。
 
-B站数据在标准化前必须先在原始合并总表中按固定规则去掉 `回复@xxx：` 或 `回复 @xxx:` 前缀，只保留冒号后的真实评论内容。该步骤只处理 `content` 或 `评论内容` 列的固定文本前缀，必须输出新的前缀清理后合并表，不得覆盖原始合并总表；不得在该步骤中移动回复行或推断父子层级，不得新增层级列，不得删除行。
+B站数据在标准化前必须按固定规则去掉 `回复@xxx：` 或 `回复 @xxx:` 前缀，只保留冒号后的真实评论内容。多文件流程在用户确认合并完成后处理原始合并总表；单文件流程在用户确认只有该文件后处理原始输入。该步骤只处理 `content` 或 `评论内容` 列的固定文本前缀，必须输出新的临时前缀清理表，不得覆盖原始输入或原始合并总表；不得在该步骤中移动回复行或推断父子层级，不得新增层级列，不得删除行。
 
 清洗工具成功生成并核对清洗后的 `.xlsx` 和 `.csv` 后，必须立即删除本次流程生成的合并总表、回复前缀清理表、标准化总表及其摘要文件，默认同时删除清洗日志和清洗摘要，不再额外询问用户是否清理；除非用户在清洗前明确要求保留日志或摘要用于核对，最终默认只保留清洗后的 `.xlsx` 和 `.csv`。删除时只能使用明确传入的中间文件路径，不得扫描文件夹批量删除；不得删除原始输入文件、清洗后的 `.xlsx`、清洗后的 `.csv`，也不得删除用户明确要求保留的日志或摘要。调用清理工具时，必须把所有原始输入文件以及最终清洗后的 `.xlsx`、`.csv` 作为受保护路径传入；默认不得生成额外的清理摘要文件。
 
@@ -95,6 +96,7 @@ B站数据在标准化前必须先在原始合并总表中按固定规则去掉 
 - 默认第 1 行是表头，从第 2 行开始清洗。
 - 删除首尾空白后长度小于等于 7 的中文主评论。
 - Chinese comments delete by character length; non-Chinese comments delete by deterministic word count.
+- Deterministic script classification gives Japanese Kana, Korean Hangul, Thai, and Devanagari precedence over Han characters for both length and fixed-word rules. Han-only text is treated as Chinese because distinguishing Han-only Japanese from Chinese would require semantic inference.
 - Non-Chinese comments with four or fewer words are deleted.
 - For unspaced non-Chinese scripts, only very short text with four or fewer characters is deleted by the short-text rule.
 - Pure numeric comments keep the legacy seven-character threshold for backward compatibility.
@@ -102,6 +104,8 @@ B站数据在标准化前必须先在原始合并总表中按固定规则去掉 
 - 删除包含用户提供 KOL 清理词的评论。
 - 固定清理词只能追加，不能覆盖或移除原有固定词“链接”。
 - When adding a fixed delete word later, add confirmed equivalents for Chinese, English, Japanese, Korean, Spanish, Thai, and Hindi where applicable.
+- Fixed delete words must be isolated by deterministic script group. Chinese comments only use Chinese fixed words; Japanese, Korean, Thai, and Hindi comments only use their respective script groups. English and Spanish share the Latin-script group because deterministic script inspection cannot distinguish them reliably. Language-neutral URL markers `http://` and `https://` apply to all groups.
+- Latin-script fixed words must match complete lexical boundaries. Matching remains case-insensitive where configured, but `test` may match `test` or `TEST` and must not match `TESTV`, `contest`, or `testing`.
 - 完整固定清理词清单以 `config/comment-cleaner.json` 为准；当前配置覆盖中文、英文、日文、韩文、西语、泰文和印地语。
 - 删除包含任一固定清理词的整行评论。当前固定清理词包括：“链接”、“凑字数”、“水经验”、“赚积分”、“为了金币”、“赚硬币”、“赚京豆”、“淘气值”、“为了评论而评论”、“混个脸熟”、“完成任务”、“代下”、“代买”、“内部券”、“加微”、“加v”、“私聊我”、“主页看”、“点击链接”、“http://”、“https://”、“第一”、“打卡”、“路过”、“来了”、“冒泡”、“占座”、“测试”、“test”、“无”、“无内容”、“略”、“暂无评价”、“蹲”、“蹲一个”、“求链接”、“求分享”、“多少钱”、“怎么卖”、“啥牌子”、“什么牌子”、“求品牌”、“求私”、“加群”、“裙内”、“互赞”、“互粉”、“互关”、“回关”、“秒回”、“交朋友”、“リンク”、“プロフィール見て”、“プロフ見て”、“DMして”、“フォロー返し”、“相互フォロー”、“テスト”、“内容なし”、“評価なし”、“コメント稼ぎ”、“링크”、“맞팔”、“테스트”、“내용 없음”。
 - “加v”以及英文固定清理词必须按大小写不敏感方式匹配，例如“加v”和“加V”都删除；英文固定清理词包括：“link in bio”、“click link”、“click the link”、“check my profile”、“see my profile”、“visit my profile”、“dm me”、“message me”、“follow me”、“follow back”、“follow for follow”、“sub4sub”、“sub for sub”、“subscribe to my channel”、“earn coins”、“free coins”、“for coins”、“comment for points”、“promo code”、“coupon code”、“discount code”、“whatsapp”、“telegram”、“first”、“test”、“n/a”、“no content”、“no comment”、“nothing to say”。

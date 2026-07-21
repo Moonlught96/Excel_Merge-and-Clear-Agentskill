@@ -8,7 +8,7 @@ The fixed workflow is:
 2. Confirm whether the supplied file list is complete enough to enter merge or, for one file, whether it is the only intended input.
 3. Merge multiple raw inputs into a new raw merged workbook.
 4. Return the raw merged workbook and wait for merge-completion confirmation.
-5. For B站 data, create a separate reply-prefix-stripped merged workbook.
+5. For B站 data, create a separate reply-prefix-stripped temporary workbook from the confirmed single input or raw merged workbook.
 6. Standardize the raw or prefix-stripped workbook into a new standardized workbook.
 7. Return the standardized workbook and wait for approval.
 8. Ask for optional KOL clean words and, when words exist, confirm the list is complete.
@@ -101,11 +101,13 @@ After standardized-workbook approval, ask exactly:
 
 ## B站 Reply Prefix Step
 
-- Run the step only after merge-completion confirmation and before standardization.
+- Run the step before standardization for every B站 workflow.
+- In a multi-file workflow, run it on the raw merged workbook only after merge-completion confirmation.
+- In a single-file workflow, run it on the original input only after the user confirms it is the only intended file.
 - Process only a fixed prefix in `content` or `评论内容` matching `回复@xxx：`, `回复 @xxx：`, `回复@xxx:`, or `回复 @xxx:`.
 - Keep only the text after the first matching Chinese or English colon in the same cell.
-- Save a separate reply-prefix-stripped merged workbook.
-- Do not overwrite the raw merged workbook.
+- Save a separate temporary reply-prefix-stripped workbook.
+- Do not overwrite the original input or raw merged workbook.
 - Do not move reply rows, infer parent-child hierarchy, add hierarchy columns, or delete rows.
 
 ## Completion

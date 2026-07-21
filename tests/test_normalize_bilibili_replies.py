@@ -69,6 +69,24 @@ class StripBilibiliReplyPrefixesTest(unittest.TestCase):
         self.assertEqual("真实评论内容", normalized["总表"].cell(row=2, column=1).value)
         self.assertEqual("=1+1", normalized["总表"].cell(row=2, column=2).value)
 
+    def test_csv_formula_like_reply_body_remains_text(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-strip-csv-formula-text"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.csv"
+        output_path = tmp / "prefix-stripped.xlsx"
+        input_path.write_text(
+            "content,like_count,timestamp\n回复@user：=1+1,=2+2,1547698468\n",
+            encoding="utf-8-sig",
+        )
+
+        strip_bilibili_reply_prefixes(input_path, output_path)
+
+        normalized = load_workbook(output_path, read_only=False, data_only=False)
+        self.assertEqual("=1+1", normalized.active.cell(row=2, column=1).value)
+        self.assertEqual("s", normalized.active.cell(row=2, column=1).data_type)
+        self.assertEqual("=2+2", normalized.active.cell(row=2, column=2).value)
+        self.assertEqual("s", normalized.active.cell(row=2, column=2).data_type)
+
 
 
 if __name__ == "__main__":

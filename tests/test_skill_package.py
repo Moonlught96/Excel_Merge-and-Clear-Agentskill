@@ -86,6 +86,8 @@ class SkillPackageTest(unittest.TestCase):
             skill,
             r"\A---\nname: product-user-comment-data-merge-cleaning\ndescription: Use when ",
         )
+        self.assertIn("pseudonymized standardization", skill)
+        self.assertNotIn("privacy-safe", skill)
         self.assertIn("# 产品用户评论数据合并与清洗 Skill", skill)
         self.assertIn(
             "为抓取的大量用户评论数据进行文档合并、标准化和清洗工作，并输出为 XLSX 与 CSV 格式文档。",
@@ -100,6 +102,8 @@ class SkillPackageTest(unittest.TestCase):
         self.assertIn("scripts/merge_excel_workbooks.py", skill)
         self.assertIn("scripts/standardize_excel_headers.py", skill)
         self.assertIn("scripts/clean_excel_comments.py", skill)
+        self.assertIn("in a confirmed single-file run, use the original input as the source", skill)
+        self.assertIn("Automatic creation of a new protected hash-ID project requires Windows DPAPI", skill)
         self.assertNotIn("tools/clean_excel_comments.py", skill)
 
     def test_references_preserve_all_confirmed_rule_categories(self) -> None:

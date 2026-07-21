@@ -1,6 +1,6 @@
 ---
 name: product-user-comment-data-merge-cleaning
-description: Use when one or more Excel or CSV files containing collected user comments need deterministic processing, privacy-safe standardization, cleaning, or reusable workflow extensions.
+description: Use when one or more Excel or CSV files containing collected user comments need deterministic processing, pseudonymized standardization, cleaning, or reusable workflow extensions.
 ---
 
 # 产品用户评论数据合并与清洗 Skill
@@ -52,7 +52,7 @@ The executable configuration is in `config/comment-cleaner.json`, `config/header
 1. Accept only the file paths explicitly provided by the user. Never scan a folder for additional inputs.
 2. Confirm the research project name once, then determine the product name and data source by the fixed rules in `references/naming-and-retention.md`, show all planned output filenames, and obtain the required confirmation.
 3. For one input file, obtain confirmation that it is the only intended file, then skip merge. For multiple files, run `scripts/merge_excel_workbooks.py`, return the raw merged workbook, and wait for merge-completion confirmation.
-4. For B站 merged data only, run `scripts/strip_bilibili_reply_prefixes.py` before standardization. Do not infer or move reply hierarchy.
+4. For B站 data, run `scripts/strip_bilibili_reply_prefixes.py` before standardization. In a multi-file run, use the raw merged workbook; in a confirmed single-file run, use the original input as the source. Always write a separate temporary workbook and never overwrite either source. Do not infer or move reply hierarchy.
 5. Run `scripts/standardize_excel_headers.py` with the confirmed project and platform. Create a protected project key only for a user-confirmed new research project; otherwise load the existing project. The tool selects a stable account ID first for the whole worksheet and uses a configured display-name fallback only when no registered account-ID column exists; details and risks are in `references/header-standardization.md` and `references/data-contract.md`. Return the standardized workbook and wait for explicit approval before cleaning.
 6. Ask whether KOL clean words exist. If words are provided, wait for confirmation that the list is complete. Pass each word as a separate `--clean-word`; pass none when the user says there are no words.
 7. Run `scripts/clean_excel_comments.py` against the standardized `评论内容` column. Do not perform any AI review or rewriting of table values.
@@ -84,4 +84,4 @@ Retain logs or summaries only when the user requested them before cleaning. Neve
 - `assets/`: reusable confirmation and rule-extension templates.
 - `agents/openai.yaml`: Agent interface metadata.
 
-This Skill folder is self-contained. It must remain runnable after the entire `product-user-comment-data-merge-cleaning` directory is copied outside this repository.
+This Skill folder is self-contained. It must remain runnable after the entire `product-user-comment-data-merge-cleaning` directory is copied outside this repository. Automatic creation of a new protected hash-ID project requires Windows DPAPI; non-Windows runtimes can load only a securely pre-provisioned environment project key.

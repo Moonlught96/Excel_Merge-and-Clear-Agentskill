@@ -606,15 +606,16 @@ def standardize_sheet(
             min_row=config.header_row + 1,
             max_row=source_sheet.max_row,
             max_col=source_sheet.max_column,
-            values_only=True,
+            values_only=False,
         ),
         start=config.header_row + 1,
     ):
+        row_values = tuple(cell.value for cell in row)
         output_row: list[Any] = []
         for column in selected_columns:
             if normalize_header(column.output_header) != normalize_header(HASH_ID_HEADER):
                 output_row.append(
-                    value_for_selected_column(row, column, today=today)
+                    value_for_selected_column(row_values, column, today=today)
                 )
                 continue
 
@@ -624,7 +625,7 @@ def standardize_sheet(
                 continue
 
             raw_identity = (
-                row[selected_identity.source_column - 1]
+                row_values[selected_identity.source_column - 1]
                 if selected_identity.source_column - 1 < len(row)
                 else None
             )
@@ -651,6 +652,23 @@ def standardize_sheet(
                 hashed_count += 1
 
         output_sheet.append(output_row)
+        output_row_number = output_sheet.max_row
+        for output_column_index, (column, output_value) in enumerate(
+            zip(selected_columns, output_row),
+            start=1,
+        ):
+            if column.source_column is None or column.source_column - 1 >= len(row):
+                continue
+            source_cell = row[column.source_column - 1]
+            if (
+                source_cell.data_type == "s"
+                and isinstance(output_value, str)
+                and output_value == source_cell.value
+            ):
+                output_sheet.cell(
+                    row=output_row_number,
+                    column=output_column_index,
+                ).data_type = "s"
         data_rows_written += 1
 
     omitted_headers = tuple(
