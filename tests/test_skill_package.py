@@ -23,6 +23,7 @@ REFERENCE_FILES = (
     "naming-and-retention.md",
     "tool-reference.md",
     "extension-policy.md",
+    "known-issues.md",
 )
 
 SCRIPT_FILES = (
@@ -61,6 +62,31 @@ class SkillPackageTest(unittest.TestCase):
 
         missing = [str(path.relative_to(PROJECT_ROOT)) for path in required_files if not path.is_file()]
         self.assertEqual([], missing, f"Skill package is missing required files: {missing}")
+
+    def test_assets_contain_only_reusable_templates(self) -> None:
+        asset_names = {
+            path.name
+            for path in (SKILL_ROOT / "assets").iterdir()
+            if path.is_file()
+        }
+
+        self.assertEqual(
+            {"rule-extension-template.md", "workflow-confirmation-template.md"},
+            asset_names,
+        )
+
+    def test_openai_interface_metadata_matches_skill(self) -> None:
+        metadata = (SKILL_ROOT / "agents" / "openai.yaml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('display_name: "产品用户评论数据合并与清洗 Skill"', metadata)
+        self.assertIn(
+            'short_description: "为抓取的大量用户评论数据进行文档合并、标准化和清洗，并输出 XLSX 与 CSV"',
+            metadata,
+        )
+        self.assertIn("$product-user-comment-data-merge-cleaning", metadata)
+        self.assertIn("allow_implicit_invocation: true", metadata)
 
     def test_rule_extension_template_enforces_identity_alias_safety(self) -> None:
         template = (
