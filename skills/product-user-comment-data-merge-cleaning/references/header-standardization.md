@@ -92,7 +92,7 @@ Unknown columns that are not configured standard aliases are omitted. They are n
   - YouTube: `author_channel_id`, then `authorChannelId`, then `Author Channel ID`.
   - 小红书: `用户ID`.
 - Exact display-name fallback mappings:
-  - YouTube: `author`.
+  - YouTube: `author`, then `author_name`.
   - 小红书: `用户名称`.
   - B站: `username`.
   - TikTok: `用户名`, then `昵称`; never `用户身份`.

@@ -42,3 +42,19 @@ Tests must prove both cases:
 
 - an entirely blank account-ID column falls back to the registered display name and repeated names receive the same hash;
 - an account-ID column containing at least one value remains selected for the worksheet, and individual blank rows do not fall back to display names.
+
+## YouTube Export Variants Use Different Display-Name Headers
+
+### Symptom
+
+YouTube long-video exports may provide display names in `author`, while YouTube Shorts exports may provide the same kind of display name in `author_name`. Treating Shorts as a separate platform or leaving `author_name` unregistered produces blank or incompatible hash IDs.
+
+### Fixed Rule
+
+- Register both `author` and `author_name` as ordered YouTube display-name fallbacks.
+- Normalize `YouTube` and `YouTube Shorts` to the same `youtube` platform namespace.
+- Use the same research-project key and the same display-name identity domain for both headers.
+- Therefore, the same trimmed display name in `author` and `author_name` produces the same hash ID within the same research project.
+- Keep raw `author` and `author_name` values out of standardized and cleaned outputs, logs, and summaries.
+
+This is exact configured header mapping, not AI inference or fuzzy identity matching.

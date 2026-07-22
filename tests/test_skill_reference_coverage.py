@@ -54,7 +54,7 @@ class SkillReferenceCoverageTest(unittest.TestCase):
         }
 
         expected_display_name_headers = {
-            "youtube": ("author",),
+            "youtube": ("author", "author_name"),
             "xiaohongshu": ("用户名称",),
             "bilibili": ("username",),
             "tiktok": ("用户名", "昵称"),
@@ -84,7 +84,7 @@ class SkillReferenceCoverageTest(unittest.TestCase):
         )
         display_mapping_block = (
             "- Exact display-name fallback mappings:\n"
-            "  - YouTube: `author`.\n"
+            "  - YouTube: `author`, then `author_name`.\n"
             "  - 小红书: `用户名称`.\n"
             "  - B站: `username`.\n"
             "  - TikTok: `用户名`, then `昵称`; never `用户身份`.\n"
@@ -128,6 +128,15 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             known_issues,
         )
         self.assertIn("Never mix account IDs and display names row-by-row.", known_issues)
+
+    def test_youtube_export_display_name_variants_are_documented(self) -> None:
+        known_issues = (SKILL_ROOT / "references" / "known-issues.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("YouTube Export Variants", known_issues)
+        self.assertIn("`author`", known_issues)
+        self.assertIn("`author_name`", known_issues)
+        self.assertIn("same `youtube` platform namespace", known_issues)
 
     def test_cleaner_config_content_rules_are_fully_documented_in_references(self) -> None:
         config = json.loads(

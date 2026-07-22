@@ -539,6 +539,37 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("author", hash_summary["source_header"])
         self.assertEqual("display_name", hash_summary["identity_type"])
 
+    def test_youtube_author_name_reuses_author_display_name_hash_domain(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-author-name-fallback"
+        tmp.mkdir(parents=True, exist_ok=True)
+        author_path = tmp / "author.xlsx"
+        author_name_path = tmp / "author-name.xlsx"
+
+        for path, identity_header in (
+            (author_path, "author"),
+            (author_name_path, "author_name"),
+        ):
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.append(["publishedAt", "commentText", "likeCount", identity_header])
+            sheet.append(["2026-07-08", "Useful comment text", 1, "Same Visible Name"])
+            workbook.save(path)
+
+        first = self.standardize_with_hash(author_path, tmp / "author-out", "YouTube")
+        second = self.standardize_with_hash(
+            author_name_path,
+            tmp / "author-name-out",
+            "YouTube",
+        )
+        first_rows = self.read_standardized_rows(first.output_xlsx)
+        second_rows = self.read_standardized_rows(second.output_xlsx)
+        self.assertRegex(second_rows[1][3], r"^[0-9a-f]{64}$")
+        self.assertEqual(first_rows[1][3], second_rows[1][3])
+        summary = json.loads(second.summary_json.read_text(encoding="utf-8"))
+        hash_summary = summary["sheets"][0]["hash_id"]
+        self.assertEqual("author_name", hash_summary["source_header"])
+        self.assertEqual("display_name", hash_summary["identity_type"])
+
     def test_xiaohongshu_uses_display_name_when_user_id_column_is_absent(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-hash-xhs-display-name-fallback"
         tmp.mkdir(parents=True, exist_ok=True)

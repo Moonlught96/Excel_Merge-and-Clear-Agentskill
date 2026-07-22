@@ -434,7 +434,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
 
     def test_config_loads_exact_display_name_header_priorities(self) -> None:
         expected = {
-            "youtube": ("author",),
+            "youtube": ("author", "author_name"),
             "xiaohongshu": ("用户名称",),
             "bilibili": ("username",),
             "tiktok": ("用户名", "昵称"),

@@ -70,7 +70,8 @@ The standardized workbook contains exactly these columns in this order:
 - Selection is worksheet-wide, not row-by-row. Once a nonblank account-ID column is selected, a blank account-ID cell in an individual row stays blank and must not fall back to a display name from that row.
 - Use HMAC-SHA256 with the protected key for the confirmed research project and a platform namespace.
 - The same project, platform, identity type, and normalized identity value produces the same 64-character lowercase hexadecimal value.
-- The same normalized display name in the same research project and platform produces the same hash regardless of whether the registered source header is `username`, `用户名`, `昵称`, `用户名称`, or `author`.
+- The same normalized display name in the same research project and platform produces the same hash regardless of whether the registered source header is `username`, `用户名`, `昵称`, `用户名称`, `author`, or `author_name`.
+- `YouTube` and `YouTube Shorts` resolve to the same `youtube` platform namespace. They must not create separate hash domains for the same research project.
 - Account-ID and display-name hashes use separate identity domains, so the same text hashed once as an account ID and once as a display name produces different values.
 - Cross-project and cross-platform hashes differ.
 - Display-name linkage is weak pseudonymization, not legal anonymization: nickname changes can split the same user, and different users with the same normalized name can merge.

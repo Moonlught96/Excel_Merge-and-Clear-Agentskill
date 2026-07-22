@@ -6,7 +6,7 @@
       "namespace": "youtube",
       "aliases": ["YouTube", "YouTube Shorts", "youtube", "yt-comments"],
       "user_id_headers": ["author_channel_id", "authorChannelId", "Author Channel ID"],
-      "display_name_headers": ["author"]
+      "display_name_headers": ["author", "author_name"]
     },
     {
       "namespace": "xiaohongshu",
