@@ -70,3 +70,11 @@ An eight-digit date such as `20260709` is numerically plausible as a Unix timest
 ## Audit Comparison Lost Formula And Duplicate Detail
 
 Comparison previously read cached formula results and indexed rows as a set, which could hide formula differences and duplicate-count differences. Comparison now reads with `data_only=False`, preserves formula text, and uses row counters so duplicate-row multiplicity remains visible.
+
+## YouTube Shorts Paths Fell Through To Generic YouTube Naming
+
+A path under an exact `Shorts` directory used to match the generic `youtube` keyword first and produced `YouTube评论数据`. Naming now gives the exact `Shorts` path segment precedence and emits `YouTube Shorts评论数据`; long-video paths remain `YouTube评论数据`. Both display labels still resolve to the shared `youtube` hash namespace.
+
+## Emoji Filenames Failed On Windows GBK Consoles
+
+The naming CLI previously printed unescaped Unicode through the inherited console encoding. A filename containing an emoji could raise `UnicodeEncodeError` before any workbook processing. JSON output is now written through a UTF-8 reconfigured stream when supported, with ASCII-escaped JSON as a deterministic fallback.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -7,10 +8,24 @@ from unittest import mock
 
 from openpyxl import Workbook, load_workbook
 
-from tools.output_file_naming import build_naming_plan, product_candidates_from_workbook
+from tools.output_file_naming import (
+    build_naming_plan,
+    product_candidates_from_workbook,
+    write_json_document,
+)
 
 
 class OutputFileNamingTest(unittest.TestCase):
+    def test_json_output_reconfigures_gbk_stream_for_emoji_filenames(self) -> None:
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding="gbk")
+
+        write_json_document({"filename": "comments 🤯.xlsx"}, stream)
+        stream.flush()
+
+        self.assertIn("comments 🤯.xlsx", raw.getvalue().decode("utf-8"))
+        stream.detach()
+
     def test_builds_confirmable_names_from_filename_before_merge(self) -> None:
         plan = build_naming_plan(
             [Path("1783327727ScreenBar Halo2淘宝评论数据.xlsx")],
@@ -116,6 +131,24 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual("YouTube评论数据", youtube_plan.data_source)
         self.assertEqual("20260707_ScreenBar系列_TikTok评论数据_合并总表.xlsx", tiktok_plan.filenames["merge"])
         self.assertEqual("20260707_ScreenBar系列_YouTube评论数据_合并总表.xlsx", youtube_plan.filenames["merge"])
+
+    def test_detects_youtube_shorts_before_generic_youtube_source(self) -> None:
+        plan = build_naming_plan(
+            [
+                Path(
+                    "D:/专案/ScreenBar十周年专案/产品数据/youtube数据/Shorts/"
+                    "comments This new screenbar is so good 🤯.xlsx"
+                )
+            ],
+            product_name="ScreenBar系列",
+            today=datetime(2026, 7, 22, 9, 30),
+        )
+
+        self.assertEqual("YouTube Shorts评论数据", plan.data_source)
+        self.assertEqual(
+            "20260722_ScreenBar系列_YouTube Shorts评论数据_合并总表.xlsx",
+            plan.filenames["merge"],
+        )
 
     def test_uses_bilibili_parent_folder_as_product_and_preserves_release_year(self) -> None:
         plan = build_naming_plan(

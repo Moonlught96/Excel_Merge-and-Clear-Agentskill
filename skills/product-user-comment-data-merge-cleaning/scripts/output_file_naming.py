@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 from zoneinfo import ZoneInfo
 
 try:
@@ -144,6 +145,12 @@ def source_candidates_from_paths(paths: list[Path]) -> list[str]:
     candidates: list[str] = []
     for path in paths:
         text = " ".join([path.stem, *path.parts])
+        normalized_text = text.casefold()
+        is_youtube = "youtube" in normalized_text or "yt-comments" in normalized_text
+        is_shorts = any(part.casefold() == "shorts" for part in path.parts)
+        if is_youtube and is_shorts:
+            candidates.append("YouTube Shorts评论数据")
+            continue
         for keyword, source_name in SOURCE_RULES:
             if keyword in text:
                 candidates.append(source_name)
@@ -288,6 +295,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def write_json_document(payload: dict[str, Any], stream: TextIO) -> None:
+    try:
+        stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except (AttributeError, ValueError):
+        pass
+    document = json.dumps(payload, ensure_ascii=False, indent=2)
+    try:
+        stream.write(document + "\n")
+    except UnicodeEncodeError:
+        stream.write(json.dumps(payload, ensure_ascii=True, indent=2) + "\n")
+
+
 def main() -> int:
     args = parse_args()
     today = datetime.strptime(args.date, "%Y%m%d") if args.date else None
@@ -297,20 +316,17 @@ def main() -> int:
         data_source=args.data_source,
         today=today,
     )
-    print(
-        json.dumps(
-            {
-                "date": plan.date_text,
-                "product_name": plan.product_name,
-                "data_source": plan.data_source,
-                "missing_fields": plan.missing_fields,
-                "product_candidates": plan.product_candidates,
-                "data_source_candidates": plan.data_source_candidates,
-                "filenames": plan.filenames,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
+    write_json_document(
+        {
+            "date": plan.date_text,
+            "product_name": plan.product_name,
+            "data_source": plan.data_source,
+            "missing_fields": plan.missing_fields,
+            "product_candidates": plan.product_candidates,
+            "data_source_candidates": plan.data_source_candidates,
+            "filenames": plan.filenames,
+        },
+        sys.stdout,
     )
     return 0
 

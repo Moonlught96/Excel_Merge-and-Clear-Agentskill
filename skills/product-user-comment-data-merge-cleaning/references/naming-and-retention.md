@@ -38,6 +38,10 @@ Data source may be discovered only from fixed keywords including:
 
 `淘宝`, `天猫`, `京东`, `小红书`, `抖音`, `微博`, `B站`, `哔哩哔哩`, `TikTok`, `TTCommentExporter`, `YouTube`, `youtube`, and `yt-comments`.
 
+When a YouTube input path contains an exact `Shorts` directory segment, classify its display data source as `YouTube Shorts评论数据` before applying the generic YouTube rule. This display-name distinction does not change the shared `youtube` hash namespace.
+
+The naming CLI must emit JSON as UTF-8 and remain usable when input filenames contain characters unsupported by the active Windows console code page, including emoji. Console encoding must not change filename parsing or output naming.
+
 If product name or data source is absent or ambiguous, ask the user. Do not use AI or semantic inference to guess it.
 
 Before multi-file merge, show product name, data source, and all four planned filenames: merged `.xlsx`, standardized `.xlsx`, cleaned `.xlsx`, and cleaned `.csv`. Then use the exact prompt from `workflow.md`.
