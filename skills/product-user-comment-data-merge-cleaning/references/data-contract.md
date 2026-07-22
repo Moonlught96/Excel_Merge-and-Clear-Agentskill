@@ -62,12 +62,12 @@ The standardized workbook contains exactly these columns in this order:
 ## Hash ID Pseudonymization Contract
 
 - `哈希ID` is deterministic pseudonymization, not legal anonymization.
-- Stable account ID is selected first for the whole worksheet.
-- Display-name fallback is allowed only when no registered account-ID column exists.
+- Stable account ID is selected first for the whole worksheet when a registered account-ID column contains at least one nonblank value.
+- Display-name fallback is allowed only when no registered account-ID column contains any nonblank value.
 - Display-name normalization trims outer whitespace only.
 - It preserves case, internal whitespace, punctuation, and Unicode code points.
 - Do not apply Unicode normalization, full-width/half-width conversion, traditional/simplified Chinese conversion, or fuzzy matching.
-- Selection is worksheet-wide, not row-by-row. When an account-ID column exists, a blank account-ID cell stays blank and must not fall back to a display name from that row.
+- Selection is worksheet-wide, not row-by-row. Once a nonblank account-ID column is selected, a blank account-ID cell in an individual row stays blank and must not fall back to a display name from that row.
 - Use HMAC-SHA256 with the protected key for the confirmed research project and a platform namespace.
 - The same project, platform, identity type, and normalized identity value produces the same 64-character lowercase hexadecimal value.
 - The same normalized display name in the same research project and platform produces the same hash regardless of whether the registered source header is `username`, `用户名`, `昵称`, `用户名称`, or `author`.

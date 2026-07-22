@@ -68,7 +68,7 @@ Use `assets/rule-extension-template.md` to record:
 1. Require explicit user confirmation and platform-specific evidence from the exporter schema or a representative platform export.
 2. Classify the new field explicitly as a stable account ID or a display-name fallback; never infer identity type from values.
 3. Add it only to the matching platform and ordered list in `config/hash-id.json`.
-4. Preserve worksheet-wide priority: all registered `user_id_headers` outrank every `display_name_headers` entry, and display-name entries follow their configured order.
+4. Preserve worksheet-wide priority: registered `user_id_headers` containing at least one nonblank value outrank every `display_name_headers` entry; only when all registered account-ID columns are entirely blank may display-name entries follow their configured order.
 5. Never register comment IDs, parent IDs, URLs, profile links, IP fields, `用户身份`, source-provided `哈希ID`, or other ambiguous identity fields.
 6. A username or nickname may be added only as a platform-confirmed display-name fallback, never as a stable account ID.
 7. Add positive, priority, blank, same-name, cross-project, cross-platform, account-ID/display-name separation, and raw-value non-disclosure tests.

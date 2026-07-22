@@ -44,6 +44,7 @@ Read only the references needed for the current phase, but read `workflow.md` an
 - Filename, output, audit, and retention rules: [references/naming-and-retention.md](references/naming-and-retention.md)
 - Script purposes, command shapes, and validation: [references/tool-reference.md](references/tool-reference.md)
 - Rules for safe future extensions: [references/extension-policy.md](references/extension-policy.md)
+- Confirmed failure modes and deterministic resolutions: [references/known-issues.md](references/known-issues.md)
 
 The executable configuration is in `config/comment-cleaner.json`, `config/header-standardizer.json`, and `config/hash-id.json`.
 
@@ -53,7 +54,7 @@ The executable configuration is in `config/comment-cleaner.json`, `config/header
 2. Confirm the research project name once, then determine the product name and data source by the fixed rules in `references/naming-and-retention.md`, show all planned output filenames, and obtain the required confirmation.
 3. For one input file, obtain confirmation that it is the only intended file, then skip merge. For multiple files, run `scripts/merge_excel_workbooks.py`, return the raw merged workbook, and wait for merge-completion confirmation.
 4. For B站 data, run `scripts/strip_bilibili_reply_prefixes.py` before standardization. In a multi-file run, use the raw merged workbook; in a confirmed single-file run, use the original input as the source. Always write a separate temporary workbook and never overwrite either source. Do not infer or move reply hierarchy.
-5. Run `scripts/standardize_excel_headers.py` with the confirmed project and platform. Create a protected project key only for a user-confirmed new research project; otherwise load the existing project. The tool selects a stable account ID first for the whole worksheet and uses a configured display-name fallback only when no registered account-ID column exists; details and risks are in `references/header-standardization.md` and `references/data-contract.md`. Return the standardized workbook and wait for explicit approval before cleaning.
+5. Run `scripts/standardize_excel_headers.py` with the confirmed project and platform. Create a protected project key only for a user-confirmed new research project; otherwise load the existing project. The tool selects the first registered stable account-ID column containing a nonblank value and uses a configured display-name fallback only when every registered account-ID column is entirely blank; details and risks are in `references/header-standardization.md` and `references/data-contract.md`. Return the standardized workbook and wait for explicit approval before cleaning.
 6. Ask whether KOL clean words exist. If words are provided, wait for confirmation that the list is complete. Pass each word as a separate `--clean-word`; pass none when the user says there are no words.
 7. Run `scripts/clean_excel_comments.py` against the standardized `评论内容` column. Do not perform any AI review or rewriting of table values.
 8. Verify the cleaned `.xlsx` and `.csv`, then run `scripts/cleanup_intermediate_outputs.py` with explicit intermediate and protected paths.

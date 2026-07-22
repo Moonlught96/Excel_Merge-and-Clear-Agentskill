@@ -85,8 +85,8 @@ Unknown columns that are not configured standard aliases are omitted. They are n
 
 - `哈希ID` is always generated; never map or preserve a source column named `哈希ID`.
 - Platform and research-project context are required whenever a registered account-ID or display-name column is selected.
-- Stable account ID is selected first for the whole worksheet.
-- Display-name fallback is allowed only when no registered account-ID column exists.
+- Stable account ID is selected first for the whole worksheet when a registered account-ID column contains at least one nonblank value.
+- Display-name fallback is allowed only when no registered account-ID column contains any nonblank value.
 - Header selection is worksheet-wide and follows configuration order. It never falls back per row.
 - Exact account-ID mappings:
   - YouTube: `author_channel_id`, then `authorChannelId`, then `Author Channel ID`.

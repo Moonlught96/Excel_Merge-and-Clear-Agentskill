@@ -28,6 +28,7 @@ try:
         load_hash_id_config,
         normalize_platform,
         select_identity_header,
+        select_user_id_header,
     )
 except ModuleNotFoundError:
     from hash_id_pseudonymizer import (
@@ -40,6 +41,7 @@ except ModuleNotFoundError:
         load_hash_id_config,
         normalize_platform,
         select_identity_header,
+        select_user_id_header,
     )
 
 try:
@@ -522,12 +524,34 @@ def _missing_hash_context_message(
     )
 
 
+def _identity_column_has_nonblank_value(
+    source_sheet: Worksheet,
+    source_column: int,
+    header_row: int,
+) -> bool:
+    for (value,) in source_sheet.iter_rows(
+        min_row=header_row + 1,
+        max_row=source_sheet.max_row,
+        min_col=source_column,
+        max_col=source_column,
+        values_only=True,
+    ):
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return True
+    return False
+
+
 def resolve_identity_selection(
     headers: list[Any],
     platform: str | None,
     hash_context: HashProjectContext | None,
     hash_config: HashIdConfig,
     sheet_name: str | None = None,
+    source_sheet: Worksheet | None = None,
+    header_row: int = 1,
 ) -> tuple[str | None, SelectedIdentityHeader | None]:
     if platform is None:
         registered_headers = _all_registered_identity_headers(hash_config)
@@ -543,11 +567,31 @@ def resolve_identity_selection(
         return None, None
 
     canonical_platform = normalize_platform(platform, hash_config)
-    selected_identity = select_identity_header(
-        headers,
-        canonical_platform,
-        hash_config,
-    )
+    eligible_headers = list(headers)
+    selected_identity = None
+    while source_sheet is not None:
+        account_id_header = select_user_id_header(
+            eligible_headers,
+            canonical_platform,
+            hash_config,
+        )
+        if account_id_header is None:
+            break
+        if _identity_column_has_nonblank_value(
+            source_sheet,
+            account_id_header.source_column,
+            header_row,
+        ):
+            selected_identity = account_id_header
+            break
+        eligible_headers[account_id_header.source_column - 1] = None
+
+    if selected_identity is None:
+        selected_identity = select_identity_header(
+            eligible_headers,
+            canonical_platform,
+            hash_config,
+        )
     if selected_identity is not None and hash_context is None:
         raise MissingHashContextError(
             _missing_hash_context_message(
@@ -589,6 +633,8 @@ def standardize_sheet(
         hash_context,
         effective_hash_config,
         sheet_name=source_sheet.title,
+        source_sheet=source_sheet,
+        header_row=config.header_row,
     )
     selected_column_indexes = {
         column.source_column

@@ -95,8 +95,8 @@ class SkillReferenceCoverageTest(unittest.TestCase):
         self.assertIn(display_mapping_block, header_reference)
 
         for phrase in (
-            "Stable account ID is selected first for the whole worksheet.",
-            "Display-name fallback is allowed only when no registered account-ID column exists.",
+            "Stable account ID is selected first for the whole worksheet when a registered account-ID column contains at least one nonblank value.",
+            "Display-name fallback is allowed only when no registered account-ID column contains any nonblank value.",
             "weak pseudonymization, not legal anonymization",
             "nickname changes can split the same user",
             "different users with the same normalized name can merge",
@@ -117,6 +117,17 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "Do not apply Unicode normalization, full-width/half-width conversion, traditional/simplified Chinese conversion, or fuzzy matching.",
         ):
             self.assertIn(statement, data_contract)
+
+    def test_blank_account_id_failure_mode_is_documented(self) -> None:
+        known_issues = (SKILL_ROOT / "references" / "known-issues.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("author_channel_id", known_issues)
+        self.assertIn(
+            "Select the first account-ID column containing at least one nonblank value.",
+            known_issues,
+        )
+        self.assertIn("Never mix account IDs and display names row-by-row.", known_issues)
 
     def test_cleaner_config_content_rules_are_fully_documented_in_references(self) -> None:
         config = json.loads(

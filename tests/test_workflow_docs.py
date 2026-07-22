@@ -56,8 +56,8 @@ class WorkflowDocsTest(unittest.TestCase):
             "`一级评论`, `二级评论`, and `三级评论` cells whose trimmed length is less than or equal to 5 characters",
             "data_only=False",
             "Do not use AI",
-            "Stable account ID is selected first for the whole worksheet.",
-            "Display-name fallback is allowed only when no registered account-ID column exists.",
+            "Stable account ID is selected first for the whole worksheet when a registered account-ID column contains at least one nonblank value.",
+            "Display-name fallback is allowed only when no registered account-ID column contains any nonblank value.",
             "The same normalized display name in the same research project and platform produces the same hash",
             "Account-ID and display-name hashes use separate identity domains",
             "Raw account IDs, usernames, and nicknames remain omitted from standardized and cleaned outputs, logs, and summaries",
@@ -79,10 +79,10 @@ class WorkflowDocsTest(unittest.TestCase):
             r"清洗后的[^\n。]*(?:经你|用户)[^\n。]*确认[^\n。]*(?:后|再)[^\n。]*清理",
         )
         self.assertIn("清洗后的 `.xlsx` 和 `.csv` 生成并核对成功后立即", readme)
-        self.assertIn("整张工作表优先选择已登记的稳定账号 ID 列", readme)
+        self.assertIn("整张工作表优先选择第一个至少含有一个非空值的已登记稳定账号 ID 列", readme)
         self.assertIn("无需额外用户确认", readme)
         self.assertIn("只有用户在清洗前明确要求保留时才保留", readme)
-        self.assertIn("只有不存在已登记账号 ID 列时", readme)
+        self.assertIn("只有所有已登记账号 ID 列整列为空时", readme)
         self.assertIn("显示名关联属于弱伪名化，不是法律意义上的匿名化", readme)
         self.assertIn("原始账号 ID、用户名、昵称", readme)
 
@@ -131,8 +131,8 @@ class WorkflowDocsTest(unittest.TestCase):
             "`assets/`",
             "单独复制",
             "独立运行",
-            "整张工作表优先选择已登记的稳定账号 ID 列",
-            "只有整张工作表不存在已登记账号 ID 列时",
+            "整张工作表优先选择第一个至少含有一个非空值的已登记稳定账号 ID 列",
+            "只有所有已登记账号 ID 列整列为空时",
             "显示名关联属于弱伪名化，不是法律意义上的匿名化",
             "同一标准化显示名",
             "账号 ID 与显示名哈希必须不同",

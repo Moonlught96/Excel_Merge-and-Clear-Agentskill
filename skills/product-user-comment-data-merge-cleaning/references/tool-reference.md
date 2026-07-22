@@ -26,8 +26,8 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 
 ## Hash Identity Tool Contract
 
-- Stable account ID is selected first for the whole worksheet.
-- Display-name fallback is allowed only when no registered account-ID column exists.
+- Stable account ID is selected first for the whole worksheet when a registered account-ID column contains at least one nonblank value.
+- Display-name fallback is allowed only when no registered account-ID column contains any nonblank value.
 - The selected header applies to all rows in that worksheet; blank account-ID cells do not fall back row-by-row.
 - Display-name hashes include a separate identity domain, so they cannot equal account-ID hashes for the same normalized text.
 - The exact registered mappings and priority order are defined in `config/hash-id.json` and documented in `header-standardization.md`.

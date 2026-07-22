@@ -499,6 +499,28 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(1, hash_summary["hashed_count"])
         self.assertEqual(1, hash_summary["blank_count"])
 
+    def test_youtube_uses_author_when_account_id_column_is_entirely_blank(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-blank-account-id-fallback"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["publishedAt", "commentText", "likeCount", "author_channel_id", "author"])
+        sheet.append(["2026-07-08", "First useful comment", 1, None, "Same Name"])
+        sheet.append(["2026-07-09", "Second useful comment", 2, "  ", "Same Name"])
+        workbook.save(input_path)
+
+        result = self.standardize_with_hash(input_path, tmp / "out", "youtube")
+        rows = self.read_standardized_rows(result.output_xlsx)
+        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
+        self.assertEqual(rows[1][3], rows[2][3])
+        summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
+        hash_summary = summary["sheets"][0]["hash_id"]
+        self.assertEqual("display_name", hash_summary["identity_type"])
+        self.assertEqual("author", hash_summary["source_header"])
+        self.assertEqual(2, hash_summary["hashed_count"])
+        self.assertEqual(0, hash_summary["blank_count"])
+
     def test_youtube_uses_author_only_when_account_id_column_is_absent(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-author-fallback"
         tmp.mkdir(parents=True, exist_ok=True)
