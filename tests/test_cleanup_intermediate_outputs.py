@@ -8,9 +8,45 @@ from tools.cleanup_intermediate_outputs import (
     ProtectedOutputError,
     cleanup_intermediate_outputs,
 )
+from tools.output_path_safety import OutputPathConflictError
 
 
 class CleanupIntermediateOutputsTest(unittest.TestCase):
+    def test_existing_cleanup_summary_requires_explicit_overwrite(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-summary-no-clobber"
+        tmp.mkdir(parents=True, exist_ok=True)
+        intermediate = tmp / "standardized.xlsx"
+        protected = tmp / "cleaned.xlsx"
+        summary = tmp / "cleanup.summary.json"
+        intermediate.write_text("intermediate", encoding="utf-8")
+        protected.write_text("cleaned", encoding="utf-8")
+        summary.write_text("keep", encoding="utf-8")
+
+        with self.assertRaises(OutputPathConflictError):
+            cleanup_intermediate_outputs(
+                intermediate_paths=[intermediate],
+                protected_paths=[protected],
+                summary_path=summary,
+                overwrite=False,
+            )
+
+        self.assertTrue(intermediate.exists())
+        self.assertEqual("keep", summary.read_text(encoding="utf-8"))
+
+    def test_refuses_cleanup_without_any_protected_paths(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-requires-protection"
+        tmp.mkdir(parents=True, exist_ok=True)
+        intermediate = tmp / "standardized.xlsx"
+        intermediate.write_text("intermediate", encoding="utf-8")
+
+        with self.assertRaisesRegex(ProtectedOutputError, "protected path"):
+            cleanup_intermediate_outputs(
+                intermediate_paths=[intermediate],
+                protected_paths=[],
+            )
+
+        self.assertTrue(intermediate.exists())
+
     def test_deletes_only_declared_intermediate_files_and_keeps_cleaned_outputs(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-intermediate-outputs"
         tmp.mkdir(parents=True, exist_ok=True)

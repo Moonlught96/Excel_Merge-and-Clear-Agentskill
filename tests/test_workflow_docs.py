@@ -48,6 +48,7 @@ class WorkflowDocsTest(unittest.TestCase):
             "`parent_rpid` is a parent-comment ID, not a subcomment count.",
             "Beijing date (`UTC+8`)",
             "Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.",
+            "Eight-digit `YYYYMMDD` values are parsed as calendar dates before Unix timestamp detection.",
             "Chinese comments whose trimmed length is less than or equal to 7 characters are deleted.",
             "Non-Chinese comments with four or fewer words are deleted.",
             "Pure numeric comments keep the legacy seven-character threshold",
@@ -65,6 +66,10 @@ class WorkflowDocsTest(unittest.TestCase):
             "different users with the same normalized name can merge",
             "`用户身份` is never an identity source",
             "Keep only the final cleaned `.xlsx` and `.csv`",
+            "Duplicate input paths are rejected",
+            "At least one `--protect` path is mandatory",
+            "Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation.",
+            "Comparison preserves formula text and counts duplicate-row multiplicity.",
             "返回文件链接时，链接文字必须使用实际完整文件名（含扩展名），不得使用泛化标签。",
         )
         for item in required_contract:
@@ -85,6 +90,8 @@ class WorkflowDocsTest(unittest.TestCase):
         self.assertIn("只有所有已登记账号 ID 列整列为空时", readme)
         self.assertIn("显示名关联属于弱伪名化，不是法律意义上的匿名化", readme)
         self.assertIn("原始账号 ID、用户名、昵称", readme)
+        self.assertNotIn("用八爪鱼 Excel 清洗工具", readme)
+        self.assertIn("四个输出文件", readme)
 
         gitignore = Path(".gitignore").read_text(encoding="utf-8")
         self.assertIn("outputs/", gitignore)

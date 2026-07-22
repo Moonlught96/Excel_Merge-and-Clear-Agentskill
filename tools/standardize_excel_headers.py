@@ -49,6 +49,11 @@ try:
 except ModuleNotFoundError:
     from hash_id_project_store import ProjectStore
 
+try:
+    from tools.output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
+except ModuleNotFoundError:
+    from output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
+
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "header-standardizer.json"
 COMMENT_DATE_AND_PRODUCT_HEADER = "评论日期与产品"
@@ -95,10 +100,6 @@ class HeaderNotFoundError(ValueError):
 
 
 class DuplicateHeaderError(ValueError):
-    pass
-
-
-class OutputPathConflictError(ValueError):
     pass
 
 
@@ -343,11 +344,17 @@ def convert_platform_datetime_to_beijing_date(value: Any, today: date | None = N
     if isinstance(value, date):
         return value.strftime(BEIJING_TIMESTAMP_FORMAT)
 
+    text = str(value).strip()
+    if re.fullmatch(r"\d{8}", text):
+        try:
+            return datetime.strptime(text, "%Y%m%d").strftime(BEIJING_TIMESTAMP_FORMAT)
+        except ValueError:
+            return value
+
     converted_timestamp = convert_unix_timestamp_to_beijing(value)
     if converted_timestamp != value:
         return converted_timestamp
 
-    text = str(value).strip()
     if not text:
         return None
 
@@ -776,6 +783,7 @@ def standardize_workbook(
     platform: str | None = None,
     hash_context: HashProjectContext | None = None,
     hash_config: HashIdConfig | None = None,
+    overwrite: bool = True,
 ) -> StandardizeResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -789,10 +797,11 @@ def standardize_workbook(
         output_xlsx = output_path.resolve()
         summary_json = output_xlsx.with_suffix(".standardized.summary.json")
 
-    if output_xlsx.resolve() == input_path:
-        raise OutputPathConflictError(
-            "Output path must be a new workbook path, not the input file."
-        )
+    ensure_output_paths_safe(
+        [input_path],
+        [output_xlsx, summary_json],
+        overwrite=overwrite,
+    )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
     effective_hash_config = hash_config if hash_config else load_hash_id_config()
@@ -828,7 +837,8 @@ def standardize_workbook(
                     hash_config=effective_hash_config,
                 )
             )
-        output_workbook.save(output_xlsx)
+        with atomic_output_path(output_xlsx) as staged_output:
+            output_workbook.save(staged_output)
     finally:
         input_workbook.close()
         output_workbook.close()
@@ -890,10 +900,11 @@ def standardize_workbook(
             for sheet in sheet_summaries
         ],
     }
-    summary_json.write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    with atomic_output_path(summary_json) as staged_summary:
+        staged_summary.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     return StandardizeResult(
         input_path=input_path,
@@ -927,6 +938,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="输出 .xlsx 文件路径",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="仅在已明确确认覆盖已有输出时使用",
     )
     parser.add_argument(
         "--platform",
@@ -986,6 +1002,7 @@ def main(argv: list[str] | None = None) -> int:
         platform=args.platform,
         hash_context=hash_context,
         hash_config=load_hash_id_config(args.hash_config),
+        overwrite=args.overwrite,
     )
     print(f"Standardized xlsx: {result.output_xlsx}")
     print(f"Summary: {result.summary_json}")

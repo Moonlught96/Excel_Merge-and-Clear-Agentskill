@@ -17,6 +17,7 @@ from tools.standardize_excel_headers import (
     MissingHashContextError,
     UnsafeIdentityValueError,
     UnsafeUserIdValueError,
+    OutputPathConflictError,
     load_config,
     standardize_workbook,
 )
@@ -85,6 +86,50 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("s", standardized.active.cell(row=2, column=2).data_type)
         self.assertEqual("=2+2", standardized.active.cell(row=2, column=5).value)
         self.assertEqual("s", standardized.active.cell(row=2, column=5).data_type)
+
+    def test_compact_yyyymmdd_date_is_not_treated_as_unix_timestamp(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-compact-date"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["date", "comment", "likes"])
+        sheet.append([20260709, "This is a sufficiently detailed product comment", 3])
+        workbook.save(input_path)
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+            today=date(2026, 7, 22),
+        )
+
+        rows = self.read_standardized_rows(output_path)
+        self.assertEqual("2026-07-09", rows[1][0])
+
+    def test_requires_explicit_overwrite_for_existing_output(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-existing-output"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "standardized.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["date", "comment", "likes"])
+        sheet.append(["2026-07-22", "This is a detailed product comment", 1])
+        workbook.save(input_path)
+        output_path.write_text("existing", encoding="utf-8")
+
+        with self.assertRaisesRegex(OutputPathConflictError, "already exists"):
+            standardize_workbook(
+                input_path,
+                load_config(),
+                output_path=output_path,
+                overwrite=False,
+            )
+
+        self.assertEqual("existing", output_path.read_text(encoding="utf-8"))
 
     def test_standardizes_header_order_and_removes_risk_columns(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-headers"

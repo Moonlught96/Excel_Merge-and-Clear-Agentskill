@@ -5,12 +5,18 @@ import csv
 import hashlib
 import json
 from collections import Counter, defaultdict
+from contextlib import ExitStack
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
+
+try:
+    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+except ModuleNotFoundError:
+    from output_path_safety import atomic_output_path, ensure_output_paths_safe
 
 
 def normalize_cell(value: Any) -> str:
@@ -32,20 +38,23 @@ def short_hash(key: str) -> str:
 
 
 def read_sheet(path: Path, sheet_name: str | None = None) -> dict[str, Any]:
-    workbook = load_workbook(path, read_only=True, data_only=True)
-    worksheet = workbook[sheet_name] if sheet_name else workbook.worksheets[0]
-    rows = [[normalize_cell(cell) for cell in row] for row in worksheet.iter_rows(values_only=True)]
-    header = rows[0] if rows else []
-    data_rows = rows[1:] if len(rows) > 1 else []
-    return {
-        "path": str(path),
-        "sheet_names": workbook.sheetnames,
-        "sheet_name": worksheet.title,
-        "max_row": worksheet.max_row,
-        "max_column": worksheet.max_column,
-        "header": header,
-        "data_rows": data_rows,
-    }
+    workbook = load_workbook(path, read_only=True, data_only=False)
+    try:
+        worksheet = workbook[sheet_name] if sheet_name else workbook.worksheets[0]
+        rows = [[normalize_cell(cell) for cell in row] for row in worksheet.iter_rows(values_only=True)]
+        header = rows[0] if rows else []
+        data_rows = rows[1:] if len(rows) > 1 else []
+        return {
+            "path": str(path),
+            "sheet_names": list(workbook.sheetnames),
+            "sheet_name": worksheet.title,
+            "max_row": worksheet.max_row,
+            "max_column": worksheet.max_column,
+            "header": header,
+            "data_rows": data_rows,
+        }
+    finally:
+        workbook.close()
 
 
 def build_row_index(rows: list[list[str]]) -> dict[str, list[int]]:
@@ -100,7 +109,18 @@ def compare_workbooks(
     left_label: str,
     right_label: str,
     comment_column: int,
+    *,
+    overwrite: bool = True,
 ) -> dict[str, Any]:
+    summary_path = output_dir / "comparison-summary.json"
+    only_left_path = output_dir / "only-in-left.csv"
+    only_right_path = output_dir / "only-in-right.csv"
+    report_path = output_dir / "comparison-report.xlsx"
+    ensure_output_paths_safe(
+        [left_path, right_path],
+        [summary_path, only_left_path, only_right_path, report_path],
+        overwrite=overwrite,
+    )
     left = read_sheet(left_path)
     right = read_sheet(right_path)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -109,8 +129,8 @@ def compare_workbooks(
     right_rows = right["data_rows"]
     left_index = build_row_index(left_rows)
     right_index = build_row_index(right_rows)
-    left_counter = Counter(left_index.keys())
-    right_counter = Counter(right_index.keys())
+    left_counter = Counter(row_key(row) for row in left_rows)
+    right_counter = Counter(row_key(row) for row in right_rows)
 
     only_left_keys = expand_counter_diff(left_counter, right_counter)
     only_right_keys = expand_counter_diff(right_counter, left_counter)
@@ -170,17 +190,23 @@ def compare_workbooks(
         "first_sequence_mismatch_samples": first_sequence_mismatches,
     }
 
-    summary_path = output_dir / "comparison-summary.json"
-    summary_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    write_diff_csv(output_dir / "only-in-left.csv", left["header"], report["whole_row_only_in_left_samples"])
-    write_diff_csv(output_dir / "only-in-right.csv", right["header"], report["whole_row_only_in_right_samples"])
-    write_report_xlsx(output_dir / "comparison-report.xlsx", report)
+    with ExitStack() as stack:
+        staged_summary = stack.enter_context(atomic_output_path(summary_path))
+        staged_only_left = stack.enter_context(atomic_output_path(only_left_path))
+        staged_only_right = stack.enter_context(atomic_output_path(only_right_path))
+        staged_report = stack.enter_context(atomic_output_path(report_path))
+        staged_summary.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        write_diff_csv(staged_only_left, left["header"], report["whole_row_only_in_left_samples"])
+        write_diff_csv(staged_only_right, right["header"], report["whole_row_only_in_right_samples"])
+        write_report_xlsx(staged_report, report)
 
     report["summary_path"] = str(summary_path)
-    report["report_xlsx"] = str(output_dir / "comparison-report.xlsx")
-    report["only_left_csv"] = str(output_dir / "only-in-left.csv")
-    report["only_right_csv"] = str(output_dir / "only-in-right.csv")
+    report["report_xlsx"] = str(report_path)
+    report["only_left_csv"] = str(only_left_path)
+    report["only_right_csv"] = str(only_right_path)
     return report
 
 
@@ -194,29 +220,32 @@ def write_diff_csv(path: Path, header: list[str], rows: list[dict[str, Any]]) ->
 
 def write_report_xlsx(path: Path, report: dict[str, Any]) -> None:
     workbook = Workbook()
-    summary = workbook.active
-    summary.title = "Summary"
-    summary_rows = [
-        ["Metric", report["left_label"], report["right_label"], "Notes"],
-        ["Sheet name", report["left_sheet"], report["right_sheet"], ""],
-        ["Rows incl header", report["left_total_rows_including_header"], report["right_total_rows_including_header"], ""],
-        ["Data rows", report["left_data_rows"], report["right_data_rows"], ""],
-        ["Columns", report["left_columns"], report["right_columns"], ""],
-        ["Headers match", str(report["headers_match"]), str(report["headers_match"]), ""],
-        ["Whole-row only count", report["whole_row_only_in_left_count"], report["whole_row_only_in_right_count"], "Compared as full row values"],
-        ["Comment-only count", report["comment_only_in_left_count"], report["comment_only_in_right_count"], "Compared by column 3 text"],
-        ["Sequence mismatch count", report["row_sequence_mismatch_count"], report["row_sequence_mismatch_count"], "Rows differ at same row number"],
-        ["Duplicate comment extra rows", report["left_duplicate_summary"]["duplicate_comment_count"], report["right_duplicate_summary"]["duplicate_comment_count"], "Column 3 duplicates after cleaning"],
-    ]
-    for row in summary_rows:
-        summary.append(row)
-    style_sheet(summary)
+    try:
+        summary = workbook.active
+        summary.title = "Summary"
+        summary_rows = [
+            ["Metric", report["left_label"], report["right_label"], "Notes"],
+            ["Sheet name", report["left_sheet"], report["right_sheet"], ""],
+            ["Rows incl header", report["left_total_rows_including_header"], report["right_total_rows_including_header"], ""],
+            ["Data rows", report["left_data_rows"], report["right_data_rows"], ""],
+            ["Columns", report["left_columns"], report["right_columns"], ""],
+            ["Headers match", str(report["headers_match"]), str(report["headers_match"]), ""],
+            ["Whole-row only count", report["whole_row_only_in_left_count"], report["whole_row_only_in_right_count"], "Compared as full row values"],
+            ["Comment-only count", report["comment_only_in_left_count"], report["comment_only_in_right_count"], "Compared by configured comment column"],
+            ["Sequence mismatch count", report["row_sequence_mismatch_count"], report["row_sequence_mismatch_count"], "Rows differ at same row number"],
+            ["Duplicate comment extra rows", report["left_duplicate_summary"]["duplicate_comment_count"], report["right_duplicate_summary"]["duplicate_comment_count"], "Configured comment-column duplicates after cleaning"],
+        ]
+        for row in summary_rows:
+            summary.append(row)
+        style_sheet(summary)
 
-    add_diff_sheet(workbook, "Only in Left", report["left_header"], report["whole_row_only_in_left_samples"])
-    add_diff_sheet(workbook, "Only in Right", report["right_header"], report["whole_row_only_in_right_samples"])
-    add_comment_sheet(workbook, "Comment Diff", report)
-    add_sequence_sheet(workbook, "Sequence Diff", report)
-    workbook.save(path)
+        add_diff_sheet(workbook, "Only in Left", report["left_header"], report["whole_row_only_in_left_samples"])
+        add_diff_sheet(workbook, "Only in Right", report["right_header"], report["whole_row_only_in_right_samples"])
+        add_comment_sheet(workbook, "Comment Diff", report)
+        add_sequence_sheet(workbook, "Sequence Diff", report)
+        workbook.save(path)
+    finally:
+        workbook.close()
 
 
 def style_sheet(sheet: Any) -> None:
@@ -275,6 +304,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--left-label", default="left")
     parser.add_argument("--right-label", default="right")
     parser.add_argument("--comment-column", type=int, default=3)
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace confirmed existing outputs. Omit by default to prevent accidental overwrite.",
+    )
     return parser.parse_args()
 
 
@@ -287,6 +321,7 @@ def main() -> int:
         left_label=args.left_label,
         right_label=args.right_label,
         comment_column=args.comment_column,
+        overwrite=args.overwrite,
     )
     print(f"Report: {report['report_xlsx']}")
     print(f"Rows: {report['left_label']}={report['left_data_rows']}, {report['right_label']}={report['right_data_rows']}")

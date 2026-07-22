@@ -11,7 +11,9 @@
 ## Input Contract
 
 - Supported inputs are `.xlsx`, `.xlsm`, and `.csv`.
+- Duplicate input paths are rejected before merge; the same file must never be appended twice in one invocation.
 - CSV inputs must use the deterministic compatibility layer.
+- CSV decoding supports UTF-8 with or without BOM, BOM-marked UTF-16, and GB18030. It must fail instead of guessing an unregistered encoding.
 - Preserve CSV cell values as text. Do not infer numeric, date, ID, or timestamp types while loading CSV.
 - CSV values beginning with `=` must remain text cells when written to XLSX during merge, reply-prefix processing, standardization, or direct cleaning; they must not be promoted to Excel formulas. Genuine formula cells from XLSX/XLSM inputs remain formulas because Excel inputs are read with `data_only=False`.
 - Process every worksheet in each workbook.
@@ -58,6 +60,8 @@ The standardized workbook contains exactly these columns in this order:
 - Do not delete final cleaned `.xlsx` or `.csv` files.
 - Cleanup may delete only explicitly passed current-run intermediate paths.
 - Never scan a directory to decide what to delete.
+- Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation.
+- Output workbooks, CSV files, logs, and summaries are staged beside their destination and atomically replaced only after a successful write.
 
 ## Hash ID Pseudonymization Contract
 

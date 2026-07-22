@@ -3,10 +3,11 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest import mock
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
-from tools.output_file_naming import build_naming_plan
+from tools.output_file_naming import build_naming_plan, product_candidates_from_workbook
 
 
 class OutputFileNamingTest(unittest.TestCase):
@@ -31,6 +32,10 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual(
             "20260707_ScreenBar Halo2_淘宝评论数据_清洗后总表.xlsx",
             plan.filenames["cleaned"],
+        )
+        self.assertEqual(
+            "20260707_ScreenBar Halo2_淘宝评论数据_清洗后总表.csv",
+            plan.filenames["cleaned_csv"],
         )
 
     def test_builds_names_from_parent_folder_and_source_path_when_filename_is_generic(self) -> None:
@@ -153,6 +158,28 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual("ScreenBar Series", plan.product_name)
         self.assertEqual([], plan.product_candidates)
         self.assertEqual([], plan.missing_fields)
+
+    def test_product_discovery_closes_the_input_workbook(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-output-name-closes-workbook"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+
+        source = Workbook()
+        source.active.append(["产品名", "评论内容"])
+        source.active.append(["ScreenBar", "评论内容足够完整"])
+        source.save(input_path)
+        source.close()
+
+        opened = load_workbook(input_path, read_only=True, data_only=True)
+        opened.close = mock.Mock(wraps=opened.close)
+        with mock.patch(
+            "tools.output_file_naming.load_workbook_for_processing",
+            return_value=opened,
+        ):
+            candidates = product_candidates_from_workbook(input_path)
+
+        self.assertEqual(["ScreenBar"], candidates)
+        opened.close.assert_called_once_with()
 
 
 

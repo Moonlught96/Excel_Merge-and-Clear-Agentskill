@@ -5,6 +5,7 @@ import csv
 import json
 import re
 import unicodedata
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -14,8 +15,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
+    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
 except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
+    from output_path_safety import atomic_output_path, ensure_output_paths_safe
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "comment-cleaner.json"
@@ -647,6 +650,8 @@ def clean_workbook(
     clean_words: tuple[str, ...],
     output_dir: Path | None = None,
     output_path: Path | None = None,
+    *,
+    overwrite: bool = True,
 ) -> CleanResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -655,8 +660,24 @@ def clean_workbook(
         raise FileNotFoundError(input_path)
 
     output_xlsx, output_csv, deletion_log_csv, summary_json = make_output_paths(input_path, output_dir, output_path)
-    if output_xlsx.resolve() == input_path:
-        raise ValueError("Output path must be a new workbook path, not the input file.")
+    derived_outputs = (
+        output_xlsx.resolve(),
+        output_csv.resolve(),
+        deletion_log_csv.resolve(),
+        summary_json.resolve(),
+    )
+    if input_path in derived_outputs:
+        if output_xlsx.resolve() == input_path:
+            raise ValueError("Output path must be a new workbook path, not the input file.")
+        raise ValueError("A derived output path would overwrite the input file.")
+    outputs_to_create = [output_xlsx, deletion_log_csv, summary_json]
+    if config.export_first_sheet_csv:
+        outputs_to_create.append(output_csv)
+    ensure_output_paths_safe(
+        [input_path],
+        outputs_to_create,
+        overwrite=overwrite,
+    )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
 
@@ -664,19 +685,18 @@ def clean_workbook(
     deleted_rows: list[DeletedRow] = []
     cleared_cells: list[ClearedCell] = []
 
-    for sheet in workbook.worksheets:
-        sheet_deleted_rows, sheet_cleared_cells = clean_sheet(sheet, config, clean_words)
-        deleted_rows.extend(sheet_deleted_rows)
-        cleared_cells.extend(sheet_cleared_cells)
-
-    workbook.save(output_xlsx)
+    try:
+        for sheet in workbook.worksheets:
+            sheet_deleted_rows, sheet_cleared_cells = clean_sheet(sheet, config, clean_words)
+            deleted_rows.extend(sheet_deleted_rows)
+            cleared_cells.extend(sheet_cleared_cells)
+    except BaseException:
+        workbook.close()
+        raise
 
     actual_output_csv: Path | None = None
     if config.export_first_sheet_csv and workbook.worksheets:
-        write_first_sheet_csv(workbook.worksheets[0], output_csv, config.csv_encoding)
         actual_output_csv = output_csv
-
-    write_deletion_log(deletion_log_csv, deleted_rows, cleared_cells, config.csv_encoding)
 
     summary = {
         "input_path": str(input_path),
@@ -705,8 +725,31 @@ def clean_workbook(
         "subcomment_deduplicate_headers": list(config.subcomment_deduplicate_headers),
         "subcomment_min_trimmed_length": config.subcomment_min_trimmed_length,
     }
-    summary_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    workbook.close()
+    try:
+        with ExitStack() as stack:
+            staged_xlsx = stack.enter_context(atomic_output_path(output_xlsx))
+            staged_deletion_log = stack.enter_context(atomic_output_path(deletion_log_csv))
+            staged_summary = stack.enter_context(atomic_output_path(summary_json))
+            staged_csv = (
+                stack.enter_context(atomic_output_path(output_csv))
+                if actual_output_csv is not None
+                else None
+            )
+            workbook.save(staged_xlsx)
+            if staged_csv is not None:
+                write_first_sheet_csv(workbook.worksheets[0], staged_csv, config.csv_encoding)
+            write_deletion_log(
+                staged_deletion_log,
+                deleted_rows,
+                cleared_cells,
+                config.csv_encoding,
+            )
+            staged_summary.write_text(
+                json.dumps(summary, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+    finally:
+        workbook.close()
 
     return CleanResult(
         input_path=input_path,
@@ -738,6 +781,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-header", default=None, help="按表头定位评论列，例如 评论内容")
     parser.add_argument("--output-dir", type=Path, default=None, help="输出目录，默认写到输入文件同目录")
     parser.add_argument("--output", type=Path, default=None, help="输出 .xlsx 文件路径")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="仅在已明确确认覆盖已有输出时使用",
+    )
     return parser.parse_args()
 
 
@@ -747,7 +795,14 @@ def main() -> int:
     if args.target_header:
         config = replace(config, target_header=args.target_header)
     clean_words = tuple(word.strip() for word in args.clean_word if word and word.strip())
-    result = clean_workbook(args.input_path.resolve(), config, clean_words, args.output_dir, args.output)
+    result = clean_workbook(
+        args.input_path.resolve(),
+        config,
+        clean_words,
+        args.output_dir,
+        args.output,
+        overwrite=args.overwrite,
+    )
 
     print(f"处理完成: {result.input_path}")
     print(f"工作表数量: {result.sheets_processed}")

@@ -3,13 +3,62 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from openpyxl import Workbook, load_workbook
 
-from tools.strip_bilibili_reply_prefixes import strip_bilibili_reply_prefixes
+from tools.strip_bilibili_reply_prefixes import OutputPathConflictError, strip_bilibili_reply_prefixes
 
 
 class StripBilibiliReplyPrefixesTest(unittest.TestCase):
+    def test_closes_input_workbook_when_prefix_processing_fails(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-strip-closes-on-error"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "prefix-stripped.xlsx"
+        output_path.unlink(missing_ok=True)
+        output_path.with_suffix(".reply-prefix-stripped.summary.json").unlink(missing_ok=True)
+        source = Workbook()
+        source.active.append(["content"])
+        source.active.append(["回复@user：真实评论内容"])
+        source.save(input_path)
+        source.close()
+
+        opened = load_workbook(input_path, read_only=True, data_only=False)
+        opened.close = mock.Mock(wraps=opened.close)
+        with mock.patch(
+            "tools.strip_bilibili_reply_prefixes.load_workbook_for_processing",
+            return_value=opened,
+        ), mock.patch(
+            "tools.strip_bilibili_reply_prefixes.strip_sheet_reply_prefixes",
+            side_effect=RuntimeError("processing failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "processing failed"):
+                strip_bilibili_reply_prefixes(input_path, output_path)
+
+        opened.close.assert_called_once_with()
+
+    def test_requires_explicit_overwrite_for_existing_output(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-strip-existing-output"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "prefix-stripped.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["content"])
+        sheet.append(["回复@user：真实评论内容"])
+        workbook.save(input_path)
+        output_path.write_text("existing", encoding="utf-8")
+
+        with self.assertRaisesRegex(OutputPathConflictError, "already exists"):
+            strip_bilibili_reply_prefixes(
+                input_path,
+                output_path,
+                overwrite=False,
+            )
+
+        self.assertEqual("existing", output_path.read_text(encoding="utf-8"))
+
     def test_strips_reply_prefix_without_moving_rows_or_columns(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-strip-bilibili-reply-prefixes"
         tmp.mkdir(parents=True, exist_ok=True)

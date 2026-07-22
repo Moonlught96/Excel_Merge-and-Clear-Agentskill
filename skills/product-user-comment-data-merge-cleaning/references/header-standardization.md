@@ -53,6 +53,7 @@ Do not use AI or semantic judgment to split product names.
 ## Date And Time Conversion
 
 - Platform time aliases accept deterministic Unix seconds, Unix milliseconds, ISO timestamps, and configured relative-time formats.
+- Eight-digit `YYYYMMDD` values are parsed as calendar dates before Unix timestamp detection.
 - Convert absolute platform timestamps to Beijing date (`UTC+8`) in `YYYY-MM-DD` format.
 - Keep only year, month, and day; do not output hours, minutes, or seconds.
 - For Chinese `评论时间` or `评论日期`, convert only numeric timestamps or date-time text that includes a time component. Preserve plain date-only text as provided.

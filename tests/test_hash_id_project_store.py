@@ -62,6 +62,20 @@ class MemoryProjectKeyProvider:
 
 
 class ProjectStoreTest(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows lock behavior")
+    def test_windows_registry_lock_times_out_instead_of_waiting_forever(self) -> None:
+        self.registry_root.mkdir(parents=True, exist_ok=True)
+        lock = hash_id_project_store._CrossProcessRegistryLock(
+            self.registry_root,
+            timeout_seconds=0,
+        )
+
+        with mock.patch("msvcrt.locking", side_effect=OSError("busy")):
+            with self.assertRaisesRegex(ProjectSecurityError, "timed out"):
+                lock.__enter__()
+
+        self.assertIsNone(lock._descriptor)
+
     def setUp(self) -> None:
         TEST_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
         self.temp_path = TEST_TEMP_ROOT / uuid.uuid4().hex

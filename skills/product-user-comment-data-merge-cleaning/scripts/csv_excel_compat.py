@@ -12,7 +12,7 @@ from openpyxl import Workbook, load_workbook
 EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
 CSV_SUFFIXES = {".csv"}
 SUPPORTED_INPUT_SUFFIXES = EXCEL_SUFFIXES | CSV_SUFFIXES
-CSV_INPUT_ENCODINGS = ("utf-8-sig", "gb18030")
+CSV_INPUT_ENCODINGS = ("utf-8-sig", "utf-16", "gb18030")
 INVALID_SHEET_TITLE_CHARS = re.compile(r"[\[\]:*?/\\]")
 
 
@@ -42,7 +42,12 @@ def safe_sheet_title(path: Path) -> str:
 
 
 def read_csv_rows(path: Path) -> CsvRows:
-    for encoding in CSV_INPUT_ENCODINGS:
+    prefix = path.read_bytes()[:2]
+    encodings = ["utf-8-sig"]
+    if prefix in {b"\xff\xfe", b"\xfe\xff"}:
+        encodings.append("utf-16")
+    encodings.append("gb18030")
+    for encoding in encodings:
         try:
             with path.open("r", newline="", encoding=encoding) as csv_file:
                 return CsvRows(rows=list(csv.reader(csv_file)), encoding=encoding)

@@ -30,6 +30,8 @@ KEY_FINGERPRINT_HEX_LENGTH = 16
 METADATA_FILENAME = "metadata.json"
 PROTECTED_KEY_FILENAME = "project-key.dpapi"
 PROJECT_KEY_ENVIRONMENT_PREFIX = "BAZHUAYU_HASH_ID_PROJECT_KEY_"
+REGISTRY_LOCK_TIMEOUT_SECONDS = 30.0
+REGISTRY_LOCK_POLL_SECONDS = 0.05
 _BEIJING_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
 _METADATA_FIELDS = frozenset(
     {
@@ -380,9 +382,15 @@ _PROCESS_LOCKS: dict[str, threading.Lock] = {}
 
 
 class _CrossProcessRegistryLock:
-    def __init__(self, registry_root: Path) -> None:
+    def __init__(
+        self,
+        registry_root: Path,
+        *,
+        timeout_seconds: float = REGISTRY_LOCK_TIMEOUT_SECONDS,
+    ) -> None:
         self._lock_path = registry_root / ".registry.lock"
         self._descriptor: int | None = None
+        self._timeout_seconds = max(0.0, timeout_seconds)
 
     def __enter__(self) -> None:
         descriptor = os.open(
@@ -405,17 +413,32 @@ class _CrossProcessRegistryLock:
             if os.name == "nt":
                 import msvcrt
 
+                deadline = time.monotonic() + self._timeout_seconds
                 while True:
                     os.lseek(descriptor, 0, os.SEEK_SET)
                     try:
                         msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
                         break
-                    except OSError:
-                        time.sleep(0.05)
+                    except OSError as exc:
+                        if time.monotonic() >= deadline:
+                            raise ProjectSecurityError(
+                                "Registry lock acquisition timed out"
+                            ) from exc
+                        time.sleep(REGISTRY_LOCK_POLL_SECONDS)
             else:
                 import fcntl
 
-                fcntl.flock(descriptor, fcntl.LOCK_EX)
+                deadline = time.monotonic() + self._timeout_seconds
+                while True:
+                    try:
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except OSError as exc:
+                        if time.monotonic() >= deadline:
+                            raise ProjectSecurityError(
+                                "Registry lock acquisition timed out"
+                            ) from exc
+                        time.sleep(REGISTRY_LOCK_POLL_SECONDS)
         except Exception:
             os.close(descriptor)
             self._descriptor = None
@@ -446,9 +469,13 @@ def _registry_lock(registry_root: Path) -> Iterator[None]:
     lock_key = str(registry_root.resolve())
     with _PROCESS_LOCKS_GUARD:
         process_lock = _PROCESS_LOCKS.setdefault(lock_key, threading.Lock())
-    with process_lock:
+    if not process_lock.acquire(timeout=REGISTRY_LOCK_TIMEOUT_SECONDS):
+        raise ProjectSecurityError("Process registry lock acquisition timed out")
+    try:
         with _CrossProcessRegistryLock(registry_root):
             yield
+    finally:
+        process_lock.release()
 
 class ProjectStore:
     def __init__(

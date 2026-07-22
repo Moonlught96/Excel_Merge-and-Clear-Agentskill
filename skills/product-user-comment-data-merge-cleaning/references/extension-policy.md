@@ -16,6 +16,9 @@ Examples of locked behavior include:
 - subcomment duplicate/short rules that clear cells instead of deleting rows;
 - confirmation gates between merge, standardization, and cleaning;
 - default retention of only cleaned `.xlsx` and `.csv`.
+- rejection of duplicate input paths and unconfirmed output replacement;
+- mandatory protected paths for intermediate cleanup;
+- formula-aware, duplicate-multiplicity-aware audit comparison.
 
 ## Adding A Header Alias
 

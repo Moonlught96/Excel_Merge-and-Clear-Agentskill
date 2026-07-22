@@ -58,3 +58,15 @@ YouTube long-video exports may provide display names in `author`, while YouTube 
 - Keep raw `author` and `author_name` values out of standardized and cleaned outputs, logs, and summaries.
 
 This is exact configured header mapping, not AI inference or fuzzy identity matching.
+
+## Output Collision And Partial-Write Risks
+
+Earlier tools could replace an existing output without an explicit CLI choice, and a CSV input could collide with the cleaner's derived `.csv` sidecar. All workflow writers now reject input/output collisions, reject existing CLI destinations unless `--overwrite` was explicitly confirmed, and stage files beside the destination before atomic replacement. Cleanup also refuses to run without at least one protected path.
+
+## Compact Dates Mistaken For Unix Timestamps
+
+An eight-digit date such as `20260709` is numerically plausible as a Unix timestamp. The standardizer now parses valid `YYYYMMDD` calendar values before Unix timestamp detection, so the result is `2026-07-09` rather than a 1970 date.
+
+## Audit Comparison Lost Formula And Duplicate Detail
+
+Comparison previously read cached formula results and indexed rows as a set, which could hide formula differences and duplicate-count differences. Comparison now reads with `data_only=False`, preserves formula text, and uses row counters so duplicate-row multiplicity remains visible.

@@ -7,6 +7,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+try:
+    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+except ModuleNotFoundError:
+    from output_path_safety import atomic_output_path, ensure_output_paths_safe
+
 
 class ProtectedOutputError(ValueError):
     pass
@@ -29,10 +34,15 @@ def cleanup_intermediate_outputs(
     protected_paths: list[Path] | tuple[Path, ...],
     summary_path: Path | None = None,
     delete_file: Callable[[Path], None] | None = None,
+    overwrite: bool = True,
 ) -> CleanupIntermediateOutputsResult:
     delete = delete_file if delete_file else lambda path: path.unlink()
     intermediates = resolve_paths(intermediate_paths)
     protected = resolve_paths(protected_paths)
+    if not protected:
+        raise ProtectedOutputError(
+            "At least one protected path is required before intermediate cleanup."
+        )
     protected_set = set(protected)
     resolved_summary_path = summary_path.resolve() if summary_path is not None else None
 
@@ -45,6 +55,8 @@ def cleanup_intermediate_outputs(
         raise ProtectedOutputError(
             f"Refusing to recreate an intermediate file as cleanup summary: {resolved_summary_path}"
         )
+    if resolved_summary_path is not None:
+        ensure_output_paths_safe([], [resolved_summary_path], overwrite=overwrite)
 
     deleted_files: list[str] = []
     missing_files: list[str] = []
@@ -67,7 +79,11 @@ def cleanup_intermediate_outputs(
             "files_deleted": len(deleted_files),
             "files_missing": len(missing_files),
         }
-        resolved_summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        with atomic_output_path(resolved_summary_path) as staged_summary:
+            staged_summary.write_text(
+                json.dumps(summary, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
     return CleanupIntermediateOutputsResult(
         summary_json=resolved_summary_path,
@@ -89,10 +105,15 @@ def parse_args() -> argparse.Namespace:
         "--protect",
         type=Path,
         action="append",
-        default=[],
+        required=True,
         help="Original input or final output file to protect. Pass once per file.",
     )
     parser.add_argument("--summary", type=Path, default=None, help="Optional cleanup summary JSON path.")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace a confirmed existing cleanup summary.",
+    )
     return parser.parse_args()
 
 
@@ -102,6 +123,7 @@ def main() -> int:
         intermediate_paths=args.intermediate,
         protected_paths=args.protect,
         summary_path=args.summary,
+        overwrite=args.overwrite,
     )
     if result.summary_json is not None:
         print(f"Cleanup summary: {result.summary_json}")

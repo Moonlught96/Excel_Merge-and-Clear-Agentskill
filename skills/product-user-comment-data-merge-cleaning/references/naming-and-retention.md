@@ -40,7 +40,7 @@ Data source may be discovered only from fixed keywords including:
 
 If product name or data source is absent or ambiguous, ask the user. Do not use AI or semantic inference to guess it.
 
-Before multi-file merge, show product name, data source, and all three planned filenames, then use the exact prompt from `workflow.md`.
+Before multi-file merge, show product name, data source, and all four planned filenames: merged `.xlsx`, standardized `.xlsx`, cleaned `.xlsx`, and cleaned `.csv`. Then use the exact prompt from `workflow.md`.
 
 返回文件链接时，链接文字必须使用实际完整文件名（含扩展名），不得使用泛化标签。
 
@@ -82,9 +82,14 @@ After verifying the final cleaned `.xlsx` and `.csv`:
 - run cleanup immediately without a separate user confirmation;
 - pass each raw merged, prefix-stripped, standardized, deletion-log, and summary path explicitly as an intermediate;
 - pass every original input plus final cleaned `.xlsx` and `.csv` as protected paths;
+- At least one `--protect` path is mandatory; cleanup refuses to run without protected paths.
 - omit cleanup `--summary` by default so cleanup creates no extra retained file;
 - keep only audit artifacts requested before cleaning.
 
 Do not delete original input files.
 
 Do not delete the final cleaned `.xlsx` or `.csv`. Do not scan a folder for deletion candidates.
+
+## Existing Output Policy
+
+Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation. Never add `--overwrite` merely to make a failed command succeed. First show the exact destination that would be replaced and obtain explicit user approval.

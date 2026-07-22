@@ -13,8 +13,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
+    from tools.output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
 except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
+    from output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
 
 
 TARGET_HEADER_ALIASES = ("content", "评论内容")
@@ -26,10 +28,6 @@ class TargetHeaderNotFoundError(ValueError):
 
 
 class DuplicateTargetHeaderError(ValueError):
-    pass
-
-
-class OutputPathConflictError(ValueError):
     pass
 
 
@@ -154,6 +152,7 @@ def strip_bilibili_reply_prefixes(
     *,
     output_dir: Path | None = None,
     target_aliases: tuple[str, ...] = TARGET_HEADER_ALIASES,
+    overwrite: bool = True,
 ) -> StripBilibiliReplyPrefixesResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -167,8 +166,11 @@ def strip_bilibili_reply_prefixes(
         output_xlsx = output_path.resolve()
         summary_json = output_xlsx.with_suffix(".reply-prefix-stripped.summary.json")
 
-    if output_xlsx.resolve() == input_path:
-        raise OutputPathConflictError("Output path must be a new workbook path, not the input file.")
+    ensure_output_paths_safe(
+        [input_path],
+        [output_xlsx, summary_json],
+        overwrite=overwrite,
+    )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
 
@@ -176,14 +178,17 @@ def strip_bilibili_reply_prefixes(
     output_workbook = Workbook()
 
     sheet_summaries: list[SheetStripSummary] = []
-    for sheet_index, source_sheet in enumerate(input_workbook.worksheets):
-        output_sheet = output_workbook.active if sheet_index == 0 else output_workbook.create_sheet()
-        output_sheet.title = source_sheet.title
-        sheet_summaries.append(strip_sheet_reply_prefixes(source_sheet, output_sheet, target_aliases))
+    try:
+        for sheet_index, source_sheet in enumerate(input_workbook.worksheets):
+            output_sheet = output_workbook.active if sheet_index == 0 else output_workbook.create_sheet()
+            output_sheet.title = source_sheet.title
+            sheet_summaries.append(strip_sheet_reply_prefixes(source_sheet, output_sheet, target_aliases))
 
-    output_workbook.save(output_xlsx)
-    input_workbook.close()
-    output_workbook.close()
+        with atomic_output_path(output_xlsx) as staged_output:
+            output_workbook.save(staged_output)
+    finally:
+        input_workbook.close()
+        output_workbook.close()
 
     summary = {
         "input_path": str(input_path),
@@ -208,7 +213,11 @@ def strip_bilibili_reply_prefixes(
             for sheet in sheet_summaries
         ],
     }
-    summary_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    with atomic_output_path(summary_json) as staged_summary:
+        staged_summary.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     return StripBilibiliReplyPrefixesResult(
         input_path=input_path,
@@ -226,12 +235,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("input_path", type=Path, help="Input .xlsx/.xlsm/.csv file.")
     parser.add_argument("--output", type=Path, default=None, help="Output .xlsx path.")
     parser.add_argument("--output-dir", type=Path, default=None, help="Output directory.")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace confirmed existing outputs.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    result = strip_bilibili_reply_prefixes(args.input_path, output_path=args.output, output_dir=args.output_dir)
+    result = strip_bilibili_reply_prefixes(
+        args.input_path,
+        output_path=args.output,
+        output_dir=args.output_dir,
+        overwrite=args.overwrite,
+    )
     print(f"Reply-prefix-stripped xlsx: {result.output_xlsx}")
     print(f"Summary: {result.summary_json}")
     print(f"Sheets processed: {result.sheets_processed}")

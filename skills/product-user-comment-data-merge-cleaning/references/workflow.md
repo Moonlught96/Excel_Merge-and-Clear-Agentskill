@@ -34,6 +34,7 @@ Do not use AI to choose, normalize, or hash an identity source. The exact mappin
 - If no file path is provided, ask the user to provide the files.
 - Accept `.xlsx`, `.xlsm`, and `.csv`.
 - Use only files explicitly provided by the user. Never scan a folder for additional files.
+- Reject duplicate input paths before merge instead of silently duplicating their rows.
 - Confirm research project name, product name, and data source once per workflow. Reuse the existing protected key until the user explicitly identifies a new research project. Later phases change only the step name in the output filename.
 
 ## Single-File Workflow
@@ -52,7 +53,7 @@ After showing product name, data source, and the planned `标准化总表` and `
 
 This is the default for same-platform batches with the same original format.
 
-1. Show product name, data source, and all three planned filenames.
+1. Show product name, data source, and all four planned filenames, including the cleaned `.csv`.
 2. Ask exactly:
 
    ```text
@@ -115,3 +116,4 @@ After standardized-workbook approval, ask exactly:
 - Verify the cleaned `.xlsx` and `.csv` exist before cleanup.
 - Do not ask for another cleanup confirmation.
 - Return only the final cleaned `.xlsx` and `.csv` unless the user requested audit files before cleaning.
+- Do not overwrite an existing phase or final output unless the user explicitly confirms that exact replacement.

@@ -17,6 +17,7 @@ SCRIPT_FILES = (
     "hash_id_project_store.py",
     "hash_id_pseudonymizer.py",
     "output_file_naming.py",
+    "output_path_safety.py",
     "standardize_excel_headers.py",
     "strip_bilibili_reply_prefixes.py",
 )

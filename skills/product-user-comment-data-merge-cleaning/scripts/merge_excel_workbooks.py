@@ -11,15 +11,13 @@ from openpyxl import Workbook
 
 try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
+    from tools.output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
 except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
+    from output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
 
 
 class HeaderMismatchError(ValueError):
-    pass
-
-
-class OutputPathConflictError(ValueError):
     pass
 
 
@@ -55,6 +53,7 @@ def validate_input_paths(input_paths: list[Path]) -> list[Path]:
         raise ValueError("At least one Excel file is required.")
 
     validated: list[Path] = []
+    seen: set[Path] = set()
     for path in input_paths:
         resolved = path.resolve()
         if resolved.is_dir():
@@ -65,6 +64,9 @@ def validate_input_paths(input_paths: list[Path]) -> list[Path]:
             continue
         if not resolved.exists():
             raise FileNotFoundError(resolved)
+        if resolved in seen:
+            raise ValueError(f"Duplicate input path is not allowed: {resolved}")
+        seen.add(resolved)
         validated.append(resolved)
 
     if not validated:
@@ -82,11 +84,12 @@ def merge_workbooks(
     output_path: Path,
     *,
     add_source_columns: bool = False,
+    overwrite: bool = True,
 ) -> MergeResult:
     paths = validate_input_paths(input_paths)
     output_path = output_path.resolve()
-    if output_path in paths:
-        raise OutputPathConflictError("Output path must be a new workbook path, not one of the input files.")
+    summary_path = output_path.with_suffix(".summary.json")
+    ensure_output_paths_safe(paths, [output_path, summary_path], overwrite=overwrite)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -105,53 +108,59 @@ def merge_workbooks(
         file_rows = 0
         sheet_summaries: list[dict[str, Any]] = []
 
-        for sheet in workbook.worksheets:
-            rows = sheet.iter_rows(values_only=False)
-            try:
-                header_cells = next(rows)
-            except StopIteration:
-                continue
-
-            header = [cell.value for cell in header_cells]
-            header_key = [normalize_for_header(value) for value in header]
-
-            if canonical_header_key is None:
-                canonical_header = header
-                canonical_header_key = header_key
-                output_header = list(header)
-                if add_source_columns:
-                    output_header.extend(["source_file", "source_sheet"])
-                output_sheet.append(output_header)
-            elif header_key != canonical_header_key:
-                raise HeaderMismatchError(
-                    f"Header mismatch in {path} / {sheet.title}. "
-                    f"Expected {canonical_header_key}, got {header_key}."
-                )
-
-            sheet_rows = 0
-            for row_cells in rows:
-                row_tuple = tuple(cell.value for cell in row_cells)
-                if is_blank_row(row_tuple):
+        try:
+            for sheet in workbook.worksheets:
+                rows = sheet.iter_rows(values_only=False)
+                try:
+                    header_cells = next(rows)
+                except StopIteration:
                     continue
-                row = list(row_tuple)
-                if add_source_columns:
-                    row.extend([path.name, sheet.title])
-                output_sheet.append(row)
-                output_row_number = output_sheet.max_row
-                for column_index, source_cell in enumerate(row_cells, start=1):
-                    if source_cell.data_type == "s" and isinstance(source_cell.value, str):
-                        output_sheet.cell(row=output_row_number, column=column_index).data_type = "s"
-                sheet_rows += 1
 
-            if sheet_rows:
-                sheets_processed += 1
-                file_rows += sheet_rows
-                sheet_summaries.append(
-                    {
-                        "sheet_name": sheet.title,
-                        "data_rows": sheet_rows,
-                    }
-                )
+                header = [cell.value for cell in header_cells]
+                header_key = [normalize_for_header(value) for value in header]
+
+                if canonical_header_key is None:
+                    canonical_header = header
+                    canonical_header_key = header_key
+                    output_header = list(header)
+                    if add_source_columns:
+                        output_header.extend(["source_file", "source_sheet"])
+                    output_sheet.append(output_header)
+                elif header_key != canonical_header_key:
+                    raise HeaderMismatchError(
+                        f"Header mismatch in {path} / {sheet.title}. "
+                        f"Expected {canonical_header_key}, got {header_key}."
+                    )
+
+                sheet_rows = 0
+                for row_cells in rows:
+                    row_tuple = tuple(cell.value for cell in row_cells)
+                    if is_blank_row(row_tuple):
+                        continue
+                    row = list(row_tuple)
+                    if add_source_columns:
+                        row.extend([path.name, sheet.title])
+                    output_sheet.append(row)
+                    output_row_number = output_sheet.max_row
+                    for column_index, source_cell in enumerate(row_cells, start=1):
+                        if source_cell.data_type == "s" and isinstance(source_cell.value, str):
+                            output_sheet.cell(row=output_row_number, column=column_index).data_type = "s"
+                    sheet_rows += 1
+
+                if sheet_rows:
+                    sheets_processed += 1
+                    file_rows += sheet_rows
+                    sheet_summaries.append(
+                        {
+                            "sheet_name": sheet.title,
+                            "data_rows": sheet_rows,
+                        }
+                    )
+        except BaseException:
+            output_workbook.close()
+            raise
+        finally:
+            workbook.close()
 
         file_summaries.append(
             {
@@ -161,14 +170,11 @@ def merge_workbooks(
             }
         )
         data_rows_written += file_rows
-        workbook.close()
 
     if canonical_header is None:
+        output_workbook.close()
         raise ValueError("No non-empty worksheets were found in the provided files.")
 
-    output_workbook.save(output_path)
-    output_workbook.close()
-    summary_path = output_path.with_suffix(".summary.json")
     summary = {
         "output_path": str(output_path),
         "files_processed": len(paths),
@@ -178,7 +184,16 @@ def merge_workbooks(
         "header": [value_for_json(value) for value in canonical_header],
         "files": file_summaries,
     }
-    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        with atomic_output_path(output_path) as staged_output:
+            output_workbook.save(staged_output)
+    finally:
+        output_workbook.close()
+    with atomic_output_path(summary_path) as staged_summary:
+        staged_summary.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     return MergeResult(
         output_path=output_path,
@@ -194,6 +209,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("input_paths", type=Path, nargs="+", help="Explicit .xlsx/.xlsm/.csv files to merge.")
     parser.add_argument("--output", type=Path, default=None, help="Output .xlsx path.")
     parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace confirmed existing outputs. Omit by default to prevent accidental overwrite.",
+    )
+    parser.add_argument(
         "--add-source-columns",
         action="store_true",
         help="Append source_file and source_sheet columns for audit.",
@@ -204,7 +224,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     output_path = args.output if args.output else default_output_path()
-    result = merge_workbooks(args.input_paths, output_path, add_source_columns=args.add_source_columns)
+    result = merge_workbooks(
+        args.input_paths,
+        output_path,
+        add_source_columns=args.add_source_columns,
+        overwrite=args.overwrite,
+    )
     print(f"Merged xlsx: {result.output_path}")
     print(f"Summary: {result.summary_path}")
     print(f"Files processed: {result.files_processed}")

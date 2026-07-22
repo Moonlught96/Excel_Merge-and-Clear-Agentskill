@@ -179,37 +179,40 @@ def product_candidates_from_workbook(path: Path) -> list[str]:
         return []
 
     workbook = load_workbook_for_processing(path, read_only=True, data_only=True)
-    candidates: list[str] = []
-    for sheet in workbook.worksheets:
-        rows = sheet.iter_rows(values_only=True)
-        try:
-            headers = next(rows)
-        except StopIteration:
-            continue
+    try:
+        candidates: list[str] = []
+        for sheet in workbook.worksheets:
+            rows = sheet.iter_rows(values_only=True)
+            try:
+                headers = next(rows)
+            except StopIteration:
+                continue
 
-        product_columns: list[int] = []
-        date_product_columns: list[int] = []
-        for column_index, header in enumerate(headers):
-            header_text = "" if header is None else str(header).strip()
-            if header_text in PRODUCT_HEADERS:
-                product_columns.append(column_index)
-            if header_text in COMMENT_DATE_AND_PRODUCT_HEADERS:
-                date_product_columns.append(column_index)
+            product_columns: list[int] = []
+            date_product_columns: list[int] = []
+            for column_index, header in enumerate(headers):
+                header_text = "" if header is None else str(header).strip()
+                if header_text in PRODUCT_HEADERS:
+                    product_columns.append(column_index)
+                if header_text in COMMENT_DATE_AND_PRODUCT_HEADERS:
+                    date_product_columns.append(column_index)
 
-        for row in rows:
-            for column_index in product_columns:
-                if column_index < len(row) and row[column_index] is not None:
-                    value = sanitize_filename_component(str(row[column_index]))
-                    if value:
-                        candidates.append(value)
-            for column_index in date_product_columns:
-                if column_index < len(row):
-                    _, product_name = split_comment_date_and_product(row[column_index])
-                    if product_name:
-                        value = sanitize_filename_component(str(product_name))
+            for row in rows:
+                for column_index in product_columns:
+                    if column_index < len(row) and row[column_index] is not None:
+                        value = sanitize_filename_component(str(row[column_index]))
                         if value:
                             candidates.append(value)
-    return unique_sorted(candidates)
+                for column_index in date_product_columns:
+                    if column_index < len(row):
+                        _, product_name = split_comment_date_and_product(row[column_index])
+                        if product_name:
+                            value = sanitize_filename_component(str(product_name))
+                            if value:
+                                candidates.append(value)
+        return unique_sorted(candidates)
+    finally:
+        workbook.close()
 
 
 def choose_single(candidates: list[str], override: str | None) -> tuple[str | None, list[str], bool]:
@@ -223,10 +226,12 @@ def choose_single(candidates: list[str], override: str | None) -> tuple[str | No
 
 def output_filenames(date_text: str, product_name: str, data_source: str) -> dict[str, str]:
     base = f"{date_text}_{product_name}_{data_source}"
-    return {
+    filenames = {
         key: f"{base}_{step_name}.xlsx"
         for key, step_name in STEP_NAME_BY_KEY.items()
     }
+    filenames["cleaned_csv"] = f"{base}_{STEP_NAME_BY_KEY['cleaned']}.csv"
+    return filenames
 
 
 def build_naming_plan(

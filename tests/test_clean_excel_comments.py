@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from openpyxl import Workbook, load_workbook
 
@@ -9,6 +10,36 @@ from tools.clean_excel_comments import CleanerConfig, clean_workbook, should_del
 
 
 class CleanExcelCommentsTest(unittest.TestCase):
+    def test_closes_input_workbook_when_cleaning_fails(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-clean-closes-on-error"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "cleaned.xlsx"
+        source = Workbook()
+        source.active.append(["评论内容"])
+        source.active.append(["评论内容足够完整"])
+        source.save(input_path)
+        source.close()
+
+        opened = load_workbook(input_path, read_only=False, data_only=False)
+        opened.close = mock.Mock(wraps=opened.close)
+        with mock.patch(
+            "tools.clean_excel_comments.load_workbook_for_processing",
+            return_value=opened,
+        ), mock.patch(
+            "tools.clean_excel_comments.clean_sheet",
+            side_effect=RuntimeError("processing failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "processing failed"):
+                clean_workbook(
+                    input_path,
+                    CleanerConfig(target_header="评论内容"),
+                    (),
+                    output_path=output_path,
+                )
+
+        opened.close.assert_called_once_with()
+
     def test_case_insensitive_latin_fixed_word_requires_word_boundaries(self) -> None:
         config = CleanerConfig(
             delete_contains_texts=(),
@@ -229,6 +260,51 @@ class CleanExcelCommentsTest(unittest.TestCase):
 
         original = load_workbook(input_path, read_only=True, data_only=True)
         self.assertEqual("正常评论内容很完整", original.active.cell(row=2, column=3).value)
+
+    def test_clean_workbook_rejects_derived_csv_path_that_would_overwrite_csv_input(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-clean-csv-sidecar-conflict"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.csv"
+        output_path = tmp / "source.xlsx"
+        output_path.unlink(missing_ok=True)
+        original_bytes = "id,name,comment\n1,keep,正常评论内容很完整\n".encode("utf-8-sig")
+        input_path.write_bytes(original_bytes)
+
+        with self.assertRaisesRegex(ValueError, "derived output path"):
+            clean_workbook(
+                input_path=input_path,
+                config=CleanerConfig(),
+                clean_words=(),
+                output_path=output_path,
+            )
+
+        self.assertEqual(original_bytes, input_path.read_bytes())
+        self.assertFalse(output_path.exists())
+
+    def test_requires_explicit_overwrite_for_any_existing_clean_output(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-clean-existing-output"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "standardized.xlsx"
+        output_path = tmp / "cleaned.xlsx"
+        output_csv = output_path.with_suffix(".csv")
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容"])
+        sheet.append(["2026-07-22", "这是一条足够完整的产品评论"])
+        workbook.save(input_path)
+        output_csv.write_text("existing", encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            clean_workbook(
+                input_path=input_path,
+                config=CleanerConfig(target_header="评论内容"),
+                clean_words=(),
+                output_path=output_path,
+                overwrite=False,
+            )
+
+        self.assertEqual("existing", output_csv.read_text(encoding="utf-8"))
+        self.assertFalse(output_path.exists())
 
     def test_comments_with_seven_or_fewer_characters_are_deleted(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-length-limit"

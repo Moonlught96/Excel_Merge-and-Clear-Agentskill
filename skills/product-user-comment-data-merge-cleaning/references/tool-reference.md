@@ -4,7 +4,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 
 ## Script Inventory
 
-- `scripts/output_file_naming.py`: deterministically discover product/source candidates and plan the three output names.
+- `scripts/output_file_naming.py`: deterministically discover product/source candidates and plan the four output filenames.
 - `scripts/merge_excel_workbooks.py`: merge explicit `.xlsx`, `.xlsm`, and `.csv` inputs into a new raw merged `.xlsx`.
 - `scripts/strip_bilibili_reply_prefixes.py`: remove only fixed B站 `回复@xxx：`/`回复 @xxx:` prefixes in a separate workbook.
 - `scripts/hash_id_pseudonymizer.py`: select a worksheet-wide registered account ID or display-name fallback, normalize the value, and compute project/platform/identity-type-isolated HMAC-SHA256 values.
@@ -14,6 +14,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - `scripts/cleanup_intermediate_outputs.py`: delete only explicitly supplied current-run intermediates while protecting inputs and final outputs.
 - `scripts/compare_cleaned_workbooks.py`: optional audit-only workbook comparison; it is not part of the default workflow.
 - `scripts/csv_excel_compat.py`: text-preserving CSV compatibility shared by the other scripts.
+- `scripts/output_path_safety.py`: reject input/output collisions and unconfirmed overwrites, then stage output files for atomic replacement.
 
 ## Configuration Inventory
 
@@ -83,10 +84,23 @@ python scripts\cleanup_intermediate_outputs.py --intermediate "<raw-merged.xlsx>
 
 Do not include `--summary` in cleanup unless the user requested a cleanup audit summary before cleaning.
 
+At least one `--protect` path is mandatory. Pass every original input and both final cleaned outputs as protected paths.
+
+Compare two cleaned workbooks only for an explicit audit request:
+
+```powershell
+python scripts\compare_cleaned_workbooks.py --left "<left.xlsx>" --right "<right.xlsx>" --output-dir "<comparison-directory>" --comment-column 2
+```
+
+Comparison preserves formula text and counts duplicate-row multiplicity. Comparison outputs use the same no-clobber rule as workflow outputs.
+
+Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation. All examples intentionally omit `--overwrite`.
+
 ## Runtime Requirements
 
 - Python 3.10 or newer is recommended.
 - `openpyxl` is required.
+- Install portable dependencies with `python -m pip install -r requirements.txt` from the Skill root.
 - Use a Python runtime that includes `zoneinfo` timezone data for deterministic Beijing naming.
 - When global `python` lacks dependencies, use the Codex bundled Python returned by `load_workspace_dependencies`.
 - Automatic initialization and persistent storage of a new hash-ID research project requires Windows DPAPI under the current Windows user. On non-Windows systems, the Skill can load a securely pre-provisioned project key through the documented environment provider but cannot securely initialize and persist a new project key.

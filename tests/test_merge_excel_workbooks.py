@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from openpyxl import Workbook, load_workbook
 
@@ -21,6 +22,48 @@ def write_workbook(path: Path, sheets: dict[str, list[list[object]]]) -> None:
 
 
 class MergeExcelWorkbooksTest(unittest.TestCase):
+    def test_closes_input_workbook_when_merge_processing_fails(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-merge-closes-on-error"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "merged.xlsx"
+        output_path.unlink(missing_ok=True)
+        output_path.with_suffix(".summary.json").unlink(missing_ok=True)
+        write_workbook(input_path, {"main": [["comment"], ["one row"]]})
+
+        opened = load_workbook(input_path, read_only=True, data_only=False)
+        opened.close = mock.Mock(wraps=opened.close)
+        output_workbook = Workbook()
+        output_workbook.close = mock.Mock(wraps=output_workbook.close)
+        with mock.patch(
+            "tools.merge_excel_workbooks.load_workbook_for_processing",
+            return_value=opened,
+        ), mock.patch(
+            "tools.merge_excel_workbooks.Workbook",
+            return_value=output_workbook,
+        ), mock.patch(
+            "tools.merge_excel_workbooks.normalize_for_header",
+            side_effect=RuntimeError("processing failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "processing failed"):
+                merge_workbooks([input_path], output_path)
+
+        opened.close.assert_called_once_with()
+        output_workbook.close.assert_called_once_with()
+
+    def test_rejects_duplicate_input_paths_instead_of_duplicating_rows(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-merge-duplicate-input"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "merged.xlsx"
+        output_path.unlink(missing_ok=True)
+        write_workbook(input_path, {"main": [["comment"], ["one row"]]})
+
+        with self.assertRaisesRegex(ValueError, "Duplicate input path"):
+            merge_workbooks([input_path, input_path], output_path)
+
+        self.assertFalse(output_path.exists())
+
     def test_merges_all_workbooks_with_one_header(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-merge"
         tmp.mkdir(parents=True, exist_ok=True)
@@ -98,6 +141,19 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
             merge_workbooks([first_path, second_path], first_path)
 
         self.assertEqual(before, first_path.read_bytes())
+
+    def test_requires_explicit_overwrite_for_existing_output(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-merge-existing-output"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "merged.xlsx"
+        write_workbook(input_path, {"main": [["comment"], ["one row"]]})
+        output_path.write_text("existing", encoding="utf-8")
+
+        with self.assertRaisesRegex(OutputPathConflictError, "already exists"):
+            merge_workbooks([input_path], output_path, overwrite=False)
+
+        self.assertEqual("existing", output_path.read_text(encoding="utf-8"))
 
     def test_merges_explicit_csv_inputs_through_compatibility_layer(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-merge-csv-inputs"

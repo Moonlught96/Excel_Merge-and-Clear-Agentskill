@@ -34,6 +34,7 @@ SCRIPT_FILES = (
     "hash_id_project_store.py",
     "hash_id_pseudonymizer.py",
     "output_file_naming.py",
+    "output_path_safety.py",
     "standardize_excel_headers.py",
     "strip_bilibili_reply_prefixes.py",
 )
@@ -49,6 +50,7 @@ class SkillPackageTest(unittest.TestCase):
     def test_complete_standard_skill_structure_exists(self) -> None:
         required_files = (
             SKILL_ROOT / "SKILL.md",
+            SKILL_ROOT / "requirements.txt",
             SKILL_ROOT / "agents" / "openai.yaml",
             SKILL_ROOT / "assets" / "workflow-confirmation-template.md",
             SKILL_ROOT / "assets" / "rule-extension-template.md",
@@ -93,7 +95,10 @@ class SkillPackageTest(unittest.TestCase):
             "为抓取的大量用户评论数据进行文档合并、标准化和清洗工作，并输出为 XLSX 与 CSV 格式文档。",
             skill,
         )
-        self.assertIn("目前输入不受限制，支持 Excel 与 CSV 文件。", skill)
+        self.assertIn(
+            "支持任意数量的 `.xlsx`、`.xlsm` 与 `.csv` 用户评论文件；不支持旧版 `.xls`。",
+            skill,
+        )
         self.assertLessEqual(len(skill.splitlines()), 180)
         for heading in ("## Skill Responsibilities", "## Trigger Scenarios", "## Execution Steps", "## Output Standard"):
             self.assertIn(heading, skill)
@@ -215,6 +220,16 @@ class SkillPackageTest(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+
+        for script_name in SCRIPT_FILES:
+            subprocess.run(
+                [sys.executable, str(copied_skill / "scripts" / script_name), "--help"],
+                cwd=run_root,
+                env=subprocess_env,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
 
         input_path = run_root / "input.xlsx"
         standardized_path = run_root / "standardized.xlsx"
