@@ -116,7 +116,7 @@ Reddit 报告的评论数可以大于实际可获取的评论数组长度。只�
 
 - `id` 必须唯一；
 - `id`、`parent_id` 去掉允许的 `t1_` 或 `t3_` 前缀后，必须是 ASCII 字母数字并统一为小写；
-- `content`、`username` 和 `date` 按 JSON 原文保留；
+- `content`、`username` 和 `date` 必须包含非空白文本，并按 JSON 原文保留；
 - `depth` 必须是大于等于 0 的整数；
 - `created_utc` 必须是整数，但输出评论时间使用 JSON 的 `date` 原文；
 - `depth = 0` 时，`parent_id` 必须指向帖子 ID；
