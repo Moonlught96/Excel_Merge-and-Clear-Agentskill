@@ -125,7 +125,15 @@ class ParseSavedRedditHtmlTests(unittest.TestCase):
         self.assertEqual(result.comments, {})
 
     def test_invalid_post_ids_are_rejected(self) -> None:
-        for invalid_id in ("t3_bad-id", "t3_bad%20id", "t3_café", "t3_аbc", "t3_bad&#95;id"):
+        for invalid_id in (
+            "t3_bad-id",
+            "t3_bad%20id",
+            "t3_café",
+            "t3_аbc",
+            "t3_bad&#95;id",
+            "t3_K",
+            "t3_ſ",
+        ):
             with self.subTest(invalid_id=invalid_id):
                 with self.assertRaisesRegex(ValueError, "invalid post ID"):
                     self.parse(f'<shreddit-post thingid="{invalid_id}"></shreddit-post>')
@@ -141,7 +149,15 @@ class ParseSavedRedditHtmlTests(unittest.TestCase):
         )
         self.assertEqual(result.comments, {})
 
-        for invalid_id in ("t1_bad-id", "t1_bad%20id", "t1_café", "t1_аbc", "t1_bad&#95;id"):
+        for invalid_id in (
+            "t1_bad-id",
+            "t1_bad%20id",
+            "t1_café",
+            "t1_аbc",
+            "t1_bad&#95;id",
+            "t1_K",
+            "t1_ſ",
+        ):
             with self.subTest(invalid_id=invalid_id):
                 with self.assertRaisesRegex(ValueError, "invalid comment ID"):
                     self.parse(
@@ -159,6 +175,8 @@ class ParseSavedRedditHtmlTests(unittest.TestCase):
             "t3_café",
             "t1_аbc",
             "t3_bad&#95;id",
+            "t3_K",
+            "t1_ſ",
         ):
             with self.subTest(invalid_id=invalid_id):
                 with self.assertRaisesRegex(ValueError, "invalid parent ID"):

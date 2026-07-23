@@ -54,14 +54,15 @@ def _first_nonempty_registered_attribute(
 
 
 def _normalize_id(value: str, prefixes: tuple[str, ...], label: str) -> str:
-    normalized = value.lower()
+    raw_id = value
     for prefix in prefixes:
-        if normalized.startswith(prefix):
-            normalized = normalized[len(prefix) :]
+        raw_prefix = raw_id[: len(prefix)]
+        if raw_prefix.isascii() and raw_prefix.lower() == prefix:
+            raw_id = raw_id[len(prefix) :]
             break
-    if not normalized or not normalized.isascii() or not normalized.isalnum():
+    if not raw_id or not raw_id.isascii() or not raw_id.isalnum():
         raise ValueError(f"invalid {label} ID: {value!r}")
-    return normalized
+    return raw_id.lower()
 
 
 def _parse_depth(value: str) -> int | None:
