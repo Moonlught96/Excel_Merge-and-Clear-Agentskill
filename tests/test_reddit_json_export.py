@@ -291,19 +291,31 @@ class RedditJsonExportTest(unittest.TestCase):
                 with self.subTest(location=location, value=value):
                     self.assert_invalid(payload)
 
-    def test_rejects_wrong_type_prefix_for_id_context(self) -> None:
+    def test_accepts_either_prefix_case_insensitively_in_every_id_field(
+        self,
+    ) -> None:
         cases = [
-            ("post", 0, "id", "t1_abc123"),
-            ("comments", 0, "id", "t3_root1"),
+            ("post", 0, "id", "T1_AbC123", "abc123"),
+            ("post", 0, "id", "t3_AbC123", "abc123"),
+            ("comments", 0, "id", "T3_Root1", "root1"),
+            ("comments", 1, "id", "T1_Reply2", "reply2"),
+            ("comments", 0, "parent_id", "T1_ABC123", "abc123"),
+            ("comments", 1, "parent_id", "T3_ROOT1", "root1"),
         ]
-        for section, index, field, value in cases:
+        for section, index, field, value, expected in cases:
             payload = valid_payload()
             if section == "post":
                 payload["post"][field] = value
             else:
                 payload["comments"][index][field] = value
-            with self.subTest(section=section):
-                self.assert_invalid(payload)
+            with self.subTest(section=section, index=index, field=field, value=value):
+                result = parse_reddit_json(self.write_payload(payload))
+                actual = (
+                    getattr(result.post, field)
+                    if section == "post"
+                    else getattr(result.comments[index], field)
+                )
+                self.assertEqual(expected, actual)
 
     def test_rejects_duplicate_comment_ids_after_case_and_prefix_normalization(self) -> None:
         payload = valid_payload()

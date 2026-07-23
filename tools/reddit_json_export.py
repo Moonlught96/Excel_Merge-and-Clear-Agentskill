@@ -73,15 +73,18 @@ def _nonblank_text(value: Any, field: str) -> str:
     return value
 
 
-def _normalize_id(value: Any, field: str, allowed_prefixes: tuple[str, ...]) -> str:
+def _normalize_id(value: Any, field: str) -> str:
     if not isinstance(value, str):
         raise RedditJsonError(f"{field} must be an ASCII identifier")
 
     identifier = value
-    for prefix in allowed_prefixes:
-        if identifier.startswith(prefix):
-            identifier = identifier[len(prefix) :]
-            break
+    if (
+        len(identifier) >= 3
+        and identifier[0] in ("t", "T")
+        and identifier[1] in ("1", "3")
+        and identifier[2] == "_"
+    ):
+        identifier = identifier[3:]
 
     if not identifier or not identifier.isascii() or not identifier.isalnum():
         raise RedditJsonError(f"{field} must be an ASCII alphanumeric identifier")
@@ -131,7 +134,7 @@ def _parse_meta(raw: dict[str, Any], comment_count: int) -> RedditMeta:
 
 
 def _parse_post(raw: dict[str, Any], reported_by_api: int) -> RedditPost:
-    post_id = _normalize_id(_required(raw, "id", "post"), "post.id", ("t3_",))
+    post_id = _normalize_id(_required(raw, "id", "post"), "post.id")
     subreddit = _nonblank_text(
         _required(raw, "subreddit", "post"), "post.subreddit"
     )
@@ -159,12 +162,11 @@ def _parse_comment(raw: dict[str, Any], index: int) -> RedditJsonComment:
     section = f"comments[{index}]"
     return RedditJsonComment(
         id=_normalize_id(
-            _required(raw, "id", section), f"{section}.id", ("t1_",)
+            _required(raw, "id", section), f"{section}.id"
         ),
         parent_id=_normalize_id(
             _required(raw, "parent_id", section),
             f"{section}.parent_id",
-            ("t1_", "t3_"),
         ),
         content=_nonblank_text(
             _required(raw, "content", section), f"{section}.content"
