@@ -1,4 +1,5 @@
 import csv
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -1236,6 +1237,43 @@ class RedditReconstructionCliTests(unittest.TestCase):
         self.assertEqual(2, missing_result.returncode)
         self.assertIn("required", missing_result.stderr)
         self.assertNotIn("Traceback", missing_result.stderr)
+
+    def test_path_resolution_os_error_is_concise_and_does_not_escape_main(
+        self,
+    ) -> None:
+        stderr = io.StringIO()
+        escaped_error: OSError | None = None
+        with patch.object(
+            Path,
+            "resolve",
+            side_effect=OSError("simulated path resolution failure"),
+        ):
+            with patch.object(sys, "stderr", stderr):
+                try:
+                    return_code = reconstruct_reddit_comments.main(
+                        [
+                            "--free-csv",
+                            "free.csv",
+                            "--html",
+                            "saved.html",
+                            "--output-xlsx",
+                            "result.xlsx",
+                            "--output-csv",
+                            "result.csv",
+                        ]
+                    )
+                except OSError as error:
+                    escaped_error = error
+                    return_code = None
+
+        self.assertIsNone(escaped_error, "path resolution error escaped main")
+        self.assertEqual(1, return_code)
+        self.assertEqual(
+            "Error: simulated path resolution failure\n",
+            stderr.getvalue(),
+        )
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertNotIn("SECRET_", stderr.getvalue())
 
 
 if __name__ == "__main__":

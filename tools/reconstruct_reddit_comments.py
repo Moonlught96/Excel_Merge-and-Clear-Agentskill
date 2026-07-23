@@ -361,11 +361,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
-    free_csv = arguments.free_csv.resolve()
-    html_path = arguments.html.resolve()
-    output_xlsx = arguments.output_xlsx.resolve()
-    output_csv = arguments.output_csv.resolve()
     try:
+        free_csv = arguments.free_csv.resolve()
+        html_path = arguments.html.resolve()
+        output_xlsx = arguments.output_xlsx.resolve()
+        output_csv = arguments.output_csv.resolve()
         free = parse_free_reddit_csv(free_csv)
         html = parse_saved_reddit_html(html_path)
         rows = reconstruct_rows(
