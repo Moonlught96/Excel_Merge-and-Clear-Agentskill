@@ -77,6 +77,24 @@ class ParseSavedRedditHtmlTests(unittest.TestCase):
         self.assertEqual(result.post_author, "Casey")
         self.assertEqual(result.comments["commxyz"].parent_id, "postabc")
 
+    def test_unicode_confusable_tag_name_is_ignored(self) -> None:
+        with self.assertRaisesRegex(ValueError, "missing registered post ID"):
+            self.parse(
+                """
+                <shreddit-poſt thingid="t3_fake1" score="999"></shreddit-poſt>
+                """
+            )
+
+    def test_unicode_confusable_attribute_name_is_not_registered(self) -> None:
+        result = self.parse(
+            """
+            <ShReDdIt-PoSt ThInGiD="T3_Real1"
+                ſcore="999" ScOrE="4"></ShReDdIt-PoSt>
+            """
+        )
+
+        self.assertEqual(result.post_score, "4")
+
     def test_duplicate_comment_id_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "duplicate comment ID.*sameid"):
             self.parse(

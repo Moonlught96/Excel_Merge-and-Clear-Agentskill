@@ -26,11 +26,11 @@ def _attribute_values(
     attributes: list[tuple[str, str | None]],
     name: str,
 ) -> list[str]:
-    registered_name = name.casefold()
+    registered_name = name.lower()
     return [
         value or ""
         for attribute_name, value in attributes
-        if attribute_name.casefold() == registered_name
+        if attribute_name.isascii() and attribute_name.lower() == registered_name
     ]
 
 
@@ -85,7 +85,9 @@ class _SavedRedditHtmlParser(HTMLParser):
         tag: str,
         attrs: list[tuple[str, str | None]],
     ) -> None:
-        normalized_tag = tag.casefold()
+        if not tag.isascii():
+            return
+        normalized_tag = tag.lower()
         if normalized_tag == "shreddit-post":
             self._parse_post(attrs)
         elif normalized_tag == "shreddit-comment":
