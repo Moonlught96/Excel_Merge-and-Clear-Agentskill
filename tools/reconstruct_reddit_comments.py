@@ -39,13 +39,14 @@ def _required_post_value(
     field_name: str,
     cli_name: str,
 ) -> str:
-    value = html_value if html_value != "" else fallback
-    if value is None or value == "":
-        raise ValueError(
-            f"Missing required post field {field_name}; explicit CLI value "
-            f"{cli_name} is needed"
-        )
-    return value
+    if html_value.strip():
+        return html_value
+    if fallback is not None and fallback.strip():
+        return fallback
+    raise ValueError(
+        f"Missing required post field {field_name}; explicit CLI value "
+        f"{cli_name} is needed"
+    )
 
 
 def reconstruct_rows(

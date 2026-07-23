@@ -197,6 +197,66 @@ class ReconstructRedditRowsTests(unittest.TestCase):
                         self.html(self.html_comment("c1"), **html_values),
                     )
 
+    def test_whitespace_only_html_post_fields_are_missing(self) -> None:
+        cases = (
+            ("Post Author", "post_author"),
+            ("Post Score", "post_score"),
+            ("Post Comment Count", "post_comment_count"),
+        )
+        for field_name, field_key in cases:
+            with self.subTest(field_name=field_name):
+                html_values = {
+                    "post_author": "author",
+                    "post_score": "score",
+                    "post_comment_count": "count",
+                }
+                html_values[field_key] = " \t "
+                with self.assertRaisesRegex(ValueError, field_name):
+                    reconstruct_rows(
+                        self.free(self.comment("c1")),
+                        self.html(self.html_comment("c1"), **html_values),
+                    )
+
+    def test_whitespace_only_explicit_post_fallbacks_are_missing(self) -> None:
+        cases = (
+            ("Post Author", "post_author"),
+            ("Post Score", "post_score"),
+            ("Post Comment Count", "post_comment_count"),
+        )
+        for field_name, field_key in cases:
+            with self.subTest(field_name=field_name):
+                html_values = {
+                    "post_author": "author",
+                    "post_score": "score",
+                    "post_comment_count": "count",
+                }
+                html_values[field_key] = ""
+                fallback_values = {field_key: " \r\n "}
+                with self.assertRaisesRegex(ValueError, field_name):
+                    reconstruct_rows(
+                        self.free(self.comment("c1")),
+                        self.html(self.html_comment("c1"), **html_values),
+                        **fallback_values,
+                    )
+
+    def test_whitespace_html_uses_valid_fallbacks_without_stripping_them(self) -> None:
+        rows = reconstruct_rows(
+            self.free(self.comment("c1")),
+            self.html(
+                self.html_comment("c1"),
+                post_author=" ",
+                post_score="\t",
+                post_comment_count="\r\n",
+            ),
+            post_author=" fallback author ",
+            post_score=" 7 ",
+            post_comment_count=" 1 ",
+        )
+
+        self.assertEqual(" fallback author ", rows[0]["Post Author"])
+        self.assertEqual(" 7 ", rows[0]["Post Score"])
+        self.assertEqual(" 1 ", rows[0]["Post Comment Count"])
+
     def test_post_id_mismatch_names_both_ids(self) -> None:
         with self.assertRaisesRegex(ValueError, r"free-id.*html-id"):
             reconstruct_rows(
