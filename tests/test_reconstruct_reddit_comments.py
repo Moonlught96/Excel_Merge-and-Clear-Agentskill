@@ -119,6 +119,14 @@ class ReconstructRedditRowsTests(unittest.TestCase):
         self.assertEqual(["No", "Yes"], [row["Is Reply"] for row in rows])
         self.assertEqual([0, 2], [row["Thread Level"] for row in rows])
 
+    def test_only_exact_zero_thread_level_is_not_a_reply(self) -> None:
+        rows = reconstruct_rows(
+            self.free(self.comment("synthetic-negative")),
+            self.html(self.html_comment("synthetic-negative", level=-1)),
+        )
+
+        self.assertEqual("Yes", rows[0]["Is Reply"])
+
     def test_blank_comment_score_is_allowed_and_preserved(self) -> None:
         rows = reconstruct_rows(
             self.free(self.comment("c1")),

@@ -111,7 +111,7 @@ def reconstruct_rows(
                 "Time": comment.time,
                 "Score": html_comment.score,
                 "Thread Level": thread_level,
-                "Is Reply": "Yes" if thread_level > 0 else "No",
+                "Is Reply": "No" if thread_level == 0 else "Yes",
                 "Comment": comment.comment,
                 "Comment URL": comment.comment_url,
                 "Comment ID": comment.comment_id,
