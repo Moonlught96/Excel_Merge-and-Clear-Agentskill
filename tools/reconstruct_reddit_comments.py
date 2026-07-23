@@ -3,19 +3,31 @@
 from __future__ import annotations
 
 import csv
+import os
+import shutil
 import sys
-from contextlib import ExitStack
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
+from uuid import uuid4
 
 from openpyxl import Workbook
 
 try:
-    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        OutputPathConflictError,
+        atomic_output_path,
+        ensure_output_paths_safe,
+    )
     from tools.reddit_free_csv import FreeRedditExport
     from tools.reddit_saved_html import SavedRedditHtml
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        OutputPathConflictError,
+        atomic_output_path,
+        ensure_output_paths_safe,
+    )
     from tools.reddit_free_csv import FreeRedditExport
     from tools.reddit_saved_html import SavedRedditHtml
 
@@ -37,6 +49,50 @@ OUTPUT_HEADERS = (
     "Comment ID",
     "Parent ID",
 )
+_XLSX_STRING_LIMIT = 32_767
+
+
+def _validate_input_aliases(
+    input_paths: tuple[Path, Path],
+    output_xlsx: Path,
+    output_csv: Path,
+) -> None:
+    resolved_inputs = {path.resolve() for path in input_paths}
+    for output in (output_xlsx.resolve(), output_csv.resolve()):
+        if output in resolved_inputs:
+            raise OutputPathConflictError(
+                f"Output path must be a new path, not an input file: {output}"
+            )
+
+
+def _validate_output_roles(output_xlsx: Path, output_csv: Path) -> None:
+    if output_xlsx.resolve() == output_csv.resolve():
+        raise OutputPathConflictError(
+            f"Duplicate output path is not allowed: {output_xlsx.resolve()}"
+        )
+    if output_xlsx.suffix.lower() != ".xlsx":
+        raise ValueError("XLSX output path must use the .xlsx suffix")
+    if output_csv.suffix.lower() != ".csv":
+        raise ValueError("CSV output path must use the .csv suffix")
+
+
+def _validate_xlsx_string_lengths(
+    rows: list[dict[str, str | int]],
+) -> None:
+    for column_number, header in enumerate(OUTPUT_HEADERS, start=1):
+        if len(header) > _XLSX_STRING_LIMIT:
+            raise ValueError(
+                "XLSX string exceeds 32,767 characters at "
+                f"header row, column {column_number}"
+            )
+    for row_number, row in enumerate(rows, start=1):
+        for header in OUTPUT_HEADERS:
+            value = row[header]
+            if isinstance(value, str) and len(value) > _XLSX_STRING_LIMIT:
+                raise ValueError(
+                    "XLSX string exceeds 32,767 characters at "
+                    f"data row {row_number}, column {header}"
+                )
 
 
 def _write_xlsx(rows: list[dict[str, str | int]], output_path: Path) -> None:
@@ -62,6 +118,73 @@ def _write_csv(rows: list[dict[str, str | int]], output_path: Path) -> None:
         writer.writerows(rows)
 
 
+def _transaction_path(target: Path, role: str) -> Path:
+    return target.with_name(
+        f".{target.stem}.{uuid4().hex}.reddit-{role}{target.suffix}"
+    )
+
+
+def _replace_output_pair(
+    staged_and_targets: tuple[tuple[Path, Path], tuple[Path, Path]],
+) -> None:
+    backups: dict[Path, Path] = {}
+    try:
+        for _, target in staged_and_targets:
+            if target.exists():
+                backup = _transaction_path(target, "backup")
+                shutil.copyfile(target, backup)
+                backups[target] = backup
+    except BaseException:
+        for backup in backups.values():
+            backup.unlink(missing_ok=True)
+        raise
+    try:
+        for staged, target in staged_and_targets:
+            os.replace(staged, target)
+    except BaseException:
+        for _, target in staged_and_targets:
+            backup = backups.get(target)
+            if backup is None:
+                target.unlink(missing_ok=True)
+            else:
+                os.replace(backup, target)
+        raise
+    finally:
+        for staged, _ in staged_and_targets:
+            staged.unlink(missing_ok=True)
+        for backup in backups.values():
+            backup.unlink(missing_ok=True)
+
+
+def _reservation_path(target: Path) -> Path:
+    return target.with_name(f".{target.name}.reddit-output.lock")
+
+
+@contextmanager
+def _reserve_output_paths(output_paths: tuple[Path, Path]) -> Iterator[None]:
+    acquired: list[Path] = []
+    try:
+        for target in sorted(output_paths, key=lambda path: str(path).casefold()):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            reservation = _reservation_path(target)
+            try:
+                descriptor = os.open(
+                    reservation,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o600,
+                )
+            except FileExistsError as error:
+                raise OutputPathConflictError(
+                    f"Output path is reserved by another writer: {target}"
+                ) from error
+            acquired.append(reservation)
+            os.close(descriptor)
+        yield
+    finally:
+        for reservation in reversed(acquired):
+            reservation.unlink(missing_ok=True)
+
+
 def write_outputs(
     rows: list[dict[str, str | int]],
     *,
@@ -70,16 +193,29 @@ def write_outputs(
     output_csv: Path,
     overwrite: bool,
 ) -> None:
-    resolved_xlsx, resolved_csv = ensure_output_paths_safe(
-        input_paths,
-        (output_xlsx, output_csv),
-        overwrite=overwrite,
-    )
-    with ExitStack() as stack:
-        staged_xlsx = stack.enter_context(atomic_output_path(resolved_xlsx))
-        staged_csv = stack.enter_context(atomic_output_path(resolved_csv))
-        _write_xlsx(rows, staged_xlsx)
-        _write_csv(rows, staged_csv)
+    _validate_input_aliases(input_paths, output_xlsx, output_csv)
+    _validate_output_roles(output_xlsx, output_csv)
+    _validate_xlsx_string_lengths(rows)
+    requested_outputs = (output_xlsx.resolve(), output_csv.resolve())
+    with _reserve_output_paths(requested_outputs):
+        resolved_xlsx, resolved_csv = ensure_output_paths_safe(
+            input_paths,
+            requested_outputs,
+            overwrite=overwrite,
+        )
+        staged_xlsx = _transaction_path(resolved_xlsx, "stage")
+        staged_csv = _transaction_path(resolved_csv, "stage")
+        try:
+            with atomic_output_path(staged_xlsx) as temporary_xlsx:
+                _write_xlsx(rows, temporary_xlsx)
+            with atomic_output_path(staged_csv) as temporary_csv:
+                _write_csv(rows, temporary_csv)
+            _replace_output_pair(
+                ((staged_xlsx, resolved_xlsx), (staged_csv, resolved_csv))
+            )
+        finally:
+            staged_xlsx.unlink(missing_ok=True)
+            staged_csv.unlink(missing_ok=True)
 
 
 def _required_post_value(

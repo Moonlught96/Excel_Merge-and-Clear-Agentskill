@@ -1,4 +1,5 @@
 import csv
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -450,6 +451,42 @@ class RedditOutputTests(unittest.TestCase):
             self.assertEqual(expected, cell.value)
             self.assertEqual("s", cell.data_type)
 
+    def test_xlsx_maximum_length_string_round_trips_in_both_outputs(self) -> None:
+        maximum_length = "界" * 32_767
+
+        self.write([self.row(**{"Comment": maximum_length})])
+
+        comment_column = OUTPUT_HEADERS.index("Comment")
+        self.assertEqual(
+            maximum_length,
+            load_workbook(self.output_xlsx).active.cell(
+                2, comment_column + 1
+            ).value,
+        )
+        self.assertEqual(maximum_length, self.csv_rows()[1][comment_column])
+
+    def test_xlsx_overlength_string_is_rejected_before_outputs_change(self) -> None:
+        overlength = "private-value-" + ("界" * 32_768)
+        self.output_xlsx.write_bytes(b"old xlsx")
+        self.output_csv.write_bytes(b"old csv")
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"data row 1.*Comment",
+        ) as caught:
+            self.write(
+                [self.row(**{"Comment": overlength})],
+                overwrite=True,
+            )
+
+        self.assertNotIn("private-value", str(caught.exception))
+        self.assertEqual(b"old xlsx", self.output_xlsx.read_bytes())
+        self.assertEqual(b"old csv", self.output_csv.read_bytes())
+        self.assertEqual(
+            {"input.csv", "input.html", "output.xlsx", "output.csv"},
+            {path.name for path in self.directory.iterdir()},
+        )
+
     def test_missing_optional_score_is_written_as_blank_in_both_outputs(self) -> None:
         self.write([self.row(**{"Score": ""})])
 
@@ -510,6 +547,66 @@ class RedditOutputTests(unittest.TestCase):
 
         self.assertFalse(self.output_xlsx.exists())
 
+    def test_swapped_output_suffixes_are_rejected_before_writes(self) -> None:
+        swapped_xlsx = self.directory / "swapped.csv"
+        swapped_csv = self.directory / "swapped.xlsx"
+
+        with self.assertRaises(ValueError):
+            write_outputs(
+                [self.row()],
+                input_paths=(self.input_csv, self.input_html),
+                output_xlsx=swapped_xlsx,
+                output_csv=swapped_csv,
+                overwrite=False,
+            )
+
+        self.assertFalse(swapped_xlsx.exists())
+        self.assertFalse(swapped_csv.exists())
+        self.assertEqual(
+            {"input.csv", "input.html"},
+            {path.name for path in self.directory.iterdir()},
+        )
+
+    def test_wrong_output_suffixes_are_rejected_before_writes(self) -> None:
+        cases = (
+            (self.directory / "wrong.xlsm", self.output_csv),
+            (self.output_xlsx, self.directory / "wrong.txt"),
+        )
+        for wrong_xlsx, wrong_csv in cases:
+            with self.subTest(
+                output_xlsx=wrong_xlsx.name,
+                output_csv=wrong_csv.name,
+            ):
+                with self.assertRaises(ValueError):
+                    write_outputs(
+                        [self.row()],
+                        input_paths=(self.input_csv, self.input_html),
+                        output_xlsx=wrong_xlsx,
+                        output_csv=wrong_csv,
+                        overwrite=False,
+                    )
+                self.assertFalse(wrong_xlsx.exists())
+                self.assertFalse(wrong_csv.exists())
+                self.assertEqual(
+                    {"input.csv", "input.html"},
+                    {path.name for path in self.directory.iterdir()},
+                )
+
+    def test_output_suffix_roles_are_case_insensitive(self) -> None:
+        uppercase_xlsx = self.directory / "output.XLSX"
+        uppercase_csv = self.directory / "output.CSV"
+
+        write_outputs(
+            [self.row()],
+            input_paths=(self.input_csv, self.input_html),
+            output_xlsx=uppercase_xlsx,
+            output_csv=uppercase_csv,
+            overwrite=False,
+        )
+
+        self.assertTrue(uppercase_xlsx.is_file())
+        self.assertTrue(uppercase_csv.is_file())
+
     def test_csv_staging_failure_preserves_existing_outputs_and_cleans_stages(
         self,
     ) -> None:
@@ -538,6 +635,135 @@ class RedditOutputTests(unittest.TestCase):
             {"input.csv", "input.html", "output.xlsx", "output.csv"},
             {path.name for path in self.directory.iterdir()},
         )
+
+    def test_preheld_output_reservation_blocks_writer_without_changes(self) -> None:
+        reservation = self.output_xlsx.with_name(
+            f".{self.output_xlsx.name}.reddit-output.lock"
+        )
+        reservation.write_bytes(b"held by another writer")
+        try:
+            with self.assertRaises(OutputPathConflictError):
+                self.write([self.row()])
+
+            self.assertFalse(self.output_xlsx.exists())
+            self.assertFalse(self.output_csv.exists())
+            self.assertEqual(b"held by another writer", reservation.read_bytes())
+            self.assertEqual(
+                {"input.csv", "input.html", reservation.name},
+                {path.name for path in self.directory.iterdir()},
+            )
+        finally:
+            reservation.unlink(missing_ok=True)
+
+    def test_final_replace_failure_rolls_back_both_outputs_without_residue(
+        self,
+    ) -> None:
+        real_replace = os.replace
+        targets = {self.output_xlsx.resolve(), self.output_csv.resolve()}
+        for preexisting in (False, True):
+            for failure_position in (1, 2):
+                with self.subTest(
+                    preexisting=preexisting,
+                    failure_position=failure_position,
+                ):
+                    self.output_xlsx.unlink(missing_ok=True)
+                    self.output_csv.unlink(missing_ok=True)
+                    old_xlsx = b"old xlsx bytes"
+                    old_csv = b"old csv bytes"
+                    if preexisting:
+                        self.output_xlsx.write_bytes(old_xlsx)
+                        self.output_csv.write_bytes(old_csv)
+                    final_replace_count = 0
+                    failure_injected = False
+
+                    def fail_selected_final_replace(
+                        source: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+                        destination: str
+                        | bytes
+                        | os.PathLike[str]
+                        | os.PathLike[bytes],
+                    ) -> None:
+                        nonlocal final_replace_count, failure_injected
+                        if (
+                            not failure_injected
+                            and Path(destination).resolve() in targets
+                        ):
+                            final_replace_count += 1
+                            if final_replace_count == failure_position:
+                                failure_injected = True
+                                raise OSError(
+                                    f"simulated final replace {failure_position}"
+                                )
+                        real_replace(source, destination)
+
+                    with patch.object(
+                        os,
+                        "replace",
+                        side_effect=fail_selected_final_replace,
+                    ):
+                        with self.assertRaisesRegex(
+                            OSError,
+                            f"simulated final replace {failure_position}",
+                        ):
+                            self.write([self.row()], overwrite=preexisting)
+
+                    if preexisting:
+                        self.assertEqual(old_xlsx, self.output_xlsx.read_bytes())
+                        self.assertEqual(old_csv, self.output_csv.read_bytes())
+                    else:
+                        self.assertFalse(self.output_xlsx.exists())
+                        self.assertFalse(self.output_csv.exists())
+                    expected_names = {"input.csv", "input.html"}
+                    if preexisting:
+                        expected_names.update({"output.xlsx", "output.csv"})
+                    self.assertEqual(
+                        expected_names,
+                        {path.name for path in self.directory.iterdir()},
+                    )
+
+    def test_backup_preparation_failure_keeps_existing_outputs_unchanged(
+        self,
+    ) -> None:
+        old_xlsx = b"old xlsx bytes"
+        old_csv = b"old csv bytes"
+        self.output_xlsx.write_bytes(old_xlsx)
+        self.output_csv.write_bytes(old_csv)
+        real_copyfile = reconstruct_reddit_comments.shutil.copyfile
+        for failure_position in (1, 2):
+            with self.subTest(failure_position=failure_position):
+                self.output_xlsx.write_bytes(old_xlsx)
+                self.output_csv.write_bytes(old_csv)
+                copy_count = 0
+
+                def fail_selected_backup(
+                    source: str | os.PathLike[str],
+                    destination: str | os.PathLike[str],
+                ) -> str:
+                    nonlocal copy_count
+                    copy_count += 1
+                    if copy_count == failure_position:
+                        raise OSError(
+                            f"simulated backup failure {failure_position}"
+                        )
+                    return real_copyfile(source, destination)
+
+                with patch.object(
+                    reconstruct_reddit_comments.shutil,
+                    "copyfile",
+                    side_effect=fail_selected_backup,
+                ):
+                    with self.assertRaisesRegex(
+                        OSError,
+                        f"simulated backup failure {failure_position}",
+                    ):
+                        self.write([self.row()], overwrite=True)
+
+                self.assertEqual(old_xlsx, self.output_xlsx.read_bytes())
+                self.assertEqual(old_csv, self.output_csv.read_bytes())
+                self.assertEqual(
+                    {"input.csv", "input.html", "output.xlsx", "output.csv"},
+                    {path.name for path in self.directory.iterdir()},
+                )
 
 
 if __name__ == "__main__":
