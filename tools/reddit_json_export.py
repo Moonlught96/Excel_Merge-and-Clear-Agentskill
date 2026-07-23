@@ -45,6 +45,19 @@ class RedditJsonExport:
     comments: tuple[RedditJsonComment, ...]
 
 
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise RedditJsonError("invalid JSON: duplicate object key")
+        result[key] = value
+    return result
+
+
+def _reject_nonstandard_constant(_constant: str) -> None:
+    raise RedditJsonError("invalid JSON: non-standard numeric constant")
+
+
 def _required(mapping: dict[str, Any], name: str, section: str) -> Any:
     if name not in mapping:
         raise RedditJsonError(f"{section} is missing required field {name}")
@@ -190,29 +203,47 @@ def _validate_graph(
     post_id: str, comments: tuple[RedditJsonComment, ...]
 ) -> None:
     by_id: dict[str, RedditJsonComment] = {}
-    for comment in comments:
+    for item_number, comment in enumerate(comments, start=1):
         if comment.id in by_id:
-            raise RedditJsonError("comment IDs must be unique")
+            raise RedditJsonError(
+                f"comment item {item_number} has a duplicate ID"
+            )
         by_id[comment.id] = comment
 
-    for comment in comments:
+    for item_number, comment in enumerate(comments, start=1):
         if comment.depth == 0:
             if comment.parent_id != post_id:
-                raise RedditJsonError("root comment parent does not match post")
+                raise RedditJsonError(
+                    f"comment item {item_number} root parent does not match post"
+                )
             continue
 
         parent = by_id.get(comment.parent_id)
         if parent is None:
-            raise RedditJsonError("comment parent is missing")
+            raise RedditJsonError(
+                f"comment item {item_number} parent is missing"
+            )
         if parent.depth != comment.depth - 1:
-            raise RedditJsonError("comment parent depth is inconsistent")
+            raise RedditJsonError(
+                f"comment item {item_number} parent depth is inconsistent"
+            )
 
 
 def parse_reddit_json(path: Path) -> RedditJsonExport:
     try:
         text = path.read_text(encoding="utf-8-sig")
-        loaded = json.loads(text)
-    except (OSError, UnicodeError, json.JSONDecodeError):
+    except (OSError, UnicodeError):
+        raise RedditJsonError("unable to read valid UTF-8 JSON export") from None
+
+    try:
+        loaded = json.loads(
+            text,
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_nonstandard_constant,
+        )
+    except RedditJsonError:
+        raise
+    except (ValueError, RecursionError):
         raise RedditJsonError("unable to read valid UTF-8 JSON export") from None
 
     root = _object(loaded, "root")

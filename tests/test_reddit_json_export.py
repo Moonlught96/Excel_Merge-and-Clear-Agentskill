@@ -76,6 +76,10 @@ class RedditJsonExportTest(unittest.TestCase):
         )
         return target
 
+    def write_raw(self, text: str) -> Path:
+        self.path.write_text(text, encoding="utf-8")
+        return self.path
+
     def assert_invalid(self, payload: Any) -> None:
         self.write_payload(payload)
         with self.assertRaises(RedditJsonError):
@@ -125,6 +129,69 @@ class RedditJsonExportTest(unittest.TestCase):
         with self.assertRaises(RedditJsonError) as caught:
             parse_reddit_json(self.path)
         self.assertNotIn(secret, str(caught.exception))
+
+    def test_rejects_duplicate_keys_at_every_object_level(self) -> None:
+        raw = json.dumps(valid_payload(), ensure_ascii=False)
+        duplicates = {
+            "root": raw.replace('"meta": {', '"meta": null, "meta": {', 1),
+            "meta": raw.replace(
+                '"completeness": "complete"',
+                '"completeness": "complete", "completeness": "complete"',
+                1,
+            ),
+            "post": raw.replace(
+                '"id": "t3_AbC123"', '"id": "other", "id": "t3_AbC123"', 1
+            ),
+            "comment": raw.replace(
+                '"username": "  用户一  "',
+                '"username": "other", "username": "  用户一  "',
+                1,
+            ),
+        }
+        for level, duplicate_json in duplicates.items():
+            with self.subTest(level=level):
+                with self.assertRaisesRegex(
+                    RedditJsonError, r"^invalid JSON: duplicate object key$"
+                ):
+                    parse_reddit_json(self.write_raw(duplicate_json))
+
+    def test_rejects_nonstandard_json_numeric_constants(self) -> None:
+        raw = json.dumps(valid_payload(), ensure_ascii=False)
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            document = raw[:-1] + f', "extra": {constant}' + "}"
+            with self.subTest(constant=constant):
+                with self.assertRaisesRegex(
+                    RedditJsonError,
+                    r"^invalid JSON: non-standard numeric constant$",
+                ):
+                    parse_reddit_json(self.write_raw(document))
+
+    def test_translates_huge_integer_decoder_value_error_without_leaking_source(
+        self,
+    ) -> None:
+        huge_integer = "7" * 5000
+        raw = json.dumps(valid_payload(), ensure_ascii=False)
+        document = raw[:-1] + f', "extra": {huge_integer}' + "}"
+        with self.assertRaisesRegex(
+            RedditJsonError, r"^unable to read valid UTF-8 JSON export$"
+        ) as caught:
+            parse_reddit_json(self.write_raw(document))
+        self.assertNotIn(huge_integer[:100], str(caught.exception))
+        self.assertIsNone(caught.exception.__cause__)
+
+    def test_translates_deep_nesting_recursion_error_without_leaking_source(
+        self,
+    ) -> None:
+        marker = "PRIVATE_DEEP_MARKER"
+        nested = "[" * 5000 + json.dumps(marker) + "]" * 5000
+        raw = json.dumps(valid_payload(), ensure_ascii=False)
+        document = raw[:-1] + f', "extra": {nested}' + "}"
+        with self.assertRaisesRegex(
+            RedditJsonError, r"^unable to read valid UTF-8 JSON export$"
+        ) as caught:
+            parse_reddit_json(self.write_raw(document))
+        self.assertNotIn(marker, str(caught.exception))
+        self.assertIsNone(caught.exception.__cause__)
 
     def test_requires_root_meta_and_post_objects_and_comments_array(self) -> None:
         cases: list[Any] = [
@@ -325,17 +392,24 @@ class RedditJsonExportTest(unittest.TestCase):
     def test_rejects_missing_parent(self) -> None:
         payload = valid_payload()
         payload["comments"][1]["parent_id"] = "t1_missing"
-        self.assert_invalid(payload)
+        with self.assertRaisesRegex(RedditJsonError, r"^comment item 2 parent is missing$"):
+            parse_reddit_json(self.write_payload(payload))
 
     def test_rejects_root_comment_with_wrong_parent(self) -> None:
         payload = valid_payload()
         payload["comments"][0]["parent_id"] = "t3_other"
-        self.assert_invalid(payload)
+        with self.assertRaisesRegex(
+            RedditJsonError, r"^comment item 1 root parent does not match post$"
+        ):
+            parse_reddit_json(self.write_payload(payload))
 
     def test_rejects_parent_with_wrong_depth(self) -> None:
         payload = valid_payload()
         payload["comments"][1]["depth"] = 2
-        self.assert_invalid(payload)
+        with self.assertRaisesRegex(
+            RedditJsonError, r"^comment item 2 parent depth is inconsistent$"
+        ):
+            parse_reddit_json(self.write_payload(payload))
 
     def test_accepts_parent_later_in_array_when_graph_is_valid(self) -> None:
         payload = valid_payload()
@@ -349,8 +423,10 @@ class RedditJsonExportTest(unittest.TestCase):
         secret_content = "SECRET_CONTENT_92517"
         payload["comments"][0]["username"] = secret_author
         payload["comments"][0]["content"] = secret_content
-        payload["comments"][0]["depth"] = -1
-        with self.assertRaises(RedditJsonError) as caught:
+        payload["comments"][1]["parent_id"] = "t1_missing"
+        with self.assertRaisesRegex(
+            RedditJsonError, r"^comment item 2 parent is missing$"
+        ) as caught:
             parse_reddit_json(self.write_payload(payload))
         message = str(caught.exception)
         self.assertNotIn(secret_author, message)
