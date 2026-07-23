@@ -765,6 +765,180 @@ class RedditOutputTests(unittest.TestCase):
                     {path.name for path in self.directory.iterdir()},
                 )
 
+    def test_restore_failure_retains_backup_and_reports_commit_and_rollback(
+        self,
+    ) -> None:
+        old_xlsx = b"old xlsx bytes"
+        old_csv = b"old csv bytes"
+        self.output_xlsx.write_bytes(old_xlsx)
+        self.output_csv.write_bytes(old_csv)
+        real_replace = os.replace
+        backup_path: Path | None = None
+
+        def fail_commit_then_restore(
+            source: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+            destination: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        ) -> None:
+            nonlocal backup_path
+            source_path = Path(source)
+            destination_path = Path(destination).resolve()
+            if (
+                destination_path == self.output_csv.resolve()
+                and "reddit-stage" in source_path.name
+            ):
+                raise OSError("simulated second commit failure")
+            if (
+                destination_path == self.output_xlsx.resolve()
+                and "reddit-backup" in source_path.name
+            ):
+                backup_path = source_path
+                raise OSError("simulated restore failure")
+            real_replace(source, destination)
+
+        with patch.object(os, "replace", side_effect=fail_commit_then_restore):
+            with self.assertRaises(RuntimeError) as caught:
+                self.write(
+                    [self.row(**{"Comment": "private row content"})],
+                    overwrite=True,
+                )
+
+        self.assertIsNotNone(backup_path)
+        assert backup_path is not None
+        self.assertTrue(backup_path.is_file())
+        self.assertEqual(old_xlsx, backup_path.read_bytes())
+        self.assertNotEqual(old_xlsx, self.output_xlsx.read_bytes())
+        self.assertEqual(old_csv, self.output_csv.read_bytes())
+        message = str(caught.exception)
+        self.assertIn("simulated second commit failure", message)
+        self.assertIn("simulated restore failure", message)
+        self.assertIn(str(backup_path), message)
+        self.assertNotIn("private row content", message)
+        self.assertEqual(
+            {
+                "input.csv",
+                "input.html",
+                "output.xlsx",
+                "output.csv",
+                backup_path.name,
+            },
+            {path.name for path in self.directory.iterdir()},
+        )
+        backup_path.unlink()
+
+    def test_new_target_unlink_failure_reports_surviving_target(self) -> None:
+        real_replace = os.replace
+        real_unlink = Path.unlink
+
+        def fail_second_commit(
+            source: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+            destination: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        ) -> None:
+            if (
+                Path(destination).resolve() == self.output_csv.resolve()
+                and "reddit-stage" in Path(source).name
+            ):
+                raise OSError("simulated second commit failure")
+            real_replace(source, destination)
+
+        def fail_new_target_unlink(
+            path: Path,
+            missing_ok: bool = False,
+        ) -> None:
+            if path.resolve() == self.output_xlsx.resolve():
+                raise OSError("simulated unlink rollback failure")
+            real_unlink(path, missing_ok=missing_ok)
+
+        with patch.object(os, "replace", side_effect=fail_second_commit):
+            with patch.object(Path, "unlink", new=fail_new_target_unlink):
+                with self.assertRaises(RuntimeError) as caught:
+                    self.write([self.row()])
+
+        self.assertTrue(self.output_xlsx.is_file())
+        self.assertFalse(self.output_csv.exists())
+        message = str(caught.exception)
+        self.assertIn("simulated second commit failure", message)
+        self.assertIn("simulated unlink rollback failure", message)
+        self.assertIn(str(self.output_xlsx.resolve()), message)
+        self.assertEqual(
+            {"input.csv", "input.html", "output.xlsx"},
+            {path.name for path in self.directory.iterdir()},
+        )
+
+    def test_all_committed_targets_are_rollback_attempted_after_failures(
+        self,
+    ) -> None:
+        if not hasattr(reconstruct_reddit_comments, "_rollback_committed_outputs"):
+            self.fail("missing committed-output rollback helper")
+        rollback = reconstruct_reddit_comments._rollback_committed_outputs
+        first_target = self.output_xlsx
+        second_target = self.output_csv
+        first_backup = self.directory / ".first.reddit-backup.xlsx"
+        first_target.write_bytes(b"new first")
+        first_backup.write_bytes(b"old first")
+        second_target.write_bytes(b"new second")
+        real_unlink = Path.unlink
+        attempted: list[Path] = []
+
+        def fail_restore(
+            source: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+            destination: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        ) -> None:
+            attempted.append(Path(destination).resolve())
+            raise OSError("simulated restore failure")
+
+        def fail_unlink(path: Path, missing_ok: bool = False) -> None:
+            if path.resolve() == second_target.resolve():
+                attempted.append(path.resolve())
+                raise OSError("simulated unlink failure")
+            real_unlink(path, missing_ok=missing_ok)
+
+        with patch.object(os, "replace", side_effect=fail_restore):
+            with patch.object(Path, "unlink", new=fail_unlink):
+                failures, retained_backups = rollback(
+                    [second_target, first_target],
+                    {first_target: first_backup},
+                )
+
+        self.assertEqual(
+            [first_target.resolve(), second_target.resolve()],
+            attempted,
+        )
+        self.assertEqual(2, len(failures))
+        self.assertEqual({first_backup}, retained_backups)
+        self.assertTrue(first_backup.is_file())
+        self.assertTrue(second_target.is_file())
+
+    def test_partial_backup_copy_is_removed_without_changing_outputs(self) -> None:
+        old_xlsx = b"old xlsx bytes"
+        old_csv = b"old csv bytes"
+        self.output_xlsx.write_bytes(old_xlsx)
+        self.output_csv.write_bytes(old_csv)
+
+        def write_partial_backup_then_fail(
+            source: str | os.PathLike[str],
+            destination: str | os.PathLike[str],
+        ) -> str:
+            Path(destination).write_bytes(b"partial backup bytes")
+            raise OSError("simulated partial backup failure")
+
+        with patch.object(
+            reconstruct_reddit_comments.shutil,
+            "copyfile",
+            side_effect=write_partial_backup_then_fail,
+        ):
+            with self.assertRaisesRegex(
+                OSError,
+                "simulated partial backup failure",
+            ):
+                self.write([self.row()], overwrite=True)
+
+        self.assertEqual(old_xlsx, self.output_xlsx.read_bytes())
+        self.assertEqual(old_csv, self.output_csv.read_bytes())
+        self.assertEqual(
+            {"input.csv", "input.html", "output.xlsx", "output.csv"},
+            {path.name for path in self.directory.iterdir()},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

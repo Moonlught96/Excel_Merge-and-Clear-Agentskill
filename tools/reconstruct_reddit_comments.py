@@ -124,6 +124,34 @@ def _transaction_path(target: Path, role: str) -> Path:
     )
 
 
+def _rollback_committed_outputs(
+    committed_targets: list[Path],
+    backups: dict[Path, Path],
+) -> tuple[list[str], set[Path]]:
+    failures: list[str] = []
+    retained_backups: set[Path] = set()
+    for target in reversed(committed_targets):
+        backup = backups.get(target)
+        if backup is not None:
+            try:
+                os.replace(backup, target)
+            except BaseException as error:
+                retained_backups.add(backup)
+                failures.append(
+                    f"failed to restore {target} from retained backup "
+                    f"{backup}: {type(error).__name__}: {error}"
+                )
+        else:
+            try:
+                target.unlink(missing_ok=True)
+            except BaseException as error:
+                failures.append(
+                    f"failed to remove newly created output; surviving target "
+                    f"{target}: {type(error).__name__}: {error}"
+                )
+    return failures, retained_backups
+
+
 def _replace_output_pair(
     staged_and_targets: tuple[tuple[Path, Path], tuple[Path, Path]],
 ) -> None:
@@ -132,28 +160,36 @@ def _replace_output_pair(
         for _, target in staged_and_targets:
             if target.exists():
                 backup = _transaction_path(target, "backup")
-                shutil.copyfile(target, backup)
                 backups[target] = backup
+                shutil.copyfile(target, backup)
     except BaseException:
         for backup in backups.values():
             backup.unlink(missing_ok=True)
         raise
+    retained_backups: set[Path] = set()
+    committed_targets: list[Path] = []
     try:
         for staged, target in staged_and_targets:
             os.replace(staged, target)
-    except BaseException:
-        for _, target in staged_and_targets:
-            backup = backups.get(target)
-            if backup is None:
-                target.unlink(missing_ok=True)
-            else:
-                os.replace(backup, target)
+            committed_targets.append(target)
+    except BaseException as commit_error:
+        rollback_failures, retained_backups = _rollback_committed_outputs(
+            committed_targets,
+            backups,
+        )
+        if rollback_failures:
+            failure_details = "; ".join(rollback_failures)
+            raise RuntimeError(
+                f"Output pair commit failed: {type(commit_error).__name__}: "
+                f"{commit_error}; rollback failure(s): {failure_details}"
+            ) from commit_error
         raise
     finally:
         for staged, _ in staged_and_targets:
             staged.unlink(missing_ok=True)
         for backup in backups.values():
-            backup.unlink(missing_ok=True)
+            if backup not in retained_backups:
+                backup.unlink(missing_ok=True)
 
 
 def _reservation_path(target: Path) -> Path:
