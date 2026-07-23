@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import os
 import shutil
@@ -19,8 +20,8 @@ try:
         atomic_output_path,
         ensure_output_paths_safe,
     )
-    from tools.reddit_free_csv import FreeRedditExport
-    from tools.reddit_saved_html import SavedRedditHtml
+    from tools.reddit_free_csv import FreeRedditExport, parse_free_reddit_csv
+    from tools.reddit_saved_html import SavedRedditHtml, parse_saved_reddit_html
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from tools.output_path_safety import (
@@ -28,8 +29,8 @@ except ModuleNotFoundError:
         atomic_output_path,
         ensure_output_paths_safe,
     )
-    from tools.reddit_free_csv import FreeRedditExport
-    from tools.reddit_saved_html import SavedRedditHtml
+    from tools.reddit_free_csv import FreeRedditExport, parse_free_reddit_csv
+    from tools.reddit_saved_html import SavedRedditHtml, parse_saved_reddit_html
 
 
 OUTPUT_HEADERS = (
@@ -341,3 +342,62 @@ def reconstruct_rows(
             }
         )
     return rows
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Reconstruct Reddit comment data from free CSV and saved HTML."
+    )
+    parser.add_argument("--free-csv", required=True, type=Path)
+    parser.add_argument("--html", required=True, type=Path)
+    parser.add_argument("--output-xlsx", required=True, type=Path)
+    parser.add_argument("--output-csv", required=True, type=Path)
+    parser.add_argument("--post-author")
+    parser.add_argument("--post-score")
+    parser.add_argument("--post-comment-count")
+    parser.add_argument("--overwrite", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = build_parser().parse_args(argv)
+    free_csv = arguments.free_csv.resolve()
+    html_path = arguments.html.resolve()
+    output_xlsx = arguments.output_xlsx.resolve()
+    output_csv = arguments.output_csv.resolve()
+    try:
+        free = parse_free_reddit_csv(free_csv)
+        html = parse_saved_reddit_html(html_path)
+        rows = reconstruct_rows(
+            free,
+            html,
+            post_author=arguments.post_author,
+            post_score=arguments.post_score,
+            post_comment_count=arguments.post_comment_count,
+        )
+        write_outputs(
+            rows,
+            input_paths=(free_csv, html_path),
+            output_xlsx=output_xlsx,
+            output_csv=output_csv,
+            overwrite=arguments.overwrite,
+        )
+    except (ValueError, OSError, csv.Error, RuntimeError) as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Free CSV input: {free_csv}")
+    print(f"Reddit HTML input: {html_path}")
+    print(f"XLSX output: {output_xlsx}")
+    print(f"CSV output: {output_csv}")
+    print(f"Comment total: {len(free.comments)}")
+    print(f"HTML match total: {len(rows)}")
+    print(
+        "Missing comment score count: "
+        f"{sum(row['Score'] == '' for row in rows)}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

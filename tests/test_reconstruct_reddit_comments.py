@@ -940,5 +940,303 @@ class RedditOutputTests(unittest.TestCase):
         )
 
 
+class RedditReconstructionCliTests(unittest.TestCase):
+    SCRIPT = (
+        Path(__file__).resolve().parents[1]
+        / "tools"
+        / "reconstruct_reddit_comments.py"
+    )
+
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.directory = Path(self.temporary_directory.name)
+        self.free_csv = self.directory / "free.csv"
+        self.html = self.directory / "saved.html"
+        self.output_xlsx = self.directory / "result.xlsx"
+        self.output_csv = self.directory / "result.csv"
+
+    def tearDown(self) -> None:
+        self.temporary_directory.cleanup()
+
+    def write_free_csv(
+        self,
+        *,
+        author: str = "SECRET_FREE_AUTHOR",
+        comment: str = "SECRET_COMMENT_TEXT",
+        body: str = "SECRET_POST_BODY",
+        comment_ids: tuple[str, ...] = ("c1",),
+    ) -> None:
+        with self.free_csv.open(
+            "w", encoding="utf-8-sig", newline=""
+        ) as handle:
+            writer = csv.writer(handle)
+            writer.writerows(
+                [
+                    ["title", "Fixture title"],
+                    ["body", body],
+                    [
+                        "url",
+                        "https://www.reddit.com/r/test/comments/post1/fixture/",
+                    ],
+                    [],
+                    ["author_name", "date_time", "comment", "comment_url"],
+                    *[
+                        [
+                            author,
+                            "2026-07-23",
+                            f"{comment}-{index}",
+                            f"https://www.reddit.com/comment/{comment_id}/",
+                        ]
+                        for index, comment_id in enumerate(comment_ids, start=1)
+                    ],
+                ]
+            )
+
+    def write_html(
+        self,
+        *,
+        author: str | None = "HTML_POST_AUTHOR",
+        score: str | None = "99",
+        comment_count: str | None = "1",
+        comments: tuple[tuple[str, str, str, str], ...] = (
+            ("c1", "post1", "0", "7"),
+        ),
+    ) -> None:
+        attributes = ['thingid="t3_post1"']
+        if author is not None:
+            attributes.append(f'author="{author}"')
+        if score is not None:
+            attributes.append(f'score="{score}"')
+        if comment_count is not None:
+            attributes.append(f'comment-count="{comment_count}"')
+        comment_nodes = "\n".join(
+            (
+                f'<shreddit-comment thingid="t1_{comment_id}" '
+                f'parentid="{parent_id}" depth="{depth}" score="{item_score}">'
+                "</shreddit-comment>"
+            )
+            for comment_id, parent_id, depth, item_score in comments
+        )
+        self.html.write_text(
+            f"<shreddit-post {' '.join(attributes)}>"
+            f"{comment_nodes}</shreddit-post>",
+            encoding="utf-8",
+        )
+
+    def run_cli(self, *extra_arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(self.SCRIPT),
+                "--free-csv",
+                str(self.free_csv),
+                "--html",
+                str(self.html),
+                "--output-xlsx",
+                str(self.output_xlsx),
+                "--output-csv",
+                str(self.output_csv),
+                *extra_arguments,
+            ],
+            cwd=self.SCRIPT.parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def output_rows(self) -> list[list[str]]:
+        with self.output_csv.open(
+            "r", encoding="utf-8-sig", newline=""
+        ) as handle:
+            return list(csv.reader(handle))
+
+    def assert_no_transaction_residue(self) -> None:
+        residue = [
+            path.name
+            for path in self.directory.iterdir()
+            if "reddit-output.lock" in path.name
+            or "reddit-stage" in path.name
+            or "reddit-backup" in path.name
+        ]
+        self.assertEqual([], residue)
+
+    def test_happy_path_creates_outputs_reports_safe_counts_and_paths(self) -> None:
+        self.write_free_csv(comment_ids=("c1", "c2"))
+        self.write_html(
+            comment_count="2",
+            comments=(
+                ("c1", "post1", "0", "7"),
+                ("c2", "c1", "1", ""),
+            ),
+        )
+
+        completed = self.run_cli()
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertTrue(self.output_xlsx.is_file())
+        self.assertTrue(self.output_csv.is_file())
+        self.assertEqual(3, len(self.output_rows()))
+        sheet = load_workbook(self.output_xlsx).active
+        self.assertEqual(3, sheet.max_row)
+        self.assertEqual("c2", sheet.cell(3, 14).value)
+        expected_lines = [
+            f"Free CSV input: {self.free_csv.resolve()}",
+            f"Reddit HTML input: {self.html.resolve()}",
+            f"XLSX output: {self.output_xlsx.resolve()}",
+            f"CSV output: {self.output_csv.resolve()}",
+            "Comment total: 2",
+            "HTML match total: 2",
+            "Missing comment score count: 1",
+        ]
+        self.assertEqual(expected_lines, completed.stdout.splitlines())
+        for secret in (
+            "SECRET_FREE_AUTHOR",
+            "SECRET_COMMENT_TEXT",
+            "SECRET_POST_BODY",
+            "HTML_POST_AUTHOR",
+            "c1",
+            "c2",
+        ):
+            self.assertNotIn(secret, completed.stdout)
+        self.assertEqual("", completed.stderr)
+        self.assert_no_transaction_residue()
+
+    def test_explicit_values_fill_missing_html_post_metadata(self) -> None:
+        self.write_free_csv()
+        self.write_html(author=None, score=None, comment_count=None)
+
+        completed = self.run_cli(
+            "--post-author",
+            "fallback author",
+            "--post-score",
+            "fallback score",
+            "--post-comment-count",
+            "fallback count",
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        row = self.output_rows()[1]
+        self.assertEqual("fallback author", row[3])
+        self.assertEqual("fallback score", row[4])
+        self.assertEqual("fallback count", row[5])
+        self.assertNotIn("fallback author", completed.stdout)
+
+    def test_html_post_metadata_takes_precedence_over_fallback_arguments(self) -> None:
+        self.write_free_csv()
+        self.write_html(author="right author", score="8", comment_count="4")
+
+        completed = self.run_cli(
+            "--post-author",
+            "wrong author",
+            "--post-score",
+            "wrong score",
+            "--post-comment-count",
+            "wrong count",
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        row = self.output_rows()[1]
+        self.assertEqual(["right author", "8", "4"], row[3:6])
+        self.assertNotIn("wrong author", completed.stdout)
+
+    def test_existing_outputs_require_overwrite_and_stay_unchanged_on_rejection(
+        self,
+    ) -> None:
+        self.write_free_csv()
+        self.write_html()
+        first = self.run_cli()
+        self.assertEqual(0, first.returncode, first.stderr)
+        old_xlsx = self.output_xlsx.read_bytes()
+        old_csv = self.output_csv.read_bytes()
+
+        rejected = self.run_cli()
+
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertEqual(old_xlsx, self.output_xlsx.read_bytes())
+        self.assertEqual(old_csv, self.output_csv.read_bytes())
+        self.assertNotIn("Traceback", rejected.stderr)
+        overwritten = self.run_cli("--overwrite")
+        self.assertEqual(0, overwritten.returncode, overwritten.stderr)
+        self.assert_no_transaction_residue()
+
+    def test_incomplete_html_or_post_metadata_fails_safely_without_outputs(
+        self,
+    ) -> None:
+        scenarios = (
+            (
+                "missing-comment",
+                {"comments": ()},
+                (),
+                "Missing HTML comments: c1",
+            ),
+            (
+                "invalid-hierarchy",
+                {"comments": (("c1", "", "", "7"),)},
+                (),
+                "Invalid hierarchy: c1",
+            ),
+            (
+                "missing-post-metadata",
+                {"author": None},
+                (),
+                "Missing required post field Post Author",
+            ),
+        )
+        for name, html_options, arguments, expected_error in scenarios:
+            with self.subTest(name=name):
+                self.free_csv = self.directory / f"{name}.csv"
+                self.html = self.directory / f"{name}.html"
+                self.output_xlsx = self.directory / f"{name}.xlsx"
+                self.output_csv = self.directory / f"{name}-output.csv"
+                self.write_free_csv()
+                self.write_html(**html_options)
+
+                completed = self.run_cli(*arguments)
+
+                self.assertNotEqual(0, completed.returncode)
+                self.assertIn(expected_error, completed.stderr)
+                self.assertNotIn("Traceback", completed.stderr)
+                for secret in (
+                    "SECRET_FREE_AUTHOR",
+                    "SECRET_COMMENT_TEXT",
+                    "SECRET_POST_BODY",
+                    "HTML_POST_AUTHOR",
+                ):
+                    self.assertNotIn(secret, completed.stderr)
+                self.assertFalse(self.output_xlsx.exists())
+                self.assertFalse(self.output_csv.exists())
+                self.assert_no_transaction_residue()
+
+    def test_argparse_help_and_missing_required_arguments(self) -> None:
+        help_result = subprocess.run(
+            [sys.executable, str(self.SCRIPT), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        missing_result = subprocess.run(
+            [sys.executable, str(self.SCRIPT)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(0, help_result.returncode)
+        for option in (
+            "--free-csv",
+            "--html",
+            "--output-xlsx",
+            "--output-csv",
+            "--post-author",
+            "--post-score",
+            "--post-comment-count",
+            "--overwrite",
+        ):
+            self.assertIn(option, help_result.stdout)
+        self.assertEqual(2, missing_result.returncode)
+        self.assertIn("required", missing_result.stderr)
+        self.assertNotIn("Traceback", missing_result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
