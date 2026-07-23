@@ -1,11 +1,22 @@
+import csv
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
+
+from openpyxl import load_workbook
 
 from tools.reddit_free_csv import FreeComment, FreeRedditExport
 from tools.reddit_saved_html import HtmlComment, SavedRedditHtml
-from tools.reconstruct_reddit_comments import OUTPUT_HEADERS, reconstruct_rows
+from tools.output_path_safety import OutputPathConflictError
+from tools import reconstruct_reddit_comments
+from tools.reconstruct_reddit_comments import (
+    OUTPUT_HEADERS,
+    reconstruct_rows,
+    write_outputs,
+)
 
 
 class ReconstructRedditRowsTests(unittest.TestCase):
@@ -344,6 +355,189 @@ class ReconstructRedditRowsTests(unittest.TestCase):
         self.assertEqual("2026-01-01\n12:34", row["Time"])
         self.assertEqual("first line\n=HYPERLINK(\"x\")", row["Comment"])
         self.assertEqual("=FORMULA-LIKE-URL", row["Comment URL"])
+
+
+class RedditOutputTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.directory = Path(self.temporary_directory.name)
+        self.input_csv = self.directory / "input.csv"
+        self.input_html = self.directory / "input.html"
+        self.input_csv.write_bytes(b"original csv input")
+        self.input_html.write_bytes(b"original html input")
+        self.output_xlsx = self.directory / "output.xlsx"
+        self.output_csv = self.directory / "output.csv"
+
+    def row(self, **overrides: str | int) -> dict[str, str | int]:
+        values: dict[str, str | int] = {
+            "Title": "A title",
+            "Post Body": "A body",
+            "Post URL": "https://reddit.com/r/test/comments/post1/",
+            "Post Author": "post-author",
+            "Post Score": "10",
+            "Post Comment Count": "1",
+            "Author": "comment-author",
+            "Time": "2026-07-23",
+            "Score": "5",
+            "Thread Level": 0,
+            "Is Reply": "No",
+            "Comment": "A comment",
+            "Comment URL": "https://reddit.com/comment/c1/",
+            "Comment ID": "c1",
+            "Parent ID": "post1",
+        }
+        values.update(overrides)
+        return values
+
+    def write(self, rows: list[dict[str, str | int]], *, overwrite: bool = False) -> None:
+        write_outputs(
+            rows,
+            input_paths=(self.input_csv, self.input_html),
+            output_xlsx=self.output_xlsx,
+            output_csv=self.output_csv,
+            overwrite=overwrite,
+        )
+
+    def csv_rows(self) -> list[list[str]]:
+        with self.output_csv.open("r", encoding="utf-8-sig", newline="") as handle:
+            return list(csv.reader(handle))
+
+    def test_writes_matching_exact_headers_row_count_and_values(self) -> None:
+        rows = [self.row(), self.row(**{"Comment ID": "c2", "Thread Level": 2})]
+
+        self.write(rows)
+
+        workbook = load_workbook(self.output_xlsx, data_only=False)
+        sheet = workbook.active
+        xlsx_rows = list(sheet.iter_rows(values_only=True))
+        csv_rows = self.csv_rows()
+        self.assertEqual("Reddit Comments", sheet.title)
+        self.assertEqual(list(OUTPUT_HEADERS), list(xlsx_rows[0]))
+        self.assertEqual(list(OUTPUT_HEADERS), csv_rows[0])
+        self.assertEqual(len(rows) + 1, len(xlsx_rows))
+        self.assertEqual(len(rows) + 1, len(csv_rows))
+        for row_number, source_row in enumerate(rows, start=1):
+            expected = [source_row[header] for header in OUTPUT_HEADERS]
+            self.assertEqual(expected, list(xlsx_rows[row_number]))
+            self.assertEqual([str(value) for value in expected], csv_rows[row_number])
+
+    def test_csv_has_utf8_bom_and_round_trips_special_content(self) -> None:
+        special = '中文 😀, "quoted"\nsecond line'
+        self.write([self.row(**{"Comment": special})])
+
+        self.assertTrue(self.output_csv.read_bytes().startswith(b"\xef\xbb\xbf"))
+        self.assertEqual(special, self.csv_rows()[1][OUTPUT_HEADERS.index("Comment")])
+        workbook = load_workbook(self.output_xlsx)
+        self.assertEqual(
+            special,
+            workbook.active.cell(2, OUTPUT_HEADERS.index("Comment") + 1).value,
+        )
+
+    def test_formula_like_xlsx_values_are_text(self) -> None:
+        markers = ("=SUM(1,2)", "+123", "-456", "@mention")
+        rows = [
+            self.row(**{"Comment ID": f"c{index}", "Comment": value})
+            for index, value in enumerate(markers)
+        ]
+
+        self.write(rows)
+
+        sheet = load_workbook(self.output_xlsx, data_only=False).active
+        column = OUTPUT_HEADERS.index("Comment") + 1
+        for row_number, expected in enumerate(markers, start=2):
+            cell = sheet.cell(row_number, column)
+            self.assertEqual(expected, cell.value)
+            self.assertEqual("s", cell.data_type)
+
+    def test_missing_optional_score_is_written_as_blank_in_both_outputs(self) -> None:
+        self.write([self.row(**{"Score": ""})])
+
+        sheet = load_workbook(self.output_xlsx).active
+        score_column = OUTPUT_HEADERS.index("Score") + 1
+        self.assertIsNone(sheet.cell(2, score_column).value)
+        self.assertEqual("", self.csv_rows()[1][score_column - 1])
+
+    def test_existing_outputs_are_rejected_without_overwrite_and_unchanged(self) -> None:
+        self.output_xlsx.write_bytes(b"old xlsx")
+        self.output_csv.write_bytes(b"old csv")
+
+        with self.assertRaises(OutputPathConflictError):
+            self.write([self.row()])
+
+        self.assertEqual(b"old xlsx", self.output_xlsx.read_bytes())
+        self.assertEqual(b"old csv", self.output_csv.read_bytes())
+
+    def test_overwrite_true_updates_both_outputs(self) -> None:
+        self.output_xlsx.write_bytes(b"old xlsx")
+        self.output_csv.write_bytes(b"old csv")
+
+        self.write([self.row(**{"Comment": "replacement"})], overwrite=True)
+
+        self.assertEqual(
+            "replacement",
+            load_workbook(self.output_xlsx).active.cell(
+                2, OUTPUT_HEADERS.index("Comment") + 1
+            ).value,
+        )
+        self.assertEqual(
+            "replacement",
+            self.csv_rows()[1][OUTPUT_HEADERS.index("Comment")],
+        )
+
+    def test_input_output_alias_is_rejected_even_with_overwrite(self) -> None:
+        with self.assertRaises(OutputPathConflictError):
+            write_outputs(
+                [self.row()],
+                input_paths=(self.input_csv, self.input_html),
+                output_xlsx=self.input_csv,
+                output_csv=self.output_csv,
+                overwrite=True,
+            )
+
+        self.assertEqual(b"original csv input", self.input_csv.read_bytes())
+        self.assertFalse(self.output_csv.exists())
+
+    def test_duplicate_output_paths_are_rejected(self) -> None:
+        with self.assertRaises(OutputPathConflictError):
+            write_outputs(
+                [self.row()],
+                input_paths=(self.input_csv, self.input_html),
+                output_xlsx=self.output_xlsx,
+                output_csv=self.output_xlsx,
+                overwrite=False,
+            )
+
+        self.assertFalse(self.output_xlsx.exists())
+
+    def test_csv_staging_failure_preserves_existing_outputs_and_cleans_stages(
+        self,
+    ) -> None:
+        self.output_xlsx.write_bytes(b"old xlsx")
+        self.output_csv.write_bytes(b"old csv")
+
+        with patch.object(
+            reconstruct_reddit_comments,
+            "_write_csv",
+            side_effect=RuntimeError("simulated CSV failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "simulated CSV failure"):
+                self.write([self.row()], overwrite=True)
+
+        self.assertEqual(b"old xlsx", self.output_xlsx.read_bytes())
+        self.assertEqual(b"old csv", self.output_csv.read_bytes())
+        self.assertEqual(
+            {"input.csv", "input.html", "output.xlsx", "output.csv"},
+            {path.name for path in self.directory.iterdir()},
+        )
+
+    def test_success_leaves_no_extra_files(self) -> None:
+        self.write([self.row()])
+
+        self.assertEqual(
+            {"input.csv", "input.html", "output.xlsx", "output.csv"},
+            {path.name for path in self.directory.iterdir()},
+        )
 
 
 if __name__ == "__main__":

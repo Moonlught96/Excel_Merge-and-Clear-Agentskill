@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import csv
 import sys
+from contextlib import ExitStack
 from pathlib import Path
 
+from openpyxl import Workbook
+
 try:
+    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
     from tools.reddit_free_csv import FreeRedditExport
     from tools.reddit_saved_html import SavedRedditHtml
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
     from tools.reddit_free_csv import FreeRedditExport
     from tools.reddit_saved_html import SavedRedditHtml
 
@@ -31,6 +37,49 @@ OUTPUT_HEADERS = (
     "Comment ID",
     "Parent ID",
 )
+
+
+def _write_xlsx(rows: list[dict[str, str | int]], output_path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Reddit Comments"
+    for column_number, header in enumerate(OUTPUT_HEADERS, start=1):
+        cell = sheet.cell(1, column_number, header)
+        cell.data_type = "s"
+    for row_number, row in enumerate(rows, start=2):
+        for column_number, header in enumerate(OUTPUT_HEADERS, start=1):
+            value = row[header]
+            cell = sheet.cell(row_number, column_number, value)
+            if isinstance(value, str):
+                cell.data_type = "s"
+    workbook.save(output_path)
+
+
+def _write_csv(rows: list[dict[str, str | int]], output_path: Path) -> None:
+    with output_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=OUTPUT_HEADERS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def write_outputs(
+    rows: list[dict[str, str | int]],
+    *,
+    input_paths: tuple[Path, Path],
+    output_xlsx: Path,
+    output_csv: Path,
+    overwrite: bool,
+) -> None:
+    resolved_xlsx, resolved_csv = ensure_output_paths_safe(
+        input_paths,
+        (output_xlsx, output_csv),
+        overwrite=overwrite,
+    )
+    with ExitStack() as stack:
+        staged_xlsx = stack.enter_context(atomic_output_path(resolved_xlsx))
+        staged_csv = stack.enter_context(atomic_output_path(resolved_csv))
+        _write_xlsx(rows, staged_xlsx)
+        _write_csv(rows, staged_csv)
 
 
 def _required_post_value(
