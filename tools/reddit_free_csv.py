@@ -10,8 +10,9 @@ from tools.csv_excel_compat import read_csv_rows
 
 COMMENT_HEADERS = ("author_name", "date_time", "comment", "comment_url")
 METADATA_KEYS = ("title", "body", "url")
-POST_ID_PATTERN = re.compile(r"/comments/([^/]+)/", re.IGNORECASE)
-COMMENT_ID_PATTERN = re.compile(r"/comment/([^/]+)/?$", re.IGNORECASE)
+ASCII_CASE_INSENSITIVE = re.IGNORECASE | re.ASCII
+POST_ID_PATTERN = re.compile(r"/comments/([a-z0-9]+)/", ASCII_CASE_INSENSITIVE)
+COMMENT_ID_PATTERN = re.compile(r"/comment/([a-z0-9]+)/?$", ASCII_CASE_INSENSITIVE)
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,11 @@ def _find_comment_header(rows: list[list[str]]) -> tuple[int, list[str]]:
     required_headers = set(COMMENT_HEADERS)
     for row_index, row in enumerate(rows):
         if required_headers.issubset(row):
+            for required_header in COMMENT_HEADERS:
+                if row.count(required_header) > 1:
+                    raise ValueError(
+                        f"Duplicate required comment header: {required_header}"
+                    )
             return row_index, row
     raise ValueError(
         "Missing required comment header(s): " + ", ".join(COMMENT_HEADERS)

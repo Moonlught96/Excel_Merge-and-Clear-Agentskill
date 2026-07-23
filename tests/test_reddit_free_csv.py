@@ -152,6 +152,19 @@ class RedditFreeCsvTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "post ID"):
             parse_free_reddit_csv(path)
 
+    def test_rejects_percent_encoded_or_punctuated_post_id(self) -> None:
+        invalid_ids = ("ab%2Fcd", "abc-123", "ſ123")
+        for index, invalid_id in enumerate(invalid_ids):
+            with self.subTest(invalid_id=invalid_id):
+                rows = self._valid_rows()
+                rows[2][1] = (
+                    f"https://www.reddit.com/r/example/comments/{invalid_id}/title/"
+                )
+                path = self._write_rows(rows, filename=f"invalid-post-id-{index}.csv")
+
+                with self.assertRaisesRegex(ValueError, "post ID"):
+                    parse_free_reddit_csv(path)
+
     def test_rejects_invalid_or_missing_comment_url(self) -> None:
         invalid_urls = (
             "",
@@ -167,6 +180,22 @@ class RedditFreeCsvTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "comment URL"):
                     parse_free_reddit_csv(path)
 
+    def test_rejects_percent_encoded_or_punctuated_comment_id(self) -> None:
+        invalid_ids = ("de%2Ff456", "def-456", "ſ456")
+        for index, invalid_id in enumerate(invalid_ids):
+            with self.subTest(invalid_id=invalid_id):
+                rows = self._valid_rows()
+                rows[5][3] = (
+                    "https://www.reddit.com/r/example/comments/abc123/title/"
+                    f"comment/{invalid_id}/?context=3#reply"
+                )
+                path = self._write_rows(
+                    rows, filename=f"invalid-comment-id-{index}.csv"
+                )
+
+                with self.assertRaisesRegex(ValueError, "comment URL"):
+                    parse_free_reddit_csv(path)
+
     def test_rejects_duplicate_comment_ids_case_insensitively(self) -> None:
         rows = self._valid_rows()
         rows[6][3] = (
@@ -177,6 +206,23 @@ class RedditFreeCsvTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "def456"):
             parse_free_reddit_csv(path)
+
+    def test_rejects_duplicate_required_comment_header(self) -> None:
+        for required_header in (
+            "author_name",
+            "date_time",
+            "comment",
+            "comment_url",
+        ):
+            with self.subTest(required_header=required_header):
+                rows = self._valid_rows()
+                rows[4].append(required_header)
+                path = self._write_rows(
+                    rows, filename=f"duplicate-header-{required_header}.csv"
+                )
+
+                with self.assertRaisesRegex(ValueError, required_header):
+                    parse_free_reddit_csv(path)
 
     def test_reads_all_supported_csv_encodings(self) -> None:
         cases = (
