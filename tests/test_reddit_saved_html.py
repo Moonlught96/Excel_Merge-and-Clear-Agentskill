@@ -171,6 +171,31 @@ class ParseSavedRedditHtmlTests(unittest.TestCase):
                         """
                     )
 
+    def test_ids_with_surrounding_whitespace_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "invalid post ID"):
+            self.parse(
+                '<shreddit-post thingid=" t3_post1 "></shreddit-post>'
+            )
+
+        with self.assertRaisesRegex(ValueError, "invalid comment ID"):
+            self.parse(
+                """
+                <shreddit-post thingid="post1">
+                  <shreddit-comment thingid="t1_c1 "></shreddit-comment>
+                </shreddit-post>
+                """
+            )
+
+        with self.assertRaisesRegex(ValueError, "invalid parent ID"):
+            self.parse(
+                """
+                <shreddit-post thingid="post1">
+                  <shreddit-comment thingid="c1"
+                      parentid=" t3_post1"></shreddit-comment>
+                </shreddit-post>
+                """
+            )
+
     def test_depth_accepts_only_nonnegative_ascii_digits(self) -> None:
         result = self.parse(
             """
@@ -180,6 +205,7 @@ class ParseSavedRedditHtmlTests(unittest.TestCase):
               <shreddit-comment thingid="negative" depth="-1"></shreddit-comment>
               <shreddit-comment thingid="letters" depth="one"></shreddit-comment>
               <shreddit-comment thingid="unicode" depth="١"></shreddit-comment>
+              <shreddit-comment thingid="spaced" depth=" 1 "></shreddit-comment>
             </shreddit-post>
             """
         )
@@ -189,6 +215,7 @@ class ParseSavedRedditHtmlTests(unittest.TestCase):
         self.assertIsNone(result.comments["negative"].thread_level)
         self.assertIsNone(result.comments["letters"].thread_level)
         self.assertIsNone(result.comments["unicode"].thread_level)
+        self.assertIsNone(result.comments["spaced"].thread_level)
 
     def test_utf8_bom_is_supported(self) -> None:
         result = self.parse(

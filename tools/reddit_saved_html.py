@@ -54,7 +54,7 @@ def _first_nonempty_registered_attribute(
 
 
 def _normalize_id(value: str, prefixes: tuple[str, ...], label: str) -> str:
-    normalized = value.strip().lower()
+    normalized = value.lower()
     for prefix in prefixes:
         if normalized.startswith(prefix):
             normalized = normalized[len(prefix) :]
@@ -65,9 +65,8 @@ def _normalize_id(value: str, prefixes: tuple[str, ...], label: str) -> str:
 
 
 def _parse_depth(value: str) -> int | None:
-    stripped = value.strip()
-    if stripped and stripped.isascii() and stripped.isdigit():
-        return int(stripped)
+    if value and value.isascii() and value.isdigit():
+        return int(value)
     return None
 
 
@@ -93,7 +92,7 @@ class _SavedRedditHtmlParser(HTMLParser):
 
     def _parse_post(self, attrs: list[tuple[str, str | None]]) -> None:
         raw_post_id = _first_attribute(attrs, "thingid")
-        if not raw_post_id.strip():
+        if not raw_post_id:
             return
         post_id = _normalize_id(raw_post_id, ("t3_",), "post")
         if self.post_id and post_id != self.post_id:
@@ -114,7 +113,7 @@ class _SavedRedditHtmlParser(HTMLParser):
 
     def _parse_comment(self, attrs: list[tuple[str, str | None]]) -> None:
         raw_comment_id = _first_attribute(attrs, "thingid")
-        if not raw_comment_id.strip():
+        if not raw_comment_id:
             return
         comment_id = _normalize_id(raw_comment_id, ("t1_",), "comment")
         if comment_id in self.comments:
@@ -123,7 +122,7 @@ class _SavedRedditHtmlParser(HTMLParser):
         raw_parent_id = _first_attribute(attrs, "parentid")
         parent_id = (
             _normalize_id(raw_parent_id, ("t1_", "t3_"), "parent")
-            if raw_parent_id.strip()
+            if raw_parent_id
             else ""
         )
         self.comments[comment_id] = HtmlComment(
