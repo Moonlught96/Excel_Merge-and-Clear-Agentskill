@@ -4,6 +4,7 @@ __pycache__/
 outputs/
 analysis/
 .worktrees/
+.superpowers/
 .hash-id-projects/
 *.hash-id.key
 *.dpapi
