@@ -27,7 +27,7 @@ def valid_payload() -> dict[str, Any]:
             "failedDetails": None,
         },
         "post": {
-            "id": "t3_AbC123",
+            "id": "AbC123",
             "subreddit": "  测试社区  ",
             "title": "  A title\n第二行  ",
             "content": "正文 😀\nnext line",
@@ -140,7 +140,7 @@ class RedditJsonExportTest(unittest.TestCase):
                 1,
             ),
             "post": raw.replace(
-                '"id": "t3_AbC123"', '"id": "other", "id": "t3_AbC123"', 1
+                '"id": "AbC123"', '"id": "other", "id": "AbC123"', 1
             ),
             "comment": raw.replace(
                 '"username": "  用户一  "',
@@ -358,12 +358,15 @@ class RedditJsonExportTest(unittest.TestCase):
                 with self.subTest(location=location, value=value):
                     self.assert_invalid(payload)
 
-    def test_accepts_either_prefix_case_insensitively_in_every_id_field(
-        self,
-    ) -> None:
+    def test_rejects_fullname_prefixes_for_post_id(self) -> None:
+        for value in ("t3_AbC123", "T3_AbC123", "t1_AbC123", "T1_AbC123"):
+            payload = valid_payload()
+            payload["post"]["id"] = value
+            with self.subTest(value=value):
+                self.assert_invalid(payload)
+
+    def test_accepts_fullname_prefixes_for_comment_and_parent_ids(self) -> None:
         cases = [
-            ("post", 0, "id", "T1_AbC123", "abc123"),
-            ("post", 0, "id", "t3_AbC123", "abc123"),
             ("comments", 0, "id", "T3_Root1", "root1"),
             ("comments", 1, "id", "T1_Reply2", "reply2"),
             ("comments", 0, "parent_id", "T1_ABC123", "abc123"),
@@ -371,17 +374,10 @@ class RedditJsonExportTest(unittest.TestCase):
         ]
         for section, index, field, value, expected in cases:
             payload = valid_payload()
-            if section == "post":
-                payload["post"][field] = value
-            else:
-                payload["comments"][index][field] = value
+            payload["comments"][index][field] = value
             with self.subTest(section=section, index=index, field=field, value=value):
                 result = parse_reddit_json(self.write_payload(payload))
-                actual = (
-                    getattr(result.post, field)
-                    if section == "post"
-                    else getattr(result.comments[index], field)
-                )
+                actual = getattr(result.comments[index], field)
                 self.assertEqual(expected, actual)
 
     def test_rejects_duplicate_comment_ids_after_case_and_prefix_normalization(self) -> None:

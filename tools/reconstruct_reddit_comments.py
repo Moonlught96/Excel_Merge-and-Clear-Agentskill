@@ -65,6 +65,7 @@ OUTPUT_HEADERS = (
     "Parent ID",
 )
 _XLSX_STRING_LIMIT = 32_767
+_XLSX_EXACT_INTEGER_MAX = 2**53 - 1
 
 
 def _validate_input_aliases(
@@ -107,6 +108,25 @@ def _validate_xlsx_string_lengths(
             if isinstance(value, str) and len(value) > _XLSX_STRING_LIMIT:
                 raise ValueError(
                     "XLSX string exceeds 32,767 characters at "
+                    f"data row {row_number}, column {header}"
+                )
+
+
+def _validate_xlsx_exact_integers(
+    rows: list[dict[str, str | int]],
+    headers: tuple[str, ...],
+) -> None:
+    for row_number, row in enumerate(rows, start=1):
+        for header in headers:
+            value = row[header]
+            if (
+                type(value) is int
+                and not -_XLSX_EXACT_INTEGER_MAX
+                <= value
+                <= _XLSX_EXACT_INTEGER_MAX
+            ):
+                raise ValueError(
+                    "XLSX integer is outside exact range at "
                     f"data row {row_number}, column {header}"
                 )
 
@@ -257,6 +277,7 @@ def write_outputs(
     _validate_input_aliases(input_paths, output_xlsx, output_csv)
     _validate_output_roles(output_xlsx, output_csv)
     _validate_xlsx_string_lengths(rows, headers)
+    _validate_xlsx_exact_integers(rows, headers)
     requested_outputs = (output_xlsx.resolve(), output_csv.resolve())
     with _reserve_output_paths(requested_outputs):
         resolved_xlsx, resolved_csv = ensure_output_paths_safe(

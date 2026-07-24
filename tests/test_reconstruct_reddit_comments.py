@@ -394,6 +394,26 @@ class RedditOutputTests(unittest.TestCase):
         values.update(overrides)
         return values
 
+    def json_text_row(self, **overrides: str | int) -> dict[str, str | int]:
+        values: dict[str, str | int] = {
+            "Title": "A title",
+            "Post Body": "A body",
+            "Post Author": "post-author",
+            "Post Time": "8 hours ago",
+            "Post Score": 10,
+            "Post Comment Count": 1,
+            "Author": "comment-author",
+            "Time": "2026-07-23",
+            "Score": 5,
+            "Thread Level": 0,
+            "Is Reply": "No",
+            "Comment": "A comment",
+            "Comment ID": "c1",
+            "Parent ID": "post1",
+        }
+        values.update(overrides)
+        return values
+
     def write(self, rows: list[dict[str, str | int]], *, overwrite: bool = False) -> None:
         write_outputs(
             rows,
@@ -470,6 +490,77 @@ class RedditOutputTests(unittest.TestCase):
         self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), csv_rows[0])
         self.assertEqual("12", csv_rows[1][4])
         self.assertEqual("7", csv_rows[1][8])
+
+    def test_exact_xlsx_integer_boundaries_round_trip_in_both_outputs(self) -> None:
+        maximum = 2**53 - 1
+        minimum = -maximum
+        rows = [
+            self.json_text_row(
+                **{
+                    "Post Score": maximum,
+                    "Post Comment Count": maximum,
+                    "Score": minimum,
+                    "Thread Level": maximum,
+                }
+            )
+        ]
+
+        write_outputs(
+            rows,
+            headers=JSON_TEXT_OUTPUT_HEADERS,
+            input_paths=(self.input_csv, self.input_html),
+            output_xlsx=self.output_xlsx,
+            output_csv=self.output_csv,
+            overwrite=False,
+        )
+
+        sheet_values = list(load_workbook(self.output_xlsx).active.values)[1]
+        csv_values = self.csv_rows()[1]
+        for header, expected in (
+            ("Post Score", maximum),
+            ("Post Comment Count", maximum),
+            ("Score", minimum),
+            ("Thread Level", maximum),
+        ):
+            column = JSON_TEXT_OUTPUT_HEADERS.index(header)
+            self.assertEqual(expected, sheet_values[column])
+            self.assertEqual(str(expected), csv_values[column])
+
+    def test_out_of_range_integers_are_rejected_before_any_output_mutation(
+        self,
+    ) -> None:
+        old_xlsx = b"old xlsx"
+        old_csv = b"old csv"
+        numeric_headers = (
+            "Post Score",
+            "Post Comment Count",
+            "Score",
+            "Thread Level",
+        )
+        for index, header in enumerate(numeric_headers):
+            with self.subTest(header=header):
+                self.output_xlsx.write_bytes(old_xlsx)
+                self.output_csv.write_bytes(old_csv)
+                private_value = 9007199254740993 + index
+                with self.assertRaisesRegex(
+                    ValueError,
+                    rf"^XLSX integer is outside exact range at data row 1, column {header}$",
+                ) as caught:
+                    write_outputs(
+                        [self.json_text_row(**{header: private_value})],
+                        headers=JSON_TEXT_OUTPUT_HEADERS,
+                        input_paths=(self.input_csv, self.input_html),
+                        output_xlsx=self.output_xlsx,
+                        output_csv=self.output_csv,
+                        overwrite=True,
+                    )
+                self.assertNotIn(str(private_value), str(caught.exception))
+                self.assertEqual(old_xlsx, self.output_xlsx.read_bytes())
+                self.assertEqual(old_csv, self.output_csv.read_bytes())
+                self.assertEqual(
+                    {"input.csv", "input.html", "output.xlsx", "output.csv"},
+                    {path.name for path in self.directory.iterdir()},
+                )
 
     def test_csv_has_utf8_bom_and_round_trips_special_content(self) -> None:
         special = '中文 😀, "quoted"\nsecond line'
@@ -1026,6 +1117,7 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
         *,
         author: str = "alpha",
         content: str = "SECRET-COMMENT-1",
+        score: str = "99",
         count: str = "3",
         reverse: bool = False,
     ) -> None:
@@ -1034,7 +1126,7 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
         comments = (second, first) if reverse else (first, second)
         self.page_text_path.write_text("\n".join((
             "Reddit", "r/python", "u/SECRET-AUTHOR", "SECRET-AUTHOR \u5934\u50cf",
-            "8\u5c0f\u65f6\u524d", "SECRET-TITLE", "\u6b63\u6587", "\u8d5e\u540c", "99", "\u53cd\u5bf9", count,
+            "8\u5c0f\u65f6\u524d", "SECRET-TITLE", "\u6b63\u6587", "\u8d5e\u540c", score, "\u53cd\u5bf9", count,
             "\u8f6c\u5230\u8bc4\u8bba", "\u8bc4\u8bba\u533a\u57df", *comments,
         )), encoding="utf-8")
 
@@ -1148,6 +1240,53 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
                 self.assert_safe_failure(completed, *page_only_secrets)
                 if name == "control":
                     self.assertIn("unsupported control character", completed.stderr)
+
+    def test_out_of_range_page_integers_fail_cli_safely_without_mutation(
+        self,
+    ) -> None:
+        old_xlsx = b"old xlsx"
+        old_csv = b"old csv"
+        cases = (
+            "9007199254740993",
+            "8" * 400,
+        )
+        for index, private_value in enumerate(cases):
+            with self.subTest(digits=len(private_value)):
+                self.json_path = self.directory / f"numeric-{index}.json"
+                self.page_text_path = self.directory / f"numeric-{index}.txt"
+                self.output_xlsx = self.directory / f"numeric-{index}.xlsx"
+                self.output_csv = self.directory / f"numeric-{index}.csv"
+                self.write_json()
+                self.write_page(score=private_value)
+                self.output_xlsx.write_bytes(old_xlsx)
+                self.output_csv.write_bytes(old_csv)
+
+                completed = self.run_cli("--overwrite")
+
+                self.assertNotEqual(0, completed.returncode)
+                self.assertNotIn("Traceback", completed.stderr)
+                self.assertNotIn(private_value, completed.stdout + completed.stderr)
+                self.assertIn(
+                    "post score outside exact XLSX integer range",
+                    completed.stderr,
+                )
+                self.assertEqual(old_xlsx, self.output_xlsx.read_bytes())
+                self.assertEqual(old_csv, self.output_csv.read_bytes())
+                self.assertEqual(
+                    [],
+                    [
+                        path.name
+                        for path in self.directory.iterdir()
+                        if any(
+                            marker in path.name
+                            for marker in (
+                                "reddit-stage",
+                                "reddit-backup",
+                                ".lock",
+                            )
+                        )
+                    ],
+                )
 
     def test_help_has_only_json_page_text_workflow_options(self) -> None:
         completed = subprocess.run(

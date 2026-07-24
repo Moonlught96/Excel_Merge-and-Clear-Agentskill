@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import re
+import string
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,9 +35,10 @@ _SIGNED_INTEGER_PATTERN = re.compile(
     r"(?:-(?:[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)|"
     r"0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)"
 )
-_MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 _MARKDOWN_HEADING = re.compile(r"(?m)^\s{0,3}#{1,6}\s*")
 _WHITESPACE = re.compile(r"\s+")
+_MARKDOWN_ESCAPABLE = frozenset(string.punctuation)
+_XLSX_EXACT_INTEGER_MAX = 2**53 - 1
 _COMMENT_TIME_PATTERN = re.compile(r"\u2022?" + _TIME_PATTERN.pattern)
 _COMMENT_OPERATION_LABELS = frozenset(
     (
@@ -59,10 +61,94 @@ def normalize_author(value: str) -> str:
     return normalized
 
 
+def _unescape_markdown_visible_text(value: str) -> str:
+    result: list[str] = []
+    index = 0
+    while index < len(value):
+        if (
+            value[index] == "\\"
+            and index + 1 < len(value)
+            and value[index + 1] in _MARKDOWN_ESCAPABLE
+        ):
+            result.append(value[index + 1])
+            index += 2
+            continue
+        result.append(value[index])
+        index += 1
+    return "".join(result)
+
+
+def _markdown_label_end(value: str, start: int) -> int | None:
+    depth = 1
+    index = start + 1
+    while index < len(value):
+        character = value[index]
+        if character == "\\" and index + 1 < len(value):
+            index += 2
+            continue
+        if character == "[":
+            depth += 1
+        elif character == "]":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def _markdown_address_end(value: str, start: int) -> int:
+    depth = 1
+    index = start + 1
+    while index < len(value):
+        character = value[index]
+        if character == "\\" and index + 1 < len(value):
+            index += 2
+            continue
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    raise RedditPageTextError("markdown link syntax invalid")
+
+
+def _visible_markdown_links(value: str) -> str:
+    result: list[str] = []
+    index = 0
+    while index < len(value):
+        if value[index] == "\\" and index + 1 < len(value):
+            result.append(value[index : index + 2])
+            index += 2
+            continue
+        if value[index] != "[":
+            result.append(value[index])
+            index += 1
+            continue
+
+        label_end = _markdown_label_end(value, index)
+        if label_end is None or label_end + 1 >= len(value):
+            result.append(value[index])
+            index += 1
+            continue
+        if value[label_end + 1] != "(":
+            result.append(value[index : label_end + 1])
+            index = label_end + 1
+            continue
+
+        address_end = _markdown_address_end(value, label_end + 1)
+        result.append(
+            _unescape_markdown_visible_text(value[index + 1 : label_end])
+        )
+        index = address_end + 1
+    return "".join(result)
+
+
 def normalize_content(value: str) -> str:
     normalized = unicodedata.normalize("NFC", html.unescape(value))
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
-    normalized = _MARKDOWN_LINK.sub(r"\1", normalized)
+    normalized = _visible_markdown_links(normalized)
     normalized = _MARKDOWN_HEADING.sub("", normalized)
     normalized = re.sub(r"\*\*([^*\n]+)\*\*", r"\1", normalized)
     normalized = re.sub(r"__([^_\n]+)__", r"\1", normalized)
@@ -119,14 +205,23 @@ def _parse_integer(value: str) -> int | None:
         return None
 
 
+def _exact_xlsx_integer(value: int, label: str) -> int:
+    if not -_XLSX_EXACT_INTEGER_MAX <= value <= _XLSX_EXACT_INTEGER_MAX:
+        raise RedditPageTextError(
+            f"{label} outside exact XLSX integer range"
+        )
+    return value
+
+
 def _integer(value: str, *, signed: bool, label: str) -> int:
     pattern = _SIGNED_INTEGER_PATTERN if signed else _INTEGER_PATTERN
     if pattern.fullmatch(value) is None:
         raise RedditPageTextError(f"{label} invalid")
     try:
-        return int(value.replace(",", ""))
+        parsed = int(value.replace(",", ""))
     except ValueError:
         raise RedditPageTextError(f"{label} invalid") from None
+    return _exact_xlsx_integer(parsed, label)
 
 
 def _operation_blocks(comment_lines: list[str]) -> list[list[str]]:
@@ -278,7 +373,10 @@ def _parse_post_metrics(lines: list[str]) -> tuple[int, int]:
     comment_count = _parse_integer(labels_and_values[3])
     if score is None or comment_count is None:
         raise RedditPageTextError("post metric value invalid")
-    return score, comment_count
+    return (
+        _exact_xlsx_integer(score, "post score"),
+        _exact_xlsx_integer(comment_count, "post comment count"),
+    )
 
 
 def parse_reddit_page_text(

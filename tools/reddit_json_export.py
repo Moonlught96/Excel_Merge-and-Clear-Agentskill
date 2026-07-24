@@ -86,6 +86,15 @@ def _nonblank_text(value: Any, field: str) -> str:
     return value
 
 
+def _ascii_alphanumeric_id(value: Any, field: str) -> str:
+    if not isinstance(value, str):
+        raise RedditJsonError(f"{field} must be an ASCII identifier")
+
+    if not value or not value.isascii() or not value.isalnum():
+        raise RedditJsonError(f"{field} must be an ASCII alphanumeric identifier")
+    return value.lower()
+
+
 def _normalize_id(value: Any, field: str) -> str:
     if not isinstance(value, str):
         raise RedditJsonError(f"{field} must be an ASCII identifier")
@@ -99,9 +108,7 @@ def _normalize_id(value: Any, field: str) -> str:
     ):
         identifier = identifier[3:]
 
-    if not identifier or not identifier.isascii() or not identifier.isalnum():
-        raise RedditJsonError(f"{field} must be an ASCII alphanumeric identifier")
-    return identifier.lower()
+    return _ascii_alphanumeric_id(identifier, field)
 
 
 def _parse_meta(raw: dict[str, Any], comment_count: int) -> RedditMeta:
@@ -147,7 +154,7 @@ def _parse_meta(raw: dict[str, Any], comment_count: int) -> RedditMeta:
 
 
 def _parse_post(raw: dict[str, Any], reported_by_api: int) -> RedditPost:
-    post_id = _normalize_id(_required(raw, "id", "post"), "post.id")
+    post_id = _ascii_alphanumeric_id(_required(raw, "id", "post"), "post.id")
     subreddit = _nonblank_text(
         _required(raw, "subreddit", "post"), "post.subreddit"
     )

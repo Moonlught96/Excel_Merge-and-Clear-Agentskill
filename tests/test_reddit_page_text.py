@@ -259,6 +259,42 @@ class RedditPageTextTest(unittest.TestCase):
             ),
         )
 
+    def test_markdown_links_handle_balanced_addresses_escapes_and_adjacency(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "[Wikipedia](https://en.wikipedia.org/wiki/Foo_(bar))",
+                "Wikipedia",
+            ),
+            (
+                r"[visible \[text\] and \) mark](https://example.invalid/a\(b\))",
+                "visible [text] and ) mark",
+            ),
+            (
+                "[one](https://one.invalid)[two](https://two.invalid)",
+                "onetwo",
+            ),
+        )
+        for source, expected in cases:
+            with self.subTest(source=source):
+                self.assertEqual(expected, normalize_content(source))
+
+    def test_malformed_markdown_links_fail_safely_without_source_echo(self) -> None:
+        malformed = (
+            "[broken](https://example.invalid",
+            "[broken](https://example.invalid/Foo_(bar)",
+            r"[broken](https://example.invalid/a\)",
+        )
+        for source in malformed:
+            with self.subTest(source=source):
+                with self.assertRaisesRegex(
+                    RedditPageTextError,
+                    r"^markdown link syntax invalid$",
+                ) as caught:
+                    normalize_content(source)
+                self.assertNotIn(source, str(caught.exception))
+
     def test_rejects_author_content_order_and_score_mismatches(self) -> None:
         export = self.export_for_comments()
         cases = (
@@ -494,6 +530,58 @@ class RedditPageTextTest(unittest.TestCase):
         )
         self.assertEqual(0, result.post_score)
         self.assertEqual(1234, result.post_comment_count)
+
+    def test_accepts_exact_xlsx_integer_boundaries(self) -> None:
+        maximum = 2**53 - 1
+        result = self.parse(valid_page(score=str(maximum)))
+        self.assertEqual(maximum, result.post_score)
+
+        text = COMMENT_TEXT.replace(
+            "\u8d5e\u540c\n3",
+            f"\u8d5e\u540c\n{-maximum}",
+            1,
+        )
+        result = parse_reddit_page_text(
+            self.write_text(PAGE_PREFIX + text),
+            self.export_for_comments(),
+        )
+        self.assertEqual(-maximum, result.comments[0].score)
+
+    def test_rejects_integers_outside_exact_xlsx_range_without_value_echo(
+        self,
+    ) -> None:
+        out_of_range = str(2**53)
+        cases = (
+            (
+                "post score",
+                valid_page(score=out_of_range),
+                json_export(),
+                False,
+            ),
+            (
+                "comment 1 score",
+                PAGE_PREFIX
+                + COMMENT_TEXT.replace(
+                    "\u8d5e\u540c\n3",
+                    f"\u8d5e\u540c\n-{out_of_range}",
+                    1,
+                ),
+                self.export_for_comments(),
+                True,
+            ),
+        )
+        for category, page, export, require_comments in cases:
+            with self.subTest(category=category):
+                with self.assertRaisesRegex(
+                    RedditPageTextError,
+                    rf"^{category} outside exact XLSX integer range$",
+                ) as caught:
+                    parse_reddit_page_text(
+                        self.write_text(page),
+                        export,
+                        require_comments=require_comments,
+                    )
+                self.assertNotIn(out_of_range, str(caught.exception))
 
     def test_rejects_invalid_integer_forms(self) -> None:
         invalid_values = (
