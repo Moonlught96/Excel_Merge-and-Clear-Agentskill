@@ -30,6 +30,13 @@ _TIME_PATTERN = re.compile(
     r"(?:刚刚|[0-9]+(?:分钟前|小时前|天前|周前|个月前|年前))"
 )
 _INTEGER_PATTERN = re.compile(r"(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)")
+_SIGNED_INTEGER_PATTERN = re.compile(
+    r"(?:-(?:[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)|"
+    r"0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)"
+)
+_MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_MARKDOWN_HEADING = re.compile(r"(?m)^\s{0,3}#{1,6}\s*")
+_WHITESPACE = re.compile(r"\s+")
 
 
 def normalize_author(value: str) -> str:
@@ -39,6 +46,26 @@ def normalize_author(value: str) -> str:
     if normalized == "[已删除]":
         return "[deleted]"
     return normalized
+
+
+def normalize_content(value: str) -> str:
+    normalized = unicodedata.normalize("NFC", html.unescape(value))
+    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = _MARKDOWN_LINK.sub(r"\1", normalized)
+    normalized = _MARKDOWN_HEADING.sub("", normalized)
+    normalized = re.sub(r"\*\*([^*\n]+)\*\*", r"\1", normalized)
+    normalized = re.sub(r"__([^_\n]+)__", r"\1", normalized)
+    normalized = re.sub(
+        r"(?<!\*)\*([^*\n]+)\*(?!\*)",
+        r"\1",
+        normalized,
+    )
+    normalized = re.sub(
+        r"(?<!\w)_([^_\n]+)_(?!\w)",
+        r"\1",
+        normalized,
+    )
+    return _WHITESPACE.sub(" ", normalized).strip()
 
 
 def _decode_page(path: Path) -> str:
@@ -79,6 +106,97 @@ def _parse_integer(value: str) -> int | None:
         return int(value.replace(",", ""))
     except ValueError:
         return None
+
+
+def _integer(value: str, *, signed: bool, label: str) -> int:
+    pattern = _SIGNED_INTEGER_PATTERN if signed else _INTEGER_PATTERN
+    if pattern.fullmatch(value) is None:
+        raise RedditPageTextError(f"{label} invalid")
+    try:
+        return int(value.replace(",", ""))
+    except ValueError:
+        raise RedditPageTextError(f"{label} invalid") from None
+
+
+def _operation_blocks(comment_lines: list[str]) -> list[list[str]]:
+    blocks: list[list[str]] = []
+    start = 0
+    for index, line in enumerate(comment_lines):
+        if line != "\u5206\u4eab":
+            continue
+        candidate = comment_lines[start : index + 1]
+        start = index + 1
+        nonblank = [item for item in candidate if item]
+        if "\u53cd\u5bf9" in nonblank and "\u56de\u590d" in nonblank:
+            blocks.append(candidate)
+    trailing = [item for item in comment_lines[start:] if item]
+    if trailing and not any("\u5df2\u63a8\u5e7f" in item for item in trailing):
+        raise RedditPageTextError("unparsed trailing page comment content")
+    return blocks
+
+
+def _block_author_matches(block: list[str], expected: str) -> bool:
+    target = normalize_author(expected)
+    return any(
+        line
+        and not line.endswith("\u5934\u50cf")
+        and normalize_author(line) == target
+        for line in block
+    )
+
+
+def _block_score(block: list[str], comment_number: int) -> int | None:
+    nonblank = [line for line in block if line]
+    try:
+        share = len(nonblank) - 1
+        if nonblank[share] != "\u5206\u4eab":
+            raise ValueError
+        reply = max(
+            index for index in range(share) if nonblank[index] == "\u56de\u590d"
+        )
+        downvote = max(
+            index for index in range(reply) if nonblank[index] == "\u53cd\u5bf9"
+        )
+    except ValueError as error:
+        raise RedditPageTextError(
+            f"comment {comment_number} operation area is incomplete"
+        ) from error
+    prefix = nonblank[:downvote]
+    if prefix and prefix[-1] == "\u8d5e\u540c\u6295\u7968":
+        return None
+    if len(prefix) >= 2 and prefix[-2] == "\u8d5e\u540c":
+        return _integer(
+            prefix[-1],
+            signed=True,
+            label=f"comment {comment_number} score",
+        )
+    raise RedditPageTextError(
+        f"comment {comment_number} vote display is unsupported"
+    )
+
+
+def _comment_metrics(
+    comment_lines: list[str],
+    export: RedditJsonExport,
+) -> tuple[PageCommentMetric, ...]:
+    blocks = _operation_blocks(comment_lines)
+    if len(blocks) != len(export.comments):
+        raise RedditPageTextError("page comment block count does not match JSON comments")
+    metrics: list[PageCommentMetric] = []
+    for number, (block, expected) in enumerate(
+        zip(blocks, export.comments, strict=True),
+        start=1,
+    ):
+        if not _block_author_matches(block, expected.username):
+            raise RedditPageTextError(f"comment {number} author does not match JSON")
+        flattened = normalize_content("\n".join(block))
+        expected_content = normalize_content(expected.content)
+        if not expected_content or flattened.count(expected_content) != 1:
+            raise RedditPageTextError(
+                f"comment {number} content does not match JSON"
+            )
+        metrics.append(PageCommentMetric(_block_score(block, number)))
+    return tuple(metrics)
 
 
 def _parse_post_metrics(lines: list[str]) -> tuple[int, int]:
@@ -151,12 +269,13 @@ def parse_reddit_page_text(
     if comment_count != export.post.num_comments:
         raise RedditPageTextError("post comment count mismatch")
 
+    comments = ()
     if require_comments:
-        raise RedditPageTextError("comment parsing not implemented")
+        comments = _comment_metrics(lines[marker_index + 1 :], export)
 
     return RedditPageText(
         post_time=time_lines[0],
         post_score=score,
         post_comment_count=comment_count,
-        comments=(),
+        comments=comments,
     )

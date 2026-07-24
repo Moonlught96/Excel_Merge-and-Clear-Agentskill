@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from tools.reddit_json_export import (
+    RedditJsonComment,
     RedditJsonExport,
     RedditMeta,
     RedditPost,
@@ -13,6 +15,7 @@ from tools.reddit_page_text import (
     RedditPageText,
     RedditPageTextError,
     normalize_author,
+    normalize_content,
     parse_reddit_page_text,
 )
 
@@ -71,6 +74,60 @@ def valid_page(
     )
 
 
+PAGE_PREFIX = "\n".join(
+    (
+        "Reddit",
+        "r/python",
+        "u/Caf\u00e9User",
+        "Caf\u00e9User \u5934\u50cf",
+        "8\u5c0f\u65f6\u524d",
+        "Unicode \u6807\u9898 \U0001f40d",
+        "\u6b63\u6587",
+        "\u8d5e\u540c",
+        "99",
+        "\u53cd\u5bf9",
+        "2",
+        "\u8f6c\u5230\u8bc4\u8bba",
+        "\u8bc4\u8bba\u533a\u57df",
+    )
+) + "\n"
+
+FIRST_COMMENT = """
+AutoModerator
+\u7248\u4e3b
+\u20228\u5c0f\u65f6\u524d
+Wallpaper from **[Basic Apple Guy](https://example.com)** &amp; friends
+
+\u8d5e\u540c
+3
+\u53cd\u5bf9
+\u56de\u590d
+\u5956\u52b1
+\u5206\u4eab
+"""
+
+PROMOTED_BLOCK = """
+u/ad-user \u5934\u50cf
+ad-user
+999
+\u2022\u5df2\u63a8\u5e7f Advertisement
+"""
+
+SECOND_COMMENT = """
+eldergooooose__
+\u20228\u5c0f\u65f6\u524d
+What monitor? \U0001f914
+
+\u8d5e\u540c\u6295\u7968
+\u53cd\u5bf9
+\u56de\u590d
+\u5956\u52b1
+\u5206\u4eab
+"""
+
+COMMENT_TEXT = FIRST_COMMENT + PROMOTED_BLOCK + SECOND_COMMENT
+
+
 class RedditPageTextTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path.cwd() / ".tmp-tests" / self._testMethodName
@@ -93,6 +150,63 @@ class RedditPageTextTest(unittest.TestCase):
             export or json_export(),
             require_comments=False,
         )
+
+    def export(self) -> RedditJsonExport:
+        comments = (
+            RedditJsonComment(
+                id="comment1",
+                parent_id="post1",
+                content="first comment",
+                depth=0,
+                username="first-user",
+                date="2026-01-01",
+                created_utc=1,
+            ),
+            RedditJsonComment(
+                id="comment2",
+                parent_id="post1",
+                content="second comment",
+                depth=0,
+                username="second-user",
+                date="2026-01-01",
+                created_utc=2,
+            ),
+        )
+        return RedditJsonExport(
+            meta=RedditMeta(
+                collected_comment_count=2,
+                reported_by_api=2,
+                discrepancy=0,
+            ),
+            post=RedditPost(
+                id="post1",
+                subreddit="python",
+                title="Unicode \u6807\u9898 \U0001f40d",
+                content="post body",
+                author="Caf\u00e9User",
+                num_comments=2,
+            ),
+            comments=comments,
+        )
+
+    def export_for_comments(self) -> RedditJsonExport:
+        export = self.export()
+        comments = (
+            replace(
+                export.comments[0],
+                username="AutoModerator",
+                content=(
+                    "Wallpaper from **[Basic Apple Guy]"
+                    "(https://example.com)** &amp; friends"
+                ),
+            ),
+            replace(
+                export.comments[1],
+                username="eldergooooose__",
+                content="What monitor? \U0001f914",
+            ),
+        )
+        return replace(export, comments=comments)
 
     def assert_invalid(
         self, text: str, *, export: RedditJsonExport | None = None
@@ -122,11 +236,80 @@ class RedditPageTextTest(unittest.TestCase):
         with self.assertRaises(AttributeError):
             result.post_score = 4  # type: ignore[misc]
 
-    def test_default_comment_parsing_failure_is_safe(self) -> None:
+    def test_rejects_unparsed_comment_content_safely(self) -> None:
         with self.assertRaisesRegex(
-            RedditPageTextError, "^comment parsing not implemented$"
+            RedditPageTextError, "^unparsed trailing page comment content$"
         ):
             parse_reddit_page_text(self.write_text(valid_page()), json_export())
+
+    def test_aligns_comments_and_extracts_number_or_blank_score(self) -> None:
+        result = parse_reddit_page_text(
+            self.write_text(PAGE_PREFIX + COMMENT_TEXT),
+            self.export_for_comments(),
+        )
+        self.assertEqual([3, None], [item.score for item in result.comments])
+
+    def test_deleted_author_and_markdown_html_normalization_are_fixed(self) -> None:
+        self.assertEqual("[deleted]", normalize_author("[\u5df2\u5220\u9664]"))
+        self.assertEqual("[deleted]", normalize_author("[deleted]"))
+        self.assertEqual(
+            "Rules/Wiki & friends",
+            normalize_content(
+                "## **[Rules/Wiki](https://example.com)** &amp; friends"
+            ),
+        )
+
+    def test_rejects_author_content_order_and_score_mismatches(self) -> None:
+        export = self.export_for_comments()
+        cases = (
+            (COMMENT_TEXT.replace("AutoModerator", "wrong", 1), "author"),
+            (COMMENT_TEXT.replace("Wallpaper from", "Different text", 1), "content"),
+            (
+                COMMENT_TEXT.replace("\u8d5e\u540c\n3", "\u8d5e\u540c\n1.2K", 1),
+                "score",
+            ),
+            (SECOND_COMMENT + PROMOTED_BLOCK + FIRST_COMMENT, "author"),
+            (COMMENT_TEXT + FIRST_COMMENT, "block count"),
+        )
+        for text, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    parse_reddit_page_text(
+                        self.write_text(PAGE_PREFIX + text),
+                        export,
+                    )
+
+    def test_rejects_incomplete_comment_operation_controls(self) -> None:
+        export = self.export_for_comments()
+        for label in ("\u53cd\u5bf9", "\u56de\u590d", "\u5206\u4eab"):
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(ValueError, "comment"):
+                    parse_reddit_page_text(
+                        self.write_text(PAGE_PREFIX + COMMENT_TEXT.replace(label, "", 1)),
+                        export,
+                    )
+
+    def test_parses_negative_and_grouped_comment_scores(self) -> None:
+        text = COMMENT_TEXT.replace("\u8d5e\u540c\n3", "\u8d5e\u540c\n-3", 1).replace(
+            "\u8d5e\u540c\u6295\u7968\n", "\u8d5e\u540c\n1,234\n", 1
+        )
+        result = parse_reddit_page_text(
+            self.write_text(PAGE_PREFIX + text),
+            self.export_for_comments(),
+        )
+        self.assertEqual([-3, 1234], [item.score for item in result.comments])
+
+    def test_matches_deleted_author_and_ignores_promoted_numbers(self) -> None:
+        export = self.export_for_comments()
+        export = replace(export, comments=(replace(export.comments[0], username="[deleted]"), export.comments[1]))
+        result = parse_reddit_page_text(
+            self.write_text(
+                PAGE_PREFIX
+                + COMMENT_TEXT.replace("AutoModerator", "[\u5df2\u5220\u9664]", 1)
+            ),
+            export,
+        )
+        self.assertEqual([3, None], [item.score for item in result.comments])
 
     def test_accepts_all_raw_time_forms_without_changing_them(self) -> None:
         for raw_time in (
