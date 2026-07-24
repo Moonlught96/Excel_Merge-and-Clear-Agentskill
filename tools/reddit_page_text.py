@@ -75,22 +75,24 @@ def _unique_index(lines: list[str], value: str, category: str) -> int:
 def _parse_integer(value: str) -> int | None:
     if _INTEGER_PATTERN.fullmatch(value) is None:
         return None
-    return int(value.replace(",", ""))
+    try:
+        return int(value.replace(",", ""))
+    except ValueError:
+        return None
 
 
 def _parse_post_metrics(lines: list[str]) -> tuple[int, int]:
-    matches: list[tuple[int, int]] = []
-    for index in range(len(lines) - 3):
-        if lines[index] != "赞同" or lines[index + 2] != "反对":
-            continue
-        score = _parse_integer(lines[index + 1])
-        comment_count = _parse_integer(lines[index + 3])
-        if score is not None and comment_count is not None:
-            matches.append((score, comment_count))
+    if len(lines) < 4:
+        raise RedditPageTextError("post metrics sequence invalid")
+    labels_and_values = lines[-4:]
+    if labels_and_values[0] != "赞同" or labels_and_values[2] != "反对":
+        raise RedditPageTextError("post metrics sequence invalid")
 
-    if len(matches) != 1:
-        raise RedditPageTextError("post metrics invalid or ambiguous")
-    return matches[0]
+    score = _parse_integer(labels_and_values[1])
+    comment_count = _parse_integer(labels_and_values[3])
+    if score is None or comment_count is None:
+        raise RedditPageTextError("post metric value invalid")
+    return score, comment_count
 
 
 def parse_reddit_page_text(

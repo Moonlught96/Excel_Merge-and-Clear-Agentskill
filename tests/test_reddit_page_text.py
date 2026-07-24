@@ -240,9 +240,58 @@ class RedditPageTextTest(unittest.TestCase):
     def test_rejects_comment_count_mismatch_with_json(self) -> None:
         self.assert_invalid(valid_page(comment_count="4"))
 
-    def test_rejects_a_second_valid_metric_sequence(self) -> None:
+    def test_ignores_valid_metric_lookalike_in_body(self) -> None:
         duplicate = "赞同\n20\n反对\n5\n"
-        self.assert_invalid(valid_page().replace("正文\n", f"正文\n{duplicate}"))
+        result = self.parse(valid_page().replace("正文\n", f"正文\n{duplicate}"))
+        self.assertEqual((99, 5), (result.post_score, result.post_comment_count))
+
+    def test_ignores_malformed_metric_lookalikes_in_body(self) -> None:
+        malformed_values = ("1.2K", "-1", "01", "12,34")
+        for value in malformed_values:
+            with self.subTest(value=value):
+                malformed = f"赞同\n{value}\n反对\n5\n"
+                result = self.parse(
+                    valid_page().replace("正文\n", f"正文\n{malformed}")
+                )
+                self.assertEqual(
+                    (99, 5),
+                    (result.post_score, result.post_comment_count),
+                )
+
+    def test_rejects_body_lookalike_when_actual_final_ui_sequence_is_missing(
+        self,
+    ) -> None:
+        body_lookalike = "赞同\n99\n反对\n5"
+        page = valid_page().replace(
+            "正文\n赞同\n99\n反对\n5",
+            f"{body_lookalike}\n正文末尾",
+        )
+        self.assert_invalid(page)
+
+    def test_rejects_nonblank_line_between_metric_count_and_action(self) -> None:
+        page = valid_page().replace("5\n转到评论", "5\n广告尾行\n转到评论")
+        self.assert_invalid(page)
+
+    def test_oversized_score_and_comment_count_raise_safe_error(self) -> None:
+        oversized = "9" * 5000
+        cases = (
+            ("score", valid_page(score=oversized), json_export()),
+            (
+                "comment_count",
+                valid_page(comment_count=oversized),
+                json_export(num_comments=0),
+            ),
+        )
+        for field, page, export in cases:
+            with self.subTest(field=field):
+                self.write_text(page)
+                with self.assertRaises(RedditPageTextError) as caught:
+                    parse_reddit_page_text(
+                        self.path,
+                        export,
+                        require_comments=False,
+                    )
+                self.assertNotIn(oversized, str(caught.exception))
 
     def test_accepts_utf8_bom_utf16_bom_and_gb18030(self) -> None:
         export = json_export()
