@@ -37,6 +37,17 @@ _SIGNED_INTEGER_PATTERN = re.compile(
 _MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 _MARKDOWN_HEADING = re.compile(r"(?m)^\s{0,3}#{1,6}\s*")
 _WHITESPACE = re.compile(r"\s+")
+_COMMENT_TIME_PATTERN = re.compile(r"\u2022?" + _TIME_PATTERN.pattern)
+_COMMENT_OPERATION_LABELS = frozenset(
+    (
+        "\u8d5e\u540c",
+        "\u8d5e\u540c\u6295\u7968",
+        "\u53cd\u5bf9",
+        "\u56de\u590d",
+        "\u5956\u52b1",
+        "\u5206\u4eab",
+    )
+)
 
 
 def normalize_author(value: str) -> str:
@@ -126,52 +137,102 @@ def _operation_blocks(comment_lines: list[str]) -> list[list[str]]:
             continue
         candidate = comment_lines[start : index + 1]
         start = index + 1
-        nonblank = [item for item in candidate if item]
-        if "\u53cd\u5bf9" in nonblank and "\u56de\u590d" in nonblank:
-            blocks.append(candidate)
+        _operation_prefix(candidate, len(blocks) + 1)
+        blocks.append(candidate)
     trailing = [item for item in comment_lines[start:] if item]
-    if trailing and not any("\u5df2\u63a8\u5e7f" in item for item in trailing):
+    if trailing and not _is_promoted_trailing(trailing):
         raise RedditPageTextError("unparsed trailing page comment content")
     return blocks
 
 
-def _block_author_matches(block: list[str], expected: str) -> bool:
-    target = normalize_author(expected)
-    return any(
-        line
-        and not line.endswith("\u5934\u50cf")
-        and normalize_author(line) == target
-        for line in block
+def _is_promoted_trailing(lines: list[str]) -> bool:
+    if len(lines) not in (3, 4):
+        return False
+    if not lines[0].startswith("u/") or not lines[0].endswith("\u5934\u50cf"):
+        return False
+    if "\u5df2\u63a8\u5e7f" not in lines[-1]:
+        return False
+    return not any(
+        line in _COMMENT_OPERATION_LABELS
+        or _COMMENT_TIME_PATTERN.fullmatch(line) is not None
+        for line in lines
     )
 
 
-def _block_score(block: list[str], comment_number: int) -> int | None:
-    nonblank = [line for line in block if line]
+def _operation_prefix(
+    block: list[str],
+    comment_number: int,
+) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
+    nonblank = [(index, line) for index, line in enumerate(block) if line]
     try:
         share = len(nonblank) - 1
-        if nonblank[share] != "\u5206\u4eab":
+        if nonblank[share][1] != "\u5206\u4eab":
             raise ValueError
         reply = max(
-            index for index in range(share) if nonblank[index] == "\u56de\u590d"
+            index
+            for index in range(share)
+            if nonblank[index][1] == "\u56de\u590d"
         )
         downvote = max(
-            index for index in range(reply) if nonblank[index] == "\u53cd\u5bf9"
+            index
+            for index in range(reply)
+            if nonblank[index][1] == "\u53cd\u5bf9"
         )
     except ValueError as error:
         raise RedditPageTextError(
             f"comment {comment_number} operation area is incomplete"
         ) from error
-    prefix = nonblank[:downvote]
-    if prefix and prefix[-1] == "\u8d5e\u540c\u6295\u7968":
+    return nonblank, nonblank[:downvote]
+
+
+def _block_score(block: list[str], comment_number: int) -> int | None:
+    _nonblank, prefix = _operation_prefix(block, comment_number)
+    if prefix and prefix[-1][1] == "\u8d5e\u540c\u6295\u7968":
         return None
-    if len(prefix) >= 2 and prefix[-2] == "\u8d5e\u540c":
+    if len(prefix) >= 2 and prefix[-2][1] == "\u8d5e\u540c":
         return _integer(
-            prefix[-1],
+            prefix[-1][1],
             signed=True,
             label=f"comment {comment_number} score",
         )
     raise RedditPageTextError(
         f"comment {comment_number} vote display is unsupported"
+    )
+
+
+def _block_author_and_content(
+    block: list[str],
+    comment_number: int,
+) -> tuple[str, str]:
+    _nonblank, prefix = _operation_prefix(block, comment_number)
+    if prefix and prefix[-1][1] == "\u8d5e\u540c\u6295\u7968":
+        vote_index = prefix[-1][0]
+    elif len(prefix) >= 2 and prefix[-2][1] == "\u8d5e\u540c":
+        vote_index = prefix[-2][0]
+    else:
+        raise RedditPageTextError(
+            f"comment {comment_number} vote display is unsupported"
+        )
+    time_indexes = [
+        index
+        for index, line in enumerate(block[:vote_index])
+        if _COMMENT_TIME_PATTERN.fullmatch(line) is not None
+    ]
+    if len(time_indexes) != 1:
+        raise RedditPageTextError(f"comment {comment_number} metadata is invalid")
+    time_index = time_indexes[0]
+    separator_indexes = [
+        index for index, line in enumerate(block[:time_index]) if not line
+    ]
+    author_index = separator_indexes[-1] + 1 if separator_indexes else 0
+    if author_index >= time_index or not block[author_index]:
+        raise RedditPageTextError(f"comment {comment_number} metadata is invalid")
+    if any(line in _COMMENT_OPERATION_LABELS for line in block[:author_index]):
+        raise RedditPageTextError(
+            f"comment {comment_number} operation area is incomplete"
+        )
+    return block[author_index], normalize_content(
+        "\n".join(block[time_index + 1 : vote_index])
     )
 
 
@@ -187,11 +248,11 @@ def _comment_metrics(
         zip(blocks, export.comments, strict=True),
         start=1,
     ):
-        if not _block_author_matches(block, expected.username):
+        actual_author, actual_content = _block_author_and_content(block, number)
+        if normalize_author(actual_author) != normalize_author(expected.username):
             raise RedditPageTextError(f"comment {number} author does not match JSON")
-        flattened = normalize_content("\n".join(block))
         expected_content = normalize_content(expected.content)
-        if not expected_content or flattened.count(expected_content) != 1:
+        if not expected_content or actual_content != expected_content:
             raise RedditPageTextError(
                 f"comment {number} content does not match JSON"
             )

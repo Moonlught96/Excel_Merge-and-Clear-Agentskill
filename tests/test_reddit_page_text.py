@@ -311,6 +311,88 @@ class RedditPageTextTest(unittest.TestCase):
         )
         self.assertEqual([3, None], [item.score for item in result.comments])
 
+    def test_rejects_nonstructural_author_substring_and_unparsed_candidates(
+        self,
+    ) -> None:
+        export = self.export_for_comments()
+        wrong_author = FIRST_COMMENT.replace(
+            "AutoModerator",
+            "wrong-author",
+            1,
+        ).replace(
+            "Wallpaper from",
+            "AutoModerator\nWallpaper from",
+            1,
+        )
+        cases = (
+            (
+                COMMENT_TEXT.replace(FIRST_COMMENT, wrong_author, 1),
+                "author",
+            ),
+            (
+                COMMENT_TEXT.replace(
+                    "What monitor? \U0001f914",
+                    "What monitor? \U0001f914 extra",
+                    1,
+                ),
+                "content",
+            ),
+            (
+                COMMENT_TEXT.replace(
+                    PROMOTED_BLOCK,
+                    "\nunexpected\n\u5206\u4eab\n" + PROMOTED_BLOCK,
+                    1,
+                ),
+                "operation",
+            ),
+            (
+                COMMENT_TEXT + PROMOTED_BLOCK + "\nunparsed trailing block\n",
+                "trailing",
+            ),
+        )
+        for text, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(RedditPageTextError, message):
+                    parse_reddit_page_text(
+                        self.write_text(PAGE_PREFIX + text),
+                        export,
+                    )
+
+    def test_rejects_promoted_content_and_unshared_operation_prefixes(self) -> None:
+        export = self.export_for_comments()
+        promoted_content_export = replace(
+            export,
+            comments=(
+                export.comments[0],
+                replace(export.comments[1], content="Advertisement"),
+            ),
+        )
+        with self.assertRaisesRegex(RedditPageTextError, "content"):
+            parse_reddit_page_text(
+                self.write_text(
+                    PAGE_PREFIX
+                    + COMMENT_TEXT.replace(
+                        "What monitor? \U0001f914",
+                        "Different copied content",
+                        1,
+                    )
+                ),
+                promoted_content_export,
+            )
+
+        with self.assertRaisesRegex(RedditPageTextError, "operation"):
+            parse_reddit_page_text(
+                self.write_text(
+                    PAGE_PREFIX
+                    + COMMENT_TEXT.replace(
+                        PROMOTED_BLOCK,
+                        "\n\u8d5e\u540c\n1\n" + PROMOTED_BLOCK,
+                        1,
+                    )
+                ),
+                export,
+            )
+
     def test_accepts_all_raw_time_forms_without_changing_them(self) -> None:
         for raw_time in (
             "刚刚",
