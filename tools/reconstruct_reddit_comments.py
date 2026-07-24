@@ -10,11 +10,15 @@ import shutil
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import TYPE_CHECKING, Iterator
 from uuid import uuid4
 
 from openpyxl import Workbook
 from openpyxl.utils.exceptions import IllegalCharacterError
+
+if TYPE_CHECKING:
+    from tools.reddit_free_csv import FreeRedditExport
+    from tools.reddit_saved_html import SavedRedditHtml
 
 try:
     from tools.output_path_safety import (
@@ -22,14 +26,12 @@ try:
         atomic_output_path,
         ensure_output_paths_safe,
     )
-    from tools.reddit_free_csv import FreeRedditExport, parse_free_reddit_csv
     from tools.reddit_json_export import RedditJsonError, parse_reddit_json
     from tools.reddit_json_text_merge import (
         JSON_TEXT_OUTPUT_HEADERS,
         reconstruct_json_text_rows,
     )
     from tools.reddit_page_text import RedditPageTextError, parse_reddit_page_text
-    from tools.reddit_saved_html import SavedRedditHtml, parse_saved_reddit_html
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from tools.output_path_safety import (
@@ -37,14 +39,12 @@ except ModuleNotFoundError:
         atomic_output_path,
         ensure_output_paths_safe,
     )
-    from tools.reddit_free_csv import FreeRedditExport, parse_free_reddit_csv
     from tools.reddit_json_export import RedditJsonError, parse_reddit_json
     from tools.reddit_json_text_merge import (
         JSON_TEXT_OUTPUT_HEADERS,
         reconstruct_json_text_rows,
     )
     from tools.reddit_page_text import RedditPageTextError, parse_reddit_page_text
-    from tools.reddit_saved_html import SavedRedditHtml, parse_saved_reddit_html
 
 
 OUTPUT_HEADERS = (

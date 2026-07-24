@@ -1046,10 +1046,22 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
             cwd=Path.cwd(), text=True, capture_output=True, check=False,
         )
 
-    def assert_safe_failure(self, completed: subprocess.CompletedProcess[str]) -> None:
+    def assert_safe_failure(
+        self,
+        completed: subprocess.CompletedProcess[str],
+        *page_only_secrets: str,
+    ) -> None:
         self.assertNotEqual(0, completed.returncode)
         self.assertNotIn("Traceback", completed.stderr)
-        for secret in ("SECRET-TITLE", "SECRET-BODY", "SECRET-AUTHOR", "SECRET-COMMENT"):
+        for secret in (
+            "SECRET-TITLE",
+            "SECRET-BODY",
+            "SECRET-AUTHOR",
+            "SECRET-COMMENT",
+            "c1",
+            "c2",
+            *page_only_secrets,
+        ):
             self.assertNotIn(secret, completed.stdout + completed.stderr)
         self.assertFalse(self.output_xlsx.exists())
         self.assertFalse(self.output_csv.exists())
@@ -1073,12 +1085,28 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
         completed = self.run_cli()
 
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertIn("JSON comment count: 2", completed.stdout)
-        self.assertIn("Page comment match count: 2", completed.stdout)
-        self.assertIn("Missing comment score count: 1", completed.stdout)
-        self.assertIn("Unavailable reported comment gap: 1", completed.stdout)
-        self.assertNotIn("SECRET-BODY", completed.stdout)
-        self.assertNotIn("SECRET-COMMENT", completed.stdout)
+        self.assertEqual(
+            [
+                f"Reddit JSON input: {self.json_path.resolve()}",
+                f"Reddit page text input: {self.page_text_path.resolve()}",
+                f"XLSX output: {self.output_xlsx.resolve()}",
+                f"CSV output: {self.output_csv.resolve()}",
+                "JSON comment count: 2",
+                "Page comment match count: 2",
+                "Missing comment score count: 1",
+                "Unavailable reported comment gap: 1",
+            ],
+            completed.stdout.splitlines(),
+        )
+        for secret in (
+            "SECRET-TITLE",
+            "SECRET-BODY",
+            "SECRET-AUTHOR",
+            "SECRET-COMMENT",
+            "c1",
+            "c2",
+        ):
+            self.assertNotIn(secret, completed.stdout + completed.stderr)
         sheet = load_workbook(self.output_xlsx, data_only=False).active
         self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), list(next(sheet.values)))
         self.assertEqual(99, sheet.cell(2, 5).value)
@@ -1102,14 +1130,14 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
 
     def test_invalid_json_page_mismatches_and_control_character_fail_safely(self) -> None:
         scenarios = (
-            ("invalid-json", lambda: self.json_path.write_text('{"title":"SECRET-TITLE"', encoding="utf-8")),
-            ("author", lambda: (self.write_json(), self.write_page(author="wrong"))),
-            ("content", lambda: (self.write_json(), self.write_page(content="wrong"))),
-            ("order", lambda: (self.write_json(), self.write_page(reverse=True))),
-            ("count", lambda: (self.write_json(), self.write_page(count="2"))),
-            ("control", lambda: (self.write_json(content="SECRET-COMMENT-1\u0001"), self.write_page(content="SECRET-COMMENT-1\u0001"))),
+            ("invalid-json", lambda: self.json_path.write_text('{"title":"SECRET-TITLE"', encoding="utf-8"), ()),
+            ("author", lambda: (self.write_json(), self.write_page(author="PAGE-ONLY-SECRET-AUTHOR")), ("PAGE-ONLY-SECRET-AUTHOR",)),
+            ("content", lambda: (self.write_json(), self.write_page(content="PAGE-ONLY-SECRET-CONTENT")), ("PAGE-ONLY-SECRET-CONTENT",)),
+            ("order", lambda: (self.write_json(), self.write_page(reverse=True)), ()),
+            ("count", lambda: (self.write_json(), self.write_page(count="2")), ()),
+            ("control", lambda: (self.write_json(content="SECRET-COMMENT-1\u0001"), self.write_page(content="SECRET-COMMENT-1\u0001")), ()),
         )
-        for name, arrange in scenarios:
+        for name, arrange, page_only_secrets in scenarios:
             with self.subTest(name=name):
                 self.json_path = self.directory / f"{name}.json"
                 self.page_text_path = self.directory / f"{name}.txt"
@@ -1117,7 +1145,7 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
                 self.output_csv = self.directory / f"{name}.csv"
                 arrange()
                 completed = self.run_cli()
-                self.assert_safe_failure(completed)
+                self.assert_safe_failure(completed, *page_only_secrets)
                 if name == "control":
                     self.assertIn("unsupported control character", completed.stderr)
 
@@ -1132,6 +1160,26 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
             self.assertIn(option, completed.stdout)
         for option in ("--free-csv", "--html", "--post-author", "--post-score", "--post-comment-count"):
             self.assertNotIn(option, completed.stdout)
+
+    def test_formal_cli_import_does_not_require_legacy_parsers(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys; "
+                    "sys.modules['tools.reddit_free_csv'] = None; "
+                    "sys.modules['tools.reddit_saved_html'] = None; "
+                    "import tools.reconstruct_reddit_comments"
+                ),
+            ],
+            cwd=Path.cwd(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
 
     def test_path_resolution_error_is_concise(self) -> None:
         stderr = io.StringIO()
