@@ -78,22 +78,21 @@ def _unescape_markdown_visible_text(value: str) -> str:
     return "".join(result)
 
 
-def _markdown_label_end(value: str, start: int) -> int | None:
-    depth = 1
-    index = start + 1
+def _markdown_label_ends(value: str) -> dict[int, int]:
+    starts: list[int] = []
+    ends: dict[int, int] = {}
+    index = 0
     while index < len(value):
         character = value[index]
         if character == "\\" and index + 1 < len(value):
             index += 2
             continue
         if character == "[":
-            depth += 1
-        elif character == "]":
-            depth -= 1
-            if depth == 0:
-                return index
+            starts.append(index)
+        elif character == "]" and starts:
+            ends[starts.pop()] = index
         index += 1
-    return None
+    return ends
 
 
 def _markdown_address_end(value: str, start: int) -> int:
@@ -116,6 +115,7 @@ def _markdown_address_end(value: str, start: int) -> int:
 
 def _visible_markdown_links(value: str) -> str:
     result: list[str] = []
+    label_ends = _markdown_label_ends(value)
     index = 0
     while index < len(value):
         if value[index] == "\\" and index + 1 < len(value):
@@ -127,7 +127,7 @@ def _visible_markdown_links(value: str) -> str:
             index += 1
             continue
 
-        label_end = _markdown_label_end(value, index)
+        label_end = label_ends.get(index)
         if label_end is None or label_end + 1 >= len(value):
             result.append(value[index])
             index += 1
@@ -138,9 +138,7 @@ def _visible_markdown_links(value: str) -> str:
             continue
 
         address_end = _markdown_address_end(value, label_end + 1)
-        result.append(
-            _unescape_markdown_visible_text(value[index + 1 : label_end])
-        )
+        result.append(value[index + 1 : label_end])
         index = address_end + 1
     return "".join(result)
 
@@ -150,18 +148,27 @@ def normalize_content(value: str) -> str:
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
     normalized = _visible_markdown_links(normalized)
     normalized = _MARKDOWN_HEADING.sub("", normalized)
-    normalized = re.sub(r"\*\*([^*\n]+)\*\*", r"\1", normalized)
-    normalized = re.sub(r"__([^_\n]+)__", r"\1", normalized)
     normalized = re.sub(
-        r"(?<!\*)\*([^*\n]+)\*(?!\*)",
+        r"(?<!\\)\*\*([^*\n]+)(?<!\\)\*\*",
         r"\1",
         normalized,
     )
     normalized = re.sub(
-        r"(?<!\w)_([^_\n]+)_(?!\w)",
+        r"(?<!\\)__([^_\n]+)(?<!\\)__",
         r"\1",
         normalized,
     )
+    normalized = re.sub(
+        r"(?<![\\*])\*([^*\n]+)(?<!\\)\*(?!\*)",
+        r"\1",
+        normalized,
+    )
+    normalized = re.sub(
+        r"(?<![\\\w])_([^_\n]+)(?<!\\)_(?!\w)",
+        r"\1",
+        normalized,
+    )
+    normalized = _unescape_markdown_visible_text(normalized)
     return _WHITESPACE.sub(" ", normalized).strip()
 
 

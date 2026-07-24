@@ -4,6 +4,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from tools import reddit_page_text
 from tools.reddit_json_export import (
     RedditJsonComment,
     RedditJsonExport,
@@ -279,6 +280,51 @@ class RedditPageTextTest(unittest.TestCase):
         for source, expected in cases:
             with self.subTest(source=source):
                 self.assertEqual(expected, normalize_content(source))
+
+    def test_markdown_link_labels_preserve_escaped_visible_formatting_marks(
+        self,
+    ) -> None:
+        cases = (
+            (r"[\*literal\*](https://example.invalid)", "*literal*"),
+            (r"[\_literal\_](https://example.invalid)", "_literal_"),
+            (r"[\*\*literal\*\*](https://example.invalid)", "**literal**"),
+            (r"[\# literal](https://example.invalid)", "# literal"),
+        )
+        for source, expected in cases:
+            with self.subTest(source=source):
+                self.assertEqual(expected, normalize_content(source))
+
+    def test_markdown_scanner_has_linear_character_access_for_unmatched_brackets(
+        self,
+    ) -> None:
+        class AccessBoundedString(str):
+            def __new__(
+                cls,
+                value: str,
+                access_budget: int,
+            ) -> "AccessBoundedString":
+                instance = super().__new__(cls, value)
+                instance.character_accesses = 0
+                instance.access_budget = access_budget
+                return instance
+
+            def __getitem__(self, key: int | slice) -> str:
+                if isinstance(key, int):
+                    self.character_accesses += 1
+                    if self.character_accesses > self.access_budget:
+                        raise AssertionError(
+                            "Markdown scanner exceeded linear character-access budget"
+                        )
+                return super().__getitem__(key)
+
+        source_length = 20_000
+        source = AccessBoundedString(
+            "[" * source_length,
+            access_budget=source_length * 8,
+        )
+
+        self.assertEqual(str(source), reddit_page_text._visible_markdown_links(source))
+        self.assertLessEqual(source.character_accesses, source.access_budget)
 
     def test_malformed_markdown_links_fail_safely_without_source_echo(self) -> None:
         malformed = (
