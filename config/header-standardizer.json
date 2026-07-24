@@ -54,6 +54,21 @@
       "required": false
     },
     {
+      "header": "电商平台评分",
+      "aliases": ["电商平台评分"],
+      "required": false
+    },
+    {
+      "header": "性别",
+      "aliases": ["性别"],
+      "required": false
+    },
+    {
+      "header": "年龄",
+      "aliases": ["年龄"],
+      "required": false
+    },
+    {
       "header": "哈希ID",
       "aliases": [],
       "required": false

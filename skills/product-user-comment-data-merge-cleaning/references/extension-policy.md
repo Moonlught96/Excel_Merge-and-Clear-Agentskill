@@ -7,7 +7,7 @@ All confirmed merge, standardization, cleaning, naming, confirmation, output, an
 Examples of locked behavior include:
 
 - deterministic processing without AI data judgment;
-- the nine-column standard output order including `哈希ID`;
+- the twelve-column standard output order: `评论日期`, `评论内容`, `产品名`, `电商平台评分`, `性别`, `年龄`, `哈希ID`, `点赞数`, `子评论数/追评数`, `一级评论`, `二级评论`, and `三级评论`;
 - Chinese main-comment threshold of 7 or fewer characters;
 - non-Chinese threshold of 4 or fewer words and unspaced fallback of 4 or fewer characters;
 - pure numeric legacy threshold;

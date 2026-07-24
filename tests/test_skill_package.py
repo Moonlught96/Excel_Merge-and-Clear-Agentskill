@@ -148,7 +148,8 @@ class SkillPackageTest(unittest.TestCase):
             "请确认以上产品名、数据来源和文件命名是否正确，并确认是否可以进入合并流程。",
             "是否已经提供并合并完所有需要合并的表格？你确认后我再进行标准化。",
             "是否已经提供完成所有 KOL 清理词？你确认后我再进行清洗。",
-            "`评论日期`、`评论内容`、`产品名`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
+            "`评论日期`、`评论内容`、`产品名`、`电商平台评分`、`性别`、`年龄`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
+            "the tool does not validate, infer, round, or rewrite a rating.",
             "`评论日期与产品`",
             "Beijing date (`UTC+8`)",
             "Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.",
@@ -310,7 +311,9 @@ class SkillPackageTest(unittest.TestCase):
         self.assertEqual("评论日期", cleaned.active.cell(row=1, column=1).value)
         self.assertEqual("2023-03-15", cleaned.active.cell(row=2, column=1).value)
         self.assertEqual("这个显示器挂灯使用体验确实很好", cleaned.active.cell(row=2, column=2).value)
-        hash_id = cleaned.active.cell(row=2, column=4).value
+        standardized_headers = [cell.value for cell in cleaned.active[1]]
+        hash_id_column = standardized_headers.index("哈希ID") + 1
+        hash_id = cleaned.active.cell(row=2, column=hash_id_column).value
         self.assertIsInstance(hash_id, str)
         self.assertRegex(hash_id, r"^[0-9a-f]{64}$")
 

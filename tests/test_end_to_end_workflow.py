@@ -19,6 +19,9 @@ EXPECTED_HEADERS = (
     "评论日期",
     "评论内容",
     "产品名",
+    "电商平台评分",
+    "性别",
+    "年龄",
     "哈希ID",
     "点赞数",
     "子评论数/追评数",
@@ -26,6 +29,8 @@ EXPECTED_HEADERS = (
     "二级评论",
     "三级评论",
 )
+HASH_ID_INDEX = EXPECTED_HEADERS.index("哈希ID")
+LIKES_INDEX = EXPECTED_HEADERS.index("点赞数")
 
 
 def write_source(path: Path, rows: list[list[object]]) -> None:
@@ -99,10 +104,10 @@ class EndToEndWorkflowTest(unittest.TestCase):
             finally:
                 cleaned_workbook.close()
             self.assertEqual(EXPECTED_HEADERS, cleaned_rows[0])
-            self.assertEqual("=1+1", cleaned_rows[1][4])
+            self.assertEqual("=1+1", cleaned_rows[1][LIKES_INDEX])
             self.assertEqual("这是另一条足够长的正常回复内容", cleaned_rows[2][1])
-            first_hash = cleaned_rows[1][3]
-            second_hash = cleaned_rows[2][3]
+            first_hash = cleaned_rows[1][HASH_ID_INDEX]
+            second_hash = cleaned_rows[2][HASH_ID_INDEX]
             self.assertRegex(first_hash, r"^[0-9a-f]{64}$")
             self.assertRegex(second_hash, r"^[0-9a-f]{64}$")
             self.assertEqual(first_hash, second_hash)
@@ -116,7 +121,7 @@ class EndToEndWorkflowTest(unittest.TestCase):
             with clean_result.output_csv.open("r", encoding="utf-8-sig", newline="") as csv_file:
                 csv_rows = list(csv.reader(csv_file))
             self.assertEqual(list(EXPECTED_HEADERS), csv_rows[0])
-            self.assertEqual([expected_hash, expected_hash], [row[3] for row in csv_rows[1:]])
+            self.assertEqual([expected_hash, expected_hash], [row[HASH_ID_INDEX] for row in csv_rows[1:]])
             csv_cells = [cell for row in csv_rows for cell in row]
             self.assertNotIn("user1", csv_cells)
             self.assertNotIn("北京", csv_cells)

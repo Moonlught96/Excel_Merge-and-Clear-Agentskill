@@ -7,12 +7,15 @@ Standardization outputs only these columns, in this exact order:
 1. `评论日期`
 2. `评论内容`
 3. `产品名`
-4. `哈希ID`
-5. `点赞数`
-6. `子评论数/追评数`
-7. `一级评论`
-8. `二级评论`
-9. `三级评论`
+4. `电商平台评分`
+5. `性别`
+6. `年龄`
+7. `哈希ID`
+8. `点赞数`
+9. `子评论数/追评数`
+10. `一级评论`
+11. `二级评论`
+12. `三级评论`
 
 Standardization must move the matched header and its complete column data together. It must not merely rename or reorder header text.
 
@@ -23,6 +26,9 @@ Only exact aliases registered in `config/header-standardizer.json` may be used.
 - `评论日期`: `评论日期`, `评论时间`, `评论日期与产品`, `timestamp`, `createTime`, `create_time`, `createdAt`, `created_at`, `createDate`, `create_date`, `publishedAt`, `published_at`, `publishedTime`, `published_time`, `published`, `date`, `Date`, `time`, `Time`, `commentTime`, `comment_time`, `Comment Published`, `Published At`
 - `评论内容`: `评论内容`, `评论`, `content`, `text`, `Text`, `comment`, `Comment`, `commentText`, `comment_text`, `Comment Text`, `message`, `body`
 - `产品名`: `产品名`, `购买产品`, `商品名称`, `商品`, `评论日期与产品`
+- `电商平台评分`: `电商平台评分`
+- `性别`: `性别`
+- `年龄`: `年龄`
 - `点赞数`: `点赞数`, `点赞量`, `Digg Count`, `like_count`, `likeCount`, `Like Count`, `likes`, `Likes`, `diggCount`, `digg_count`
 - `子评论数/追评数`: `子评论数/追评数`, `子评论数`, `子评论数（追评数）`, `追评数`, `评论数`, `回复数`, `replyCount`, `reply_count`, `Reply Count`, `replyCommentTotal`, `reply_comment_total`, `replies`, `Replies`
 - `一级评论`: `一级评论`, `一级评论内容`, `追评`, `replyText`, `reply_text`, `Reply Text`
@@ -34,7 +40,9 @@ Do not use AI, semantic similarity, spelling similarity, or content inspection t
 ## Required And Blank Columns
 
 - `评论日期`, `评论内容`, and `点赞数` require one unambiguous source match.
-- `产品名`, `子评论数/追评数`, `一级评论`, `二级评论`, and `三级评论` remain in the output when the source has no matching column; their values stay blank.
+- `产品名`, `电商平台评分`, `性别`, `年龄`, `子评论数/追评数`, `一级评论`, `二级评论`, and `三级评论` remain in the output when the source has no matching column; their values stay blank.
+- `电商平台评分` normally contains a source value from 1 through 5. The script copies the configured source column as-is and does not validate, infer, round, or rewrite ratings. `性别` and `年龄` are copied only; neither may be inferred.
+- `电商平台评分`, `性别`, and `年龄` are retained output fields only. They are never `哈希ID` identity sources.
 - `子评论数/追评数` is required in the standard output schema even when the source header is absent.
 - If a required source header is missing or any standard column matches more than one source column, stop and report the actual headers. Do not guess.
 - Do not infer `四级评论` or deeper levels unless the user explicitly extends the fixed schema.

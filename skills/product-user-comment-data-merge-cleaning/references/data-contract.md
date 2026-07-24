@@ -25,9 +25,12 @@
 
 The standardized workbook contains exactly these columns in this order:
 
-`评论日期`、`评论内容`、`产品名`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`
+`评论日期`、`评论内容`、`产品名`、`电商平台评分`、`性别`、`年龄`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`
 
 - Move each matched source header and all values below it together. Standardization must not only rename header text.
+- `电商平台评分`, `性别`, and `年龄` are optional retained columns. Copy only a configured exact header and its complete source column; leave the output column blank when the source column is absent.
+- E-commerce ratings normally use the source range 1-5, but the tool does not validate, infer, round, or rewrite a rating. It must never infer `性别` or `年龄`.
+- `电商平台评分`, `性别`, and `年龄` are never identity sources and must not affect `哈希ID` selection or derivation.
 - Omit raw account IDs, usernames, nicknames, IP, profile, and link metadata. A registered identity column may be read only in memory to generate `哈希ID`; its raw column is never copied to standardized or cleaned output.
 - Missing allowed columns remain present and blank according to the header-standardization reference.
 - Do not dynamically infer a fourth or deeper comment level.

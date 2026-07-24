@@ -23,7 +23,53 @@ from tools.standardize_excel_headers import (
 )
 
 
-EXPECTED_HEADER = ["评论日期", "评论内容", "产品名", "哈希ID", "点赞数", "子评论数/追评数", "一级评论", "二级评论", "三级评论"]
+EXPECTED_HEADER = [
+    "评论日期",
+    "评论内容",
+    "产品名",
+    "电商平台评分",
+    "性别",
+    "年龄",
+    "哈希ID",
+    "点赞数",
+    "子评论数/追评数",
+    "一级评论",
+    "二级评论",
+    "三级评论",
+]
+HASH_ID_INDEX = EXPECTED_HEADER.index("哈希ID")
+LIKES_INDEX = EXPECTED_HEADER.index("点赞数")
+
+
+def expected_standardized_row(
+    comment_date: object,
+    comment_content: object,
+    product_name: object = None,
+    *,
+    score: object = None,
+    gender: object = None,
+    age: object = None,
+    hash_id: object = None,
+    likes: object = None,
+    subcomment_count: object = None,
+    level_one: object = None,
+    level_two: object = None,
+    level_three: object = None,
+) -> tuple[object, ...]:
+    return (
+        comment_date,
+        comment_content,
+        product_name,
+        score,
+        gender,
+        age,
+        hash_id,
+        likes,
+        subcomment_count,
+        level_one,
+        level_two,
+        level_three,
+    )
 
 
 class StandardizeExcelHeadersTest(unittest.TestCase):
@@ -84,8 +130,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         standardized = load_workbook(output_path, read_only=False, data_only=False)
         self.assertEqual("=1+1", standardized.active.cell(row=2, column=2).value)
         self.assertEqual("s", standardized.active.cell(row=2, column=2).data_type)
-        self.assertEqual("=2+2", standardized.active.cell(row=2, column=5).value)
-        self.assertEqual("s", standardized.active.cell(row=2, column=5).data_type)
+        self.assertEqual("=2+2", standardized.active.cell(row=2, column=LIKES_INDEX + 1).value)
+        self.assertEqual("s", standardized.active.cell(row=2, column=LIKES_INDEX + 1).data_type)
 
     def test_compact_yyyymmdd_date_is_not_treated_as_unix_timestamp(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-compact-date"
@@ -151,8 +197,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(("2026/01/05", "评论 A", None), rows[1][:3])
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertEqual((3, 2, "一级 A", "二级 A", None), rows[1][4:])
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertEqual((3, 2, "一级 A", "二级 A", None), rows[1][LIKES_INDEX:])
         self.assertTrue(result.summary_json.exists())
 
         original = load_workbook(input_path, read_only=True, data_only=True)
@@ -161,6 +207,43 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             ("IP地址", "用户名称", "评论内容", "评论时间", "点赞数", "子评论数", "一级评论内容", "引用的评论内容", "其它列"),
             original_header,
         )
+
+    def test_copies_confirmed_profile_columns_and_keeps_them_blank_when_absent(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-profile-columns"
+        tmp.mkdir(parents=True, exist_ok=True)
+        populated_input_path = tmp / "populated.xlsx"
+        blank_input_path = tmp / "blank.xlsx"
+
+        populated_workbook = Workbook()
+        populated_sheet = populated_workbook.active
+        populated_sheet.append(["评论日期", "评论内容", "电商平台评分", "性别", "年龄", "点赞数"])
+        populated_sheet.append(["2026-07-24", "完整评论内容", 5, "女", 28, 3])
+        populated_workbook.save(populated_input_path)
+
+        blank_workbook = Workbook()
+        blank_sheet = blank_workbook.active
+        blank_sheet.append(["评论日期", "评论内容", "点赞数"])
+        blank_sheet.append(["2026-07-24", "完整评论内容", 3])
+        blank_workbook.save(blank_input_path)
+
+        populated_result = standardize_workbook(
+            populated_input_path,
+            load_config(),
+            output_dir=tmp / "populated-out",
+        )
+        blank_result = standardize_workbook(
+            blank_input_path,
+            load_config(),
+            output_dir=tmp / "blank-out",
+        )
+
+        populated_rows = self.read_standardized_rows(populated_result.output_xlsx)
+        blank_rows = self.read_standardized_rows(blank_result.output_xlsx)
+
+        self.assertEqual(tuple(EXPECTED_HEADER), populated_rows[0])
+        self.assertEqual((5, "女", 28), populated_rows[1][3:6])
+        self.assertEqual(tuple(EXPECTED_HEADER), blank_rows[0])
+        self.assertEqual((None, None, None), blank_rows[1][3:6])
 
     def test_rejects_missing_required_header_without_guessing(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-missing-header"
@@ -195,7 +278,16 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(
-            ("2026年6月21日", "评论 A", "触摸开关 / 黑", None, 3, 2, "一级 A", "二级 A", "三级 A"),
+            expected_standardized_row(
+                "2026年6月21日",
+                "评论 A",
+                "触摸开关 / 黑",
+                likes=3,
+                subcomment_count=2,
+                level_one="一级 A",
+                level_two="二级 A",
+                level_three="三级 A",
+            ),
             rows[1],
         )
 
@@ -216,7 +308,19 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2026/06/21", "评论 A", "无线护眼屏幕挂灯", None, 3, 2, "一级 A", "二级 A", "三级 A"), rows[1])
+        self.assertEqual(
+            expected_standardized_row(
+                "2026/06/21",
+                "评论 A",
+                "无线护眼屏幕挂灯",
+                likes=3,
+                subcomment_count=2,
+                level_one="一级 A",
+                level_two="二级 A",
+                level_three="三级 A",
+            ),
+            rows[1],
+        )
 
     def test_maps_confirmed_taobao_aliases_to_standard_columns(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-confirmed-taobao-aliases"
@@ -236,8 +340,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(("2026年2月12日", "评论 A", "浅灰色[MA270U(27英寸4K)]"), rows[1][:3])
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertEqual((3, 5, "追评 A", None, None), rows[1][4:])
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertEqual((3, 5, "追评 A", None, None), rows[1][LIKES_INDEX:])
 
     def test_maps_confirmed_english_comment_aliases_and_drops_id_risk_columns(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-confirmed-english-comment-aliases"
@@ -257,8 +361,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(("2023-03-15", "评论 A", None), rows[1][:3])
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertEqual((2, 0, None, None, None), rows[1][4:])
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertEqual((2, 0, None, None, None), rows[1][LIKES_INDEX:])
 
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         self.assertEqual(
@@ -284,8 +388,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(("2023-03-15", "评论 A", None), rows[1][:3])
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertEqual(("2", None, None, None, None), rows[1][4:])
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertEqual(("2", None, None, None, None), rows[1][LIKES_INDEX:])
 
     def test_standardizes_csv_input_with_same_header_mapping_rules(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-csv-input"
@@ -303,8 +407,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(("2023-03-15", "评论 A", None), rows[1][:3])
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertEqual(("2", "0", None, None, None), rows[1][4:])
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertEqual(("2", "0", None, None, None), rows[1][LIKES_INDEX:])
 
     def test_maps_tiktok_comment_exporter_aliases_without_ai(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-aliases"
@@ -321,7 +425,15 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["raw"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2023-03-15", "This monitor light works great", None, None, "4", "7", None, None, None), rows[1])
+        self.assertEqual(
+            expected_standardized_row(
+                "2023-03-15",
+                "This monitor light works great",
+                likes="4",
+                subcomment_count="7",
+            ),
+            rows[1],
+        )
 
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         self.assertEqual(["id", "uniqueId"], summary["sheets"][0]["configured_drop_headers_found"])
@@ -342,8 +454,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(("2023-03-15", "This monitor light works great", None), rows[1][:3])
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertEqual(("4", "7", None, None, None), rows[1][4:])
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertEqual(("4", "7", None, None, None), rows[1][LIKES_INDEX:])
 
     def test_maps_confirmed_tiktok_chinese_datetime_without_time_output(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-chinese-datetime"
@@ -360,7 +472,15 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["raw"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2026-07-07", "This monitor light works great", None, None, "4", "7", None, None, None), rows[1])
+        self.assertEqual(
+            expected_standardized_row(
+                "2026-07-07",
+                "This monitor light works great",
+                likes="4",
+                subcomment_count="7",
+            ),
+            rows[1],
+        )
 
     def test_maps_youtube_comment_aliases_and_iso_time_to_beijing_date(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-youtube-aliases"
@@ -379,7 +499,16 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2026-07-09", "Great light for my desk", None, None, 12, 3, "Thanks for sharing", None, None), rows[1])
+        self.assertEqual(
+            expected_standardized_row(
+                "2026-07-09",
+                "Great light for my desk",
+                likes=12,
+                subcomment_count=3,
+                level_one="Thanks for sharing",
+            ),
+            rows[1],
+        )
 
     def test_maps_youtube_relative_published_at_to_beijing_year_or_month(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-youtube-relative-published-at"
@@ -406,10 +535,10 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual(("2025", "One year old comment", None, None, 1, 0, None, None, None), rows[1])
-        self.assertEqual(("2024", "Two years old comment", None, None, 2, 0, None, None, None), rows[2])
-        self.assertEqual(("2025-10", "Nine months old comment", None, None, 3, 0, None, None, None), rows[3])
-        self.assertEqual(("2026-03", "Four months old comment", None, None, 4, 0, None, None, None), rows[4])
+        self.assertEqual(expected_standardized_row("2025", "One year old comment", likes=1, subcomment_count=0), rows[1])
+        self.assertEqual(expected_standardized_row("2024", "Two years old comment", likes=2, subcomment_count=0), rows[2])
+        self.assertEqual(expected_standardized_row("2025-10", "Nine months old comment", likes=3, subcomment_count=0), rows[3])
+        self.assertEqual(expected_standardized_row("2026-03", "Four months old comment", likes=4, subcomment_count=0), rows[4])
 
     def test_hashes_verified_youtube_user_id_without_exposing_raw_id_in_summary(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-user-id"
@@ -427,7 +556,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         standardized = load_workbook(result.output_xlsx, read_only=True, data_only=True)
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
         summary_text = result.summary_json.read_text(encoding="utf-8")
         self.assertNotIn("UC-secret-user", summary_text)
         summary = json.loads(summary_text)
@@ -495,7 +624,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         second = self.standardize_with_hash(input_path, tmp / "second", "xiaohongshu")
         first_rows = list(load_workbook(first.output_xlsx, read_only=True, data_only=True).active.iter_rows(values_only=True))
         second_rows = list(load_workbook(second.output_xlsx, read_only=True, data_only=True).active.iter_rows(values_only=True))
-        self.assertEqual(first_rows[1][3], second_rows[1][3])
+        self.assertEqual(first_rows[1][HASH_ID_INDEX], second_rows[1][HASH_ID_INDEX])
 
     def test_hashes_bilibili_username_as_display_name_without_exposing_raw_name(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-hash-bilibili-display-name"
@@ -511,8 +640,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         result = self.standardize_with_hash(input_path, tmp / "out", "B站")
         rows = self.read_standardized_rows(result.output_xlsx, "Comments")
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertEqual(rows[1][3], rows[2][3])
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertEqual(rows[1][HASH_ID_INDEX], rows[2][HASH_ID_INDEX])
         self.assertNotIn("username", rows[0])
         self.assertNotIn("same-secret-name", str(rows))
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
@@ -535,8 +664,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         result = self.standardize_with_hash(input_path, tmp / "out", "youtube")
         rows = self.read_standardized_rows(result.output_xlsx)
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertIsNone(rows[2][3])
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertIsNone(rows[2][HASH_ID_INDEX])
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         hash_summary = summary["sheets"][0]["hash_id"]
         self.assertEqual("account_id", hash_summary["identity_type"])
@@ -557,8 +686,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         result = self.standardize_with_hash(input_path, tmp / "out", "youtube")
         rows = self.read_standardized_rows(result.output_xlsx)
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertEqual(rows[1][3], rows[2][3])
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertEqual(rows[1][HASH_ID_INDEX], rows[2][HASH_ID_INDEX])
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         hash_summary = summary["sheets"][0]["hash_id"]
         self.assertEqual("display_name", hash_summary["identity_type"])
@@ -578,7 +707,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         result = self.standardize_with_hash(input_path, tmp / "out", "YouTube")
         rows = self.read_standardized_rows(result.output_xlsx)
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         hash_summary = summary["sheets"][0]["hash_id"]
         self.assertEqual("author", hash_summary["source_header"])
@@ -608,8 +737,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
         first_rows = self.read_standardized_rows(first.output_xlsx)
         second_rows = self.read_standardized_rows(second.output_xlsx)
-        self.assertRegex(second_rows[1][3], r"^[0-9a-f]{64}$")
-        self.assertEqual(first_rows[1][3], second_rows[1][3])
+        self.assertRegex(second_rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
+        self.assertEqual(first_rows[1][HASH_ID_INDEX], second_rows[1][HASH_ID_INDEX])
         summary = json.loads(second.summary_json.read_text(encoding="utf-8"))
         hash_summary = summary["sheets"][0]["hash_id"]
         self.assertEqual("author_name", hash_summary["source_header"])
@@ -627,7 +756,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
 
         result = self.standardize_with_hash(input_path, tmp / "out", "小红书")
         rows = self.read_standardized_rows(result.output_xlsx)
-        self.assertRegex(rows[1][3], r"^[0-9a-f]{64}$")
+        self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         hash_summary = summary["sheets"][0]["hash_id"]
         self.assertEqual("用户名称", hash_summary["source_header"])
@@ -658,7 +787,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
                     self.hash_context,
                     self.hash_config,
                 )
-                self.assertEqual(expected_hash, rows[1][3])
+                self.assertEqual(expected_hash, rows[1][HASH_ID_INDEX])
                 if case_name == "username-present":
                     fallback_hash = hash_display_name(
                         "fallback-name",
@@ -666,7 +795,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
                         self.hash_context,
                         self.hash_config,
                     )
-                    self.assertNotEqual(fallback_hash, rows[1][3])
+                    self.assertNotEqual(fallback_hash, rows[1][HASH_ID_INDEX])
                 summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
                 hash_summary = summary["sheets"][0]["hash_id"]
                 self.assertEqual(expected_header, hash_summary["source_header"])
@@ -697,7 +826,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
                     self.hash_context,
                     self.hash_config,
                 )
-                self.assertEqual(expected_hash, rows[1][3])
+                self.assertEqual(expected_hash, rows[1][HASH_ID_INDEX])
                 if platform == "taobao":
                     fallback_hash = hash_display_name(
                         "other-name",
@@ -705,7 +834,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
                         self.hash_context,
                         self.hash_config,
                     )
-                    self.assertNotEqual(fallback_hash, rows[1][3])
+                    self.assertNotEqual(fallback_hash, rows[1][HASH_ID_INDEX])
                 summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
                 hash_summary = summary["sheets"][0]["hash_id"]
                 self.assertEqual(expected_header, hash_summary["source_header"])
@@ -731,7 +860,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
 
         rows = self.read_standardized_rows(result.output_xlsx, "Comments")
-        self.assertIsNone(rows[1][3])
+        self.assertIsNone(rows[1][HASH_ID_INDEX])
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
         hash_summary = summary["sheets"][0]["hash_id"]
         self.assertIsNone(hash_summary["identity_type"])
@@ -830,7 +959,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         standardized = load_workbook(result.output_xlsx, read_only=True, data_only=False)
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
-        self.assertEqual("=1+1", rows[1][4])
+        self.assertEqual("=1+1", rows[1][LIKES_INDEX])
 
 
 
