@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -19,6 +20,7 @@ from tools.reconstruct_reddit_comments import (
     reconstruct_rows,
     write_outputs,
 )
+from tools.reddit_json_text_merge import JSON_TEXT_OUTPUT_HEADERS
 
 
 class ReconstructRedditRowsTests(unittest.TestCase):
@@ -395,6 +397,7 @@ class RedditOutputTests(unittest.TestCase):
     def write(self, rows: list[dict[str, str | int]], *, overwrite: bool = False) -> None:
         write_outputs(
             rows,
+            headers=OUTPUT_HEADERS,
             input_paths=(self.input_csv, self.input_html),
             output_xlsx=self.output_xlsx,
             output_csv=self.output_csv,
@@ -423,6 +426,50 @@ class RedditOutputTests(unittest.TestCase):
             expected = [source_row[header] for header in OUTPUT_HEADERS]
             self.assertEqual(expected, list(xlsx_rows[row_number]))
             self.assertEqual([str(value) for value in expected], csv_rows[row_number])
+
+    def test_writes_json_text_headers_integer_scores_and_formula_like_text(self) -> None:
+        json_path = self.directory / "export.json"
+        page_text_path = self.directory / "page.txt"
+        json_path.write_text("{}", encoding="utf-8")
+        page_text_path.write_text("page", encoding="utf-8")
+        rows = [
+            {
+                "Title": "Title",
+                "Post Body": "=FORMULA-LIKE-JSON-TEXT",
+                "Post Author": "poster",
+                "Post Time": "8 hours ago",
+                "Post Score": 12,
+                "Post Comment Count": 2,
+                "Author": "commenter",
+                "Time": "2026-07-23",
+                "Score": 7,
+                "Thread Level": 0,
+                "Is Reply": "No",
+                "Comment": "Comment",
+                "Comment ID": "c1",
+                "Parent ID": "p1",
+            }
+        ]
+
+        write_outputs(
+            rows,
+            headers=JSON_TEXT_OUTPUT_HEADERS,
+            input_paths=(json_path, page_text_path),
+            output_xlsx=self.output_xlsx,
+            output_csv=self.output_csv,
+            overwrite=False,
+        )
+
+        sheet = load_workbook(self.output_xlsx, data_only=False).active
+        self.assertEqual(JSON_TEXT_OUTPUT_HEADERS, list(sheet.values)[0])
+        self.assertEqual(12, sheet.cell(2, 5).value)
+        self.assertEqual(7, sheet.cell(2, 9).value)
+        self.assertEqual("s", sheet.cell(2, 2).data_type)
+        self.assertEqual("=FORMULA-LIKE-JSON-TEXT", sheet.cell(2, 2).value)
+        csv_rows = self.csv_rows()
+        self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), csv_rows[0])
+        self.assertEqual("12", csv_rows[1][4])
+        self.assertEqual("7", csv_rows[1][8])
 
     def test_csv_has_utf8_bom_and_round_trips_special_content(self) -> None:
         special = '中文 😀, "quoted"\nsecond line'
@@ -527,6 +574,7 @@ class RedditOutputTests(unittest.TestCase):
         with self.assertRaises(OutputPathConflictError):
             write_outputs(
                 [self.row()],
+                headers=OUTPUT_HEADERS,
                 input_paths=(self.input_csv, self.input_html),
                 output_xlsx=self.input_csv,
                 output_csv=self.output_csv,
@@ -540,6 +588,7 @@ class RedditOutputTests(unittest.TestCase):
         with self.assertRaises(OutputPathConflictError):
             write_outputs(
                 [self.row()],
+                headers=OUTPUT_HEADERS,
                 input_paths=(self.input_csv, self.input_html),
                 output_xlsx=self.output_xlsx,
                 output_csv=self.output_xlsx,
@@ -555,6 +604,7 @@ class RedditOutputTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             write_outputs(
                 [self.row()],
+                headers=OUTPUT_HEADERS,
                 input_paths=(self.input_csv, self.input_html),
                 output_xlsx=swapped_xlsx,
                 output_csv=swapped_csv,
@@ -581,6 +631,7 @@ class RedditOutputTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     write_outputs(
                         [self.row()],
+                        headers=OUTPUT_HEADERS,
                         input_paths=(self.input_csv, self.input_html),
                         output_xlsx=wrong_xlsx,
                         output_csv=wrong_csv,
@@ -599,6 +650,7 @@ class RedditOutputTests(unittest.TestCase):
 
         write_outputs(
             [self.row()],
+            headers=OUTPUT_HEADERS,
             input_paths=(self.input_csv, self.input_html),
             output_xlsx=uppercase_xlsx,
             output_csv=uppercase_csv,
@@ -941,339 +993,158 @@ class RedditOutputTests(unittest.TestCase):
         )
 
 
-class RedditReconstructionCliTests(unittest.TestCase):
-    SCRIPT = (
-        Path(__file__).resolve().parents[1]
-        / "tools"
-        / "reconstruct_reddit_comments.py"
-    )
+class RedditJsonPageTextCliTests(unittest.TestCase):
+    SCRIPT = Path(__file__).resolve().parents[1] / "tools" / "reconstruct_reddit_comments.py"
 
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
         self.directory = Path(self.temporary_directory.name)
-        self.free_csv = self.directory / "free.csv"
-        self.html = self.directory / "saved.html"
+        self.json_path = self.directory / "export.json"
+        self.page_text_path = self.directory / "page.txt"
         self.output_xlsx = self.directory / "result.xlsx"
         self.output_csv = self.directory / "result.csv"
 
-    def tearDown(self) -> None:
-        self.temporary_directory.cleanup()
-
-    def write_free_csv(
-        self,
-        *,
-        author: str = "SECRET_FREE_AUTHOR",
-        comment: str = "SECRET_COMMENT_TEXT",
-        body: str = "SECRET_POST_BODY",
-        comment_ids: tuple[str, ...] = ("c1",),
-    ) -> None:
-        with self.free_csv.open(
-            "w", encoding="utf-8-sig", newline=""
-        ) as handle:
-            writer = csv.writer(handle)
-            writer.writerows(
-                [
-                    ["title", "Fixture title"],
-                    ["body", body],
-                    [
-                        "url",
-                        "https://www.reddit.com/r/test/comments/post1/fixture/",
-                    ],
-                    [],
-                    ["author_name", "date_time", "comment", "comment_url"],
-                    *[
-                        [
-                            author,
-                            "2026-07-23",
-                            f"{comment}-{index}",
-                            f"https://www.reddit.com/comment/{comment_id}/",
-                        ]
-                        for index, comment_id in enumerate(comment_ids, start=1)
-                    ],
-                ]
-            )
-
-    def write_html(
-        self,
-        *,
-        author: str | None = "HTML_POST_AUTHOR",
-        score: str | None = "99",
-        comment_count: str | None = "1",
-        comments: tuple[tuple[str, str, str, str], ...] = (
-            ("c1", "post1", "0", "7"),
-        ),
-    ) -> None:
-        attributes = ['thingid="t3_post1"']
-        if author is not None:
-            attributes.append(f'author="{author}"')
-        if score is not None:
-            attributes.append(f'score="{score}"')
-        if comment_count is not None:
-            attributes.append(f'comment-count="{comment_count}"')
-        comment_nodes = "\n".join(
-            (
-                f'<shreddit-comment thingid="t1_{comment_id}" '
-                f'parentid="{parent_id}" depth="{depth}" score="{item_score}">'
-                "</shreddit-comment>"
-            )
-            for comment_id, parent_id, depth, item_score in comments
-        )
-        self.html.write_text(
-            f"<shreddit-post {' '.join(attributes)}>"
-            f"{comment_nodes}</shreddit-post>",
-            encoding="utf-8",
-        )
-
-    def run_cli(self, *extra_arguments: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [
-                sys.executable,
-                str(self.SCRIPT),
-                "--free-csv",
-                str(self.free_csv),
-                "--html",
-                str(self.html),
-                "--output-xlsx",
-                str(self.output_xlsx),
-                "--output-csv",
-                str(self.output_csv),
-                *extra_arguments,
+    def write_json(self, *, content: str = "SECRET-COMMENT-1") -> None:
+        payload = {
+            "meta": {"completeness": "complete", "collectedCommentCount": 2,
+                     "reportedByApi": 3, "discrepancy": 1, "failedMore": 0,
+                     "failedNodes": [], "failedReasons": [], "failedDetails": []},
+            "post": {"id": "p1", "subreddit": "python", "title": "SECRET-TITLE",
+                     "content": "SECRET-BODY", "author": "SECRET-AUTHOR", "num_comments": 3},
+            "comments": [
+                {"id": "c1", "parent_id": "p1", "content": content, "depth": 0,
+                 "username": "alpha", "date": "exact-time-1", "created_utc": 1},
+                {"id": "c2", "parent_id": "c1", "content": "SECRET-COMMENT-2", "depth": 1,
+                 "username": "beta", "date": "exact-time-2", "created_utc": 2},
             ],
-            cwd=self.SCRIPT.parents[1],
-            capture_output=True,
-            text=True,
-            check=False,
+        }
+        self.json_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def write_page(
+        self,
+        *,
+        author: str = "alpha",
+        content: str = "SECRET-COMMENT-1",
+        count: str = "3",
+        reverse: bool = False,
+    ) -> None:
+        first = "\n".join((author, "\u20228\u5c0f\u65f6\u524d", content, "", "\u8d5e\u540c", "3", "\u53cd\u5bf9", "\u56de\u590d", "\u5956\u52b1", "\u5206\u4eab"))
+        second = "\n".join(("beta", "\u20228\u5c0f\u65f6\u524d", "SECRET-COMMENT-2", "", "\u8d5e\u540c\u6295\u7968", "\u53cd\u5bf9", "\u56de\u590d", "\u5956\u52b1", "\u5206\u4eab"))
+        comments = (second, first) if reverse else (first, second)
+        self.page_text_path.write_text("\n".join((
+            "Reddit", "r/python", "u/SECRET-AUTHOR", "SECRET-AUTHOR \u5934\u50cf",
+            "8\u5c0f\u65f6\u524d", "SECRET-TITLE", "\u6b63\u6587", "\u8d5e\u540c", "99", "\u53cd\u5bf9", count,
+            "\u8f6c\u5230\u8bc4\u8bba", "\u8bc4\u8bba\u533a\u57df", *comments,
+        )), encoding="utf-8")
+
+    def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "tools/reconstruct_reddit_comments.py", "--json", str(self.json_path),
+             "--page-text", str(self.page_text_path), "--output-xlsx", str(self.output_xlsx),
+             "--output-csv", str(self.output_csv), *args],
+            cwd=Path.cwd(), text=True, capture_output=True, check=False,
         )
 
-    def output_rows(self) -> list[list[str]]:
-        with self.output_csv.open(
-            "r", encoding="utf-8-sig", newline=""
-        ) as handle:
-            return list(csv.reader(handle))
-
-    def assert_no_transaction_residue(self) -> None:
-        residue = [
-            path.name
-            for path in self.directory.iterdir()
-            if "reddit-output.lock" in path.name
-            or "reddit-stage" in path.name
-            or "reddit-backup" in path.name
-        ]
-        self.assertEqual([], residue)
-
-    def test_happy_path_creates_outputs_reports_safe_counts_and_paths(self) -> None:
-        self.write_free_csv(comment_ids=("c1", "c2"))
-        self.write_html(
-            comment_count="2",
-            comments=(
-                ("c1", "post1", "0", "7"),
-                ("c2", "c1", "1", ""),
-            ),
+    def assert_safe_failure(self, completed: subprocess.CompletedProcess[str]) -> None:
+        self.assertNotEqual(0, completed.returncode)
+        self.assertNotIn("Traceback", completed.stderr)
+        for secret in ("SECRET-TITLE", "SECRET-BODY", "SECRET-AUTHOR", "SECRET-COMMENT"):
+            self.assertNotIn(secret, completed.stdout + completed.stderr)
+        self.assertFalse(self.output_xlsx.exists())
+        self.assertFalse(self.output_csv.exists())
+        self.assertEqual(
+            [],
+            [
+                path.name
+                for path in self.directory.iterdir()
+                if path.suffix.lower() in (".xlsx", ".csv")
+            ],
         )
+        self.assertEqual([], [
+            path.name for path in self.directory.iterdir()
+            if any(marker in path.name for marker in ("reddit-stage", "reddit-backup", ".lock"))
+        ])
+
+    def test_json_page_text_happy_path_writes_safe_summary(self) -> None:
+        self.write_json()
+        self.write_page()
 
         completed = self.run_cli()
 
         self.assertEqual(0, completed.returncode, completed.stderr)
-        self.assertTrue(self.output_xlsx.is_file())
-        self.assertTrue(self.output_csv.is_file())
-        self.assertEqual(3, len(self.output_rows()))
-        sheet = load_workbook(self.output_xlsx).active
-        self.assertEqual(3, sheet.max_row)
-        self.assertEqual("c2", sheet.cell(3, 14).value)
-        expected_lines = [
-            f"Free CSV input: {self.free_csv.resolve()}",
-            f"Reddit HTML input: {self.html.resolve()}",
-            f"XLSX output: {self.output_xlsx.resolve()}",
-            f"CSV output: {self.output_csv.resolve()}",
-            "Comment total: 2",
-            "HTML match total: 2",
-            "Missing comment score count: 1",
-        ]
-        self.assertEqual(expected_lines, completed.stdout.splitlines())
-        for secret in (
-            "SECRET_FREE_AUTHOR",
-            "SECRET_COMMENT_TEXT",
-            "SECRET_POST_BODY",
-            "HTML_POST_AUTHOR",
-            "c1",
-            "c2",
-        ):
-            self.assertNotIn(secret, completed.stdout)
-        self.assertEqual("", completed.stderr)
-        self.assert_no_transaction_residue()
+        self.assertIn("JSON comment count: 2", completed.stdout)
+        self.assertIn("Page comment match count: 2", completed.stdout)
+        self.assertIn("Missing comment score count: 1", completed.stdout)
+        self.assertIn("Unavailable reported comment gap: 1", completed.stdout)
+        self.assertNotIn("SECRET-BODY", completed.stdout)
+        self.assertNotIn("SECRET-COMMENT", completed.stdout)
+        sheet = load_workbook(self.output_xlsx, data_only=False).active
+        self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), list(next(sheet.values)))
+        self.assertEqual(99, sheet.cell(2, 5).value)
+        self.assertEqual(3, sheet.cell(2, 9).value)
+        self.assertEqual("c2", sheet.cell(3, 13).value)
+        self.assertIsNone(sheet.cell(3, 9).value)
 
-    def test_explicit_values_fill_missing_html_post_metadata(self) -> None:
-        self.write_free_csv()
-        self.write_html(author=None, score=None, comment_count=None)
-
-        completed = self.run_cli(
-            "--post-author",
-            "fallback author",
-            "--post-score",
-            "fallback score",
-            "--post-comment-count",
-            "fallback count",
-        )
-
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        row = self.output_rows()[1]
-        self.assertEqual("fallback author", row[3])
-        self.assertEqual("fallback score", row[4])
-        self.assertEqual("fallback count", row[5])
-        self.assertNotIn("fallback author", completed.stdout)
-
-    def test_html_post_metadata_takes_precedence_over_fallback_arguments(self) -> None:
-        self.write_free_csv()
-        self.write_html(author="right author", score="8", comment_count="4")
-
-        completed = self.run_cli(
-            "--post-author",
-            "wrong author",
-            "--post-score",
-            "wrong score",
-            "--post-comment-count",
-            "wrong count",
-        )
-
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        row = self.output_rows()[1]
-        self.assertEqual(["right author", "8", "4"], row[3:6])
-        self.assertNotIn("wrong author", completed.stdout)
-
-    def test_existing_outputs_require_overwrite_and_stay_unchanged_on_rejection(
-        self,
-    ) -> None:
-        self.write_free_csv()
-        self.write_html()
-        first = self.run_cli()
-        self.assertEqual(0, first.returncode, first.stderr)
-        old_xlsx = self.output_xlsx.read_bytes()
-        old_csv = self.output_csv.read_bytes()
+    def test_overwrite_rejection_preserves_pair_and_overwrite_succeeds(self) -> None:
+        self.write_json()
+        self.write_page()
+        self.assertEqual(0, self.run_cli().returncode)
+        old_xlsx, old_csv = self.output_xlsx.read_bytes(), self.output_csv.read_bytes()
 
         rejected = self.run_cli()
 
         self.assertNotEqual(0, rejected.returncode)
+        self.assertNotIn("Traceback", rejected.stderr)
         self.assertEqual(old_xlsx, self.output_xlsx.read_bytes())
         self.assertEqual(old_csv, self.output_csv.read_bytes())
-        self.assertNotIn("Traceback", rejected.stderr)
-        overwritten = self.run_cli("--overwrite")
-        self.assertEqual(0, overwritten.returncode, overwritten.stderr)
-        self.assert_no_transaction_residue()
+        self.assertEqual(0, self.run_cli("--overwrite").returncode)
 
-    def test_incomplete_html_or_post_metadata_fails_safely_without_outputs(
-        self,
-    ) -> None:
+    def test_invalid_json_page_mismatches_and_control_character_fail_safely(self) -> None:
         scenarios = (
-            (
-                "missing-comment",
-                {"comments": ()},
-                (),
-                "Missing HTML comments: c1",
-            ),
-            (
-                "invalid-hierarchy",
-                {"comments": (("c1", "", "", "7"),)},
-                (),
-                "Invalid hierarchy: c1",
-            ),
-            (
-                "missing-post-metadata",
-                {"author": None},
-                (),
-                "Missing required post field Post Author",
-            ),
+            ("invalid-json", lambda: self.json_path.write_text('{"title":"SECRET-TITLE"', encoding="utf-8")),
+            ("author", lambda: (self.write_json(), self.write_page(author="wrong"))),
+            ("content", lambda: (self.write_json(), self.write_page(content="wrong"))),
+            ("order", lambda: (self.write_json(), self.write_page(reverse=True))),
+            ("count", lambda: (self.write_json(), self.write_page(count="2"))),
+            ("control", lambda: (self.write_json(content="SECRET-COMMENT-1\u0001"), self.write_page(content="SECRET-COMMENT-1\u0001"))),
         )
-        for name, html_options, arguments, expected_error in scenarios:
+        for name, arrange in scenarios:
             with self.subTest(name=name):
-                self.free_csv = self.directory / f"{name}.csv"
-                self.html = self.directory / f"{name}.html"
+                self.json_path = self.directory / f"{name}.json"
+                self.page_text_path = self.directory / f"{name}.txt"
                 self.output_xlsx = self.directory / f"{name}.xlsx"
-                self.output_csv = self.directory / f"{name}-output.csv"
-                self.write_free_csv()
-                self.write_html(**html_options)
+                self.output_csv = self.directory / f"{name}.csv"
+                arrange()
+                completed = self.run_cli()
+                self.assert_safe_failure(completed)
+                if name == "control":
+                    self.assertIn("unsupported control character", completed.stderr)
 
-                completed = self.run_cli(*arguments)
-
-                self.assertNotEqual(0, completed.returncode)
-                self.assertIn(expected_error, completed.stderr)
-                self.assertNotIn("Traceback", completed.stderr)
-                for secret in (
-                    "SECRET_FREE_AUTHOR",
-                    "SECRET_COMMENT_TEXT",
-                    "SECRET_POST_BODY",
-                    "HTML_POST_AUTHOR",
-                ):
-                    self.assertNotIn(secret, completed.stderr)
-                self.assertFalse(self.output_xlsx.exists())
-                self.assertFalse(self.output_csv.exists())
-                self.assert_no_transaction_residue()
-
-    def test_argparse_help_and_missing_required_arguments(self) -> None:
-        help_result = subprocess.run(
-            [sys.executable, str(self.SCRIPT), "--help"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        missing_result = subprocess.run(
-            [sys.executable, str(self.SCRIPT)],
-            capture_output=True,
-            text=True,
-            check=False,
+    def test_help_has_only_json_page_text_workflow_options(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, "tools/reconstruct_reddit_comments.py", "--help"],
+            cwd=Path.cwd(), text=True, capture_output=True, check=False,
         )
 
-        self.assertEqual(0, help_result.returncode)
-        for option in (
-            "--free-csv",
-            "--html",
-            "--output-xlsx",
-            "--output-csv",
-            "--post-author",
-            "--post-score",
-            "--post-comment-count",
-            "--overwrite",
-        ):
-            self.assertIn(option, help_result.stdout)
-        self.assertEqual(2, missing_result.returncode)
-        self.assertIn("required", missing_result.stderr)
-        self.assertNotIn("Traceback", missing_result.stderr)
+        self.assertEqual(0, completed.returncode)
+        for option in ("--json", "--page-text", "--output-xlsx", "--output-csv", "--overwrite"):
+            self.assertIn(option, completed.stdout)
+        for option in ("--free-csv", "--html", "--post-author", "--post-score", "--post-comment-count"):
+            self.assertNotIn(option, completed.stdout)
 
-    def test_path_resolution_os_error_is_concise_and_does_not_escape_main(
-        self,
-    ) -> None:
+    def test_path_resolution_error_is_concise(self) -> None:
         stderr = io.StringIO()
-        escaped_error: OSError | None = None
-        with patch.object(
-            Path,
-            "resolve",
-            side_effect=OSError("simulated path resolution failure"),
-        ):
+        with patch.object(Path, "resolve", side_effect=OSError("simulated path resolution failure")):
             with patch.object(sys, "stderr", stderr):
-                try:
-                    return_code = reconstruct_reddit_comments.main(
-                        [
-                            "--free-csv",
-                            "free.csv",
-                            "--html",
-                            "saved.html",
-                            "--output-xlsx",
-                            "result.xlsx",
-                            "--output-csv",
-                            "result.csv",
-                        ]
-                    )
-                except OSError as error:
-                    escaped_error = error
-                    return_code = None
+                result = reconstruct_reddit_comments.main([
+                    "--json", "export.json", "--page-text", "page.txt",
+                    "--output-xlsx", "result.xlsx", "--output-csv", "result.csv",
+                ])
 
-        self.assertIsNone(escaped_error, "path resolution error escaped main")
-        self.assertEqual(1, return_code)
-        self.assertEqual(
-            "Error: simulated path resolution failure\n",
-            stderr.getvalue(),
-        )
+        self.assertEqual(1, result)
+        self.assertEqual("Error: simulated path resolution failure\n", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
-        self.assertNotIn("SECRET_", stderr.getvalue())
 
 
 if __name__ == "__main__":

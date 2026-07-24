@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import shutil
 import sys
@@ -13,6 +14,7 @@ from typing import Iterator
 from uuid import uuid4
 
 from openpyxl import Workbook
+from openpyxl.utils.exceptions import IllegalCharacterError
 
 try:
     from tools.output_path_safety import (
@@ -21,6 +23,12 @@ try:
         ensure_output_paths_safe,
     )
     from tools.reddit_free_csv import FreeRedditExport, parse_free_reddit_csv
+    from tools.reddit_json_export import RedditJsonError, parse_reddit_json
+    from tools.reddit_json_text_merge import (
+        JSON_TEXT_OUTPUT_HEADERS,
+        reconstruct_json_text_rows,
+    )
+    from tools.reddit_page_text import RedditPageTextError, parse_reddit_page_text
     from tools.reddit_saved_html import SavedRedditHtml, parse_saved_reddit_html
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -30,6 +38,12 @@ except ModuleNotFoundError:
         ensure_output_paths_safe,
     )
     from tools.reddit_free_csv import FreeRedditExport, parse_free_reddit_csv
+    from tools.reddit_json_export import RedditJsonError, parse_reddit_json
+    from tools.reddit_json_text_merge import (
+        JSON_TEXT_OUTPUT_HEADERS,
+        reconstruct_json_text_rows,
+    )
+    from tools.reddit_page_text import RedditPageTextError, parse_reddit_page_text
     from tools.reddit_saved_html import SavedRedditHtml, parse_saved_reddit_html
 
 
@@ -79,15 +93,16 @@ def _validate_output_roles(output_xlsx: Path, output_csv: Path) -> None:
 
 def _validate_xlsx_string_lengths(
     rows: list[dict[str, str | int]],
+    headers: tuple[str, ...],
 ) -> None:
-    for column_number, header in enumerate(OUTPUT_HEADERS, start=1):
+    for column_number, header in enumerate(headers, start=1):
         if len(header) > _XLSX_STRING_LIMIT:
             raise ValueError(
                 "XLSX string exceeds 32,767 characters at "
                 f"header row, column {column_number}"
             )
     for row_number, row in enumerate(rows, start=1):
-        for header in OUTPUT_HEADERS:
+        for header in headers:
             value = row[header]
             if isinstance(value, str) and len(value) > _XLSX_STRING_LIMIT:
                 raise ValueError(
@@ -96,15 +111,19 @@ def _validate_xlsx_string_lengths(
                 )
 
 
-def _write_xlsx(rows: list[dict[str, str | int]], output_path: Path) -> None:
+def _write_xlsx(
+    rows: list[dict[str, str | int]],
+    output_path: Path,
+    headers: tuple[str, ...],
+) -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Reddit Comments"
-    for column_number, header in enumerate(OUTPUT_HEADERS, start=1):
+    for column_number, header in enumerate(headers, start=1):
         cell = sheet.cell(1, column_number, header)
         cell.data_type = "s"
     for row_number, row in enumerate(rows, start=2):
-        for column_number, header in enumerate(OUTPUT_HEADERS, start=1):
+        for column_number, header in enumerate(headers, start=1):
             value = row[header]
             cell = sheet.cell(row_number, column_number, value)
             if isinstance(value, str):
@@ -112,9 +131,13 @@ def _write_xlsx(rows: list[dict[str, str | int]], output_path: Path) -> None:
     workbook.save(output_path)
 
 
-def _write_csv(rows: list[dict[str, str | int]], output_path: Path) -> None:
+def _write_csv(
+    rows: list[dict[str, str | int]],
+    output_path: Path,
+    headers: tuple[str, ...],
+) -> None:
     with output_path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=OUTPUT_HEADERS)
+        writer = csv.DictWriter(handle, fieldnames=headers)
         writer.writeheader()
         writer.writerows(rows)
 
@@ -225,6 +248,7 @@ def _reserve_output_paths(output_paths: tuple[Path, Path]) -> Iterator[None]:
 def write_outputs(
     rows: list[dict[str, str | int]],
     *,
+    headers: tuple[str, ...] = OUTPUT_HEADERS,
     input_paths: tuple[Path, Path],
     output_xlsx: Path,
     output_csv: Path,
@@ -232,7 +256,7 @@ def write_outputs(
 ) -> None:
     _validate_input_aliases(input_paths, output_xlsx, output_csv)
     _validate_output_roles(output_xlsx, output_csv)
-    _validate_xlsx_string_lengths(rows)
+    _validate_xlsx_string_lengths(rows, headers)
     requested_outputs = (output_xlsx.resolve(), output_csv.resolve())
     with _reserve_output_paths(requested_outputs):
         resolved_xlsx, resolved_csv = ensure_output_paths_safe(
@@ -244,9 +268,9 @@ def write_outputs(
         staged_csv = _transaction_path(resolved_csv, "stage")
         try:
             with atomic_output_path(staged_xlsx) as temporary_xlsx:
-                _write_xlsx(rows, temporary_xlsx)
+                _write_xlsx(rows, temporary_xlsx, headers)
             with atomic_output_path(staged_csv) as temporary_csv:
-                _write_csv(rows, temporary_csv)
+                _write_csv(rows, temporary_csv, headers)
             _replace_output_pair(
                 ((staged_xlsx, resolved_xlsx), (staged_csv, resolved_csv))
             )
@@ -346,56 +370,68 @@ def reconstruct_rows(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Reconstruct Reddit comment data from free CSV and saved HTML."
+        description=(
+            "Deterministically combine a Reddit JSON export with copied "
+            "Reddit page text."
+        )
     )
-    parser.add_argument("--free-csv", required=True, type=Path)
-    parser.add_argument("--html", required=True, type=Path)
+    parser.add_argument("--json", required=True, type=Path)
+    parser.add_argument("--page-text", required=True, type=Path)
     parser.add_argument("--output-xlsx", required=True, type=Path)
     parser.add_argument("--output-csv", required=True, type=Path)
-    parser.add_argument("--post-author")
-    parser.add_argument("--post-score")
-    parser.add_argument("--post-comment-count")
     parser.add_argument("--overwrite", action="store_true")
     return parser
+
+
+def _safe_cli_error(error: BaseException) -> str:
+    if isinstance(error, IllegalCharacterError):
+        return "XLSX output contains an unsupported control character"
+    if isinstance(error, json.JSONDecodeError):
+        return "JSON is invalid"
+    return str(error)
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     try:
-        free_csv = arguments.free_csv.resolve()
-        html_path = arguments.html.resolve()
+        json_path = arguments.json.resolve()
+        page_text_path = arguments.page_text.resolve()
         output_xlsx = arguments.output_xlsx.resolve()
         output_csv = arguments.output_csv.resolve()
-        free = parse_free_reddit_csv(free_csv)
-        html = parse_saved_reddit_html(html_path)
-        rows = reconstruct_rows(
-            free,
-            html,
-            post_author=arguments.post_author,
-            post_score=arguments.post_score,
-            post_comment_count=arguments.post_comment_count,
-        )
+        export = parse_reddit_json(json_path)
+        page = parse_reddit_page_text(page_text_path, export)
+        rows = reconstruct_json_text_rows(export, page)
         write_outputs(
             rows,
-            input_paths=(free_csv, html_path),
+            headers=JSON_TEXT_OUTPUT_HEADERS,
+            input_paths=(json_path, page_text_path),
             output_xlsx=output_xlsx,
             output_csv=output_csv,
             overwrite=arguments.overwrite,
         )
-    except (ValueError, OSError, csv.Error, RuntimeError) as error:
-        print(f"Error: {error}", file=sys.stderr)
+    except (
+        RedditJsonError,
+        RedditPageTextError,
+        IllegalCharacterError,
+        OSError,
+        csv.Error,
+        RuntimeError,
+        ValueError,
+    ) as error:
+        print(f"Error: {_safe_cli_error(error)}", file=sys.stderr)
         return 1
 
-    print(f"Free CSV input: {free_csv}")
-    print(f"Reddit HTML input: {html_path}")
+    print(f"Reddit JSON input: {json_path}")
+    print(f"Reddit page text input: {page_text_path}")
     print(f"XLSX output: {output_xlsx}")
     print(f"CSV output: {output_csv}")
-    print(f"Comment total: {len(free.comments)}")
-    print(f"HTML match total: {len(rows)}")
+    print(f"JSON comment count: {len(export.comments)}")
+    print(f"Page comment match count: {len(page.comments)}")
     print(
         "Missing comment score count: "
-        f"{sum(row['Score'] == '' for row in rows)}"
+        f"{sum(item.score is None for item in page.comments)}"
     )
+    print(f"Unavailable reported comment gap: {export.meta.discrepancy}")
     return 0
 
 
