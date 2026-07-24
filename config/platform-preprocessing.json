@@ -1,0 +1,348 @@
+{
+  "schema_version": 1,
+  "header_row": 1,
+  "platforms": [
+    {
+      "namespace": "amazon",
+      "aliases": ["亚马逊", "Amazon", "amazon"],
+      "header_signature": [
+        "标题",
+        "标题链接",
+        "图片",
+        "aprofile_链接",
+        "名称",
+        "aiconalt",
+        "查看",
+        "状态",
+        "查看1",
+        "asizebase",
+        "crhelpfultext",
+        "asizebase_链接",
+        "asizebase2"
+      ],
+      "output_columns": [
+        {
+          "header": "评论日期",
+          "operation": "amazon_review_date",
+          "source_headers": ["查看"]
+        },
+        {
+          "header": "评论内容",
+          "operation": "join_trimmed",
+          "source_headers": ["标题", "查看1"],
+          "separator": "\n\n"
+        },
+        {
+          "header": "电商平台评分",
+          "operation": "amazon_star_rating",
+          "source_headers": ["aiconalt"]
+        },
+        {
+          "header": "点赞数",
+          "operation": "amazon_helpful_count",
+          "source_headers": ["asizebase"]
+        },
+        {
+          "header": "名称",
+          "operation": "copy",
+          "source_headers": ["名称"]
+        }
+      ]
+    },
+    {
+      "namespace": "rakuten",
+      "aliases": ["乐天市场", "Rakuten", "rakuten"],
+      "variants": [
+        {
+          "name": "reviewer-title-body-review-date",
+          "header_signature": [
+            "レビュータイトル",
+            "評価",
+            "レビュー本文",
+            "レビュー投稿者",
+            "レビュー投稿日",
+            "注文日",
+            "レビュアー属性",
+            "参考になった数"
+          ],
+          "output_columns": [
+            {
+              "header": "评论日期",
+              "operation": "rakuten_review_date",
+              "source_headers": ["レビュー投稿日"]
+            },
+            {
+              "header": "评论内容",
+              "operation": "join_trimmed",
+              "source_headers": ["レビュータイトル", "レビュー本文"],
+              "separator": "\n\n"
+            },
+            {
+              "header": "电商平台评分",
+              "operation": "copy",
+              "source_headers": ["評価"]
+            },
+            {
+              "header": "用户属性",
+              "operation": "rakuten_user_attribute",
+              "source_headers": ["レビュアー属性"]
+            },
+            {
+              "header": "点赞数",
+              "operation": "rakuten_helpful_count",
+              "source_headers": ["参考になった数"]
+            },
+            {
+              "header": "乐天市场昵称",
+              "operation": "rakuten_display_name",
+              "source_headers": ["レビュー投稿者"]
+            }
+          ]
+        },
+        {
+          "name": "reviewer-date-body-title",
+          "header_signature": [
+            "レビュー投稿者",
+            "評価",
+            "投稿日",
+            "レビュー本文",
+            "レビュータイトル",
+            "レビュアー属性",
+            "参考になった数"
+          ],
+          "output_columns": [
+            {
+              "header": "评论日期",
+              "operation": "rakuten_review_date",
+              "source_headers": ["投稿日"]
+            },
+            {
+              "header": "评论内容",
+              "operation": "join_trimmed",
+              "source_headers": ["レビュータイトル", "レビュー本文"],
+              "separator": "\n\n"
+            },
+            {
+              "header": "电商平台评分",
+              "operation": "copy",
+              "source_headers": ["評価"]
+            },
+            {
+              "header": "用户属性",
+              "operation": "rakuten_user_attribute",
+              "source_headers": ["レビュアー属性"]
+            },
+            {
+              "header": "点赞数",
+              "operation": "rakuten_helpful_count",
+              "source_headers": ["参考になった数"]
+            },
+            {
+              "header": "乐天市场昵称",
+              "operation": "rakuten_display_name",
+              "source_headers": ["レビュー投稿者"]
+            }
+          ]
+        },
+        {
+          "name": "title-review-date-body-reviewer",
+          "header_signature": [
+            "レビュータイトル",
+            "評価",
+            "レビュー投稿日",
+            "レビュー本文",
+            "レビュー投稿者",
+            "注文日",
+            "レビュアー属性",
+            "参考になった数"
+          ],
+          "output_columns": [
+            {
+              "header": "评论日期",
+              "operation": "rakuten_review_date",
+              "source_headers": ["レビュー投稿日"]
+            },
+            {
+              "header": "评论内容",
+              "operation": "join_trimmed",
+              "source_headers": ["レビュータイトル", "レビュー本文"],
+              "separator": "\n\n"
+            },
+            {
+              "header": "电商平台评分",
+              "operation": "copy",
+              "source_headers": ["評価"]
+            },
+            {
+              "header": "用户属性",
+              "operation": "rakuten_user_attribute",
+              "source_headers": ["レビュアー属性"]
+            },
+            {
+              "header": "点赞数",
+              "operation": "rakuten_helpful_count",
+              "source_headers": ["参考になった数"]
+            },
+            {
+              "header": "乐天市场昵称",
+              "operation": "rakuten_display_name",
+              "source_headers": ["レビュー投稿者"]
+            }
+          ]
+        },
+        {
+          "name": "poster-title-body-review-date",
+          "header_signature": [
+            "レビュータイトル",
+            "評価",
+            "レビュー投稿日",
+            "投稿者名",
+            "レビュー本文",
+            "レビュアー属性",
+            "参考になった数"
+          ],
+          "output_columns": [
+            {
+              "header": "评论日期",
+              "operation": "rakuten_review_date",
+              "source_headers": ["レビュー投稿日"]
+            },
+            {
+              "header": "评论内容",
+              "operation": "join_trimmed",
+              "source_headers": ["レビュータイトル", "レビュー本文"],
+              "separator": "\n\n"
+            },
+            {
+              "header": "电商平台评分",
+              "operation": "copy",
+              "source_headers": ["評価"]
+            },
+            {
+              "header": "用户属性",
+              "operation": "rakuten_user_attribute",
+              "source_headers": ["レビュアー属性"]
+            },
+            {
+              "header": "点赞数",
+              "operation": "rakuten_helpful_count",
+              "source_headers": ["参考になった数"]
+            },
+            {
+              "header": "乐天市场昵称",
+              "operation": "rakuten_display_name",
+              "source_headers": ["投稿者名"]
+            }
+          ]
+        },
+        {
+          "name": "reviewer-name-title-content",
+          "header_signature": [
+            "レビュアー名",
+            "評価",
+            "投稿日",
+            "カラー",
+            "レビュータイトル",
+            "レビュー内容",
+            "レビュアー属性",
+            "参考になった数"
+          ],
+          "output_columns": [
+            {
+              "header": "评论日期",
+              "operation": "rakuten_review_date",
+              "source_headers": ["投稿日"]
+            },
+            {
+              "header": "评论内容",
+              "operation": "join_trimmed",
+              "source_headers": ["レビュータイトル", "レビュー内容"],
+              "separator": "\n\n"
+            },
+            {
+              "header": "电商平台评分",
+              "operation": "copy",
+              "source_headers": ["評価"]
+            },
+            {
+              "header": "用户属性",
+              "operation": "rakuten_user_attribute",
+              "source_headers": ["レビュアー属性"]
+            },
+            {
+              "header": "点赞数",
+              "operation": "rakuten_helpful_count",
+              "source_headers": ["参考になった数"]
+            },
+            {
+              "header": "乐天市场昵称",
+              "operation": "rakuten_display_name",
+              "source_headers": ["レビュアー名"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "namespace": "twitter",
+      "aliases": ["Twitter", "twitter", "X", "x"],
+      "header_signature": [
+        "id",
+        "created_at",
+        "full_text",
+        "media",
+        "screen_name",
+        "name",
+        "profile_image_url",
+        "user_id",
+        "in_reply_to",
+        "retweeted_status",
+        "quoted_status",
+        "media_tags",
+        "favorite_count",
+        "retweet_count",
+        "bookmark_count",
+        "quote_count",
+        "reply_count",
+        "views_count",
+        "favorited",
+        "retweeted",
+        "bookmarked",
+        "url",
+        "metadata"
+      ],
+      "output_columns": [
+        {
+          "header": "评论日期",
+          "operation": "copy",
+          "source_headers": ["created_at"]
+        },
+        {
+          "header": "评论内容",
+          "operation": "copy",
+          "source_headers": ["full_text"]
+        },
+        {
+          "header": "点赞数",
+          "operation": "copy",
+          "source_headers": ["favorite_count"]
+        },
+        {
+          "header": "子评论数/追评数",
+          "operation": "copy",
+          "source_headers": ["reply_count"]
+        },
+        {
+          "header": "Twitter用户ID",
+          "operation": "copy",
+          "source_headers": ["user_id"]
+        },
+        {
+          "header": "Twitter昵称",
+          "operation": "copy",
+          "source_headers": ["screen_name"]
+        }
+      ]
+    }
+  ]
+}

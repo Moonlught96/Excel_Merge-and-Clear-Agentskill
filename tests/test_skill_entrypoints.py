@@ -11,11 +11,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SKILL_NAME = "product-user-comment-data-merge-cleaning"
 SKILL_ROOT = PROJECT_ROOT / "skills" / SKILL_NAME
 CLI_SCRIPTS = (
+    "audit_standardized_comments.py",
     "cleanup_intermediate_outputs.py",
     "clean_excel_comments.py",
     "compare_cleaned_workbooks.py",
+    "filter_comments_by_keywords.py",
     "merge_excel_workbooks.py",
     "output_file_naming.py",
+    "preprocess_platform_comments.py",
     "standardize_excel_headers.py",
     "strip_bilibili_reply_prefixes.py",
 )

@@ -132,6 +132,116 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual("20260707_ScreenBar系列_TikTok评论数据_合并总表.xlsx", tiktok_plan.filenames["merge"])
         self.assertEqual("20260707_ScreenBar系列_YouTube评论数据_合并总表.xlsx", youtube_plan.filenames["merge"])
 
+    def test_detects_twitter_source_and_preprocessing_route(self) -> None:
+        plan = build_naming_plan(
+            [
+                Path(
+                    "D:/专案/ScreenBar十周年专案/产品数据/Twitter/"
+                    "twitter-screenbar搜索结果-1784787464581.csv"
+                )
+            ],
+            product_name="ScreenBar系列",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+
+        self.assertEqual("Twitter评论数据", plan.data_source)
+        self.assertEqual("twitter", plan.preprocessing_profile)
+        self.assertEqual(
+            "20260724_ScreenBar系列_Twitter评论数据_合并总表.xlsx",
+            plan.filenames["merge"],
+        )
+
+    def test_detects_amazon_source_from_registered_path_keywords(self) -> None:
+        plan = build_naming_plan(
+            [
+                Path(
+                    "D:/专案/ScreenBar十周年专案/产品数据/2017_ScreenBar/亚马逊日本/"
+                    "亚马逊_screenbar_4星最热.xlsx"
+                )
+            ],
+            product_name="ScreenBar",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+
+        self.assertEqual("亚马逊日本评论数据", plan.data_source)
+        self.assertEqual(
+            "20260724_ScreenBar_亚马逊日本评论数据_合并总表.xlsx",
+            plan.filenames["merge"],
+        )
+
+    def test_distinguishes_amazon_region_in_display_source_name(self) -> None:
+        japan_plan = build_naming_plan(
+            [
+                Path(
+                    "D:/专案/ScreenBar十周年专案/产品数据/2017_ScreenBar/亚马逊日本/"
+                    "亚马逊_screenbar_4星最热.xlsx"
+                )
+            ],
+            product_name="2017_ScreenBar",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+        us_plan = build_naming_plan(
+            [
+                Path(
+                    "D:/专案/ScreenBar十周年专案/产品数据/2017_ScreenBar/亚马逊美国/"
+                    "amazon_screenbar_recent.xlsx"
+                )
+            ],
+            product_name="2017_ScreenBar",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+
+        self.assertEqual("亚马逊日本评论数据", japan_plan.data_source)
+        self.assertEqual("亚马逊美国评论数据", us_plan.data_source)
+        self.assertEqual(
+            "20260724_2017_ScreenBar_亚马逊日本评论数据_合并总表.xlsx",
+            japan_plan.filenames["merge"],
+        )
+        self.assertEqual(
+            "20260724_2017_ScreenBar_亚马逊美国评论数据_合并总表.xlsx",
+            us_plan.filenames["merge"],
+        )
+
+    def test_uses_amazon_region_parent_for_product_and_exposes_preprocessing_route(self) -> None:
+        plan = build_naming_plan(
+            [
+                Path(
+                    "D:/专案/ScreenBar十周年专案/产品数据/2017_ScreenBar/亚马逊日本/"
+                    "亚马逊_screenbar_4星最热.xlsx"
+                )
+            ],
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+
+        self.assertEqual("2017_ScreenBar", plan.product_name)
+        self.assertEqual("亚马逊日本评论数据", plan.data_source)
+        self.assertEqual("amazon", plan.preprocessing_profile)
+        self.assertEqual([], plan.missing_fields)
+        self.assertEqual(
+            "20260724_2017_ScreenBar_亚马逊日本评论数据_合并总表.xlsx",
+            plan.filenames["merge"],
+        )
+
+    def test_detects_rakuten_market_and_exposes_its_preprocessing_route(self) -> None:
+        plan = build_naming_plan(
+            [
+                Path(
+                    "D:/专案/ScreenBar十周年专案/产品数据/乐天市场/"
+                    "乐天市场_ScreenBar 1.xlsx.xlsx"
+                )
+            ],
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+
+        self.assertEqual("ScreenBar 1", plan.product_name)
+        self.assertEqual("乐天市场评论数据", plan.data_source)
+        self.assertEqual("rakuten", plan.preprocessing_profile)
+        self.assertEqual([], plan.missing_fields)
+        self.assertEqual(
+            "20260724_ScreenBar 1_乐天市场评论数据_合并总表.xlsx",
+            plan.filenames["merge"],
+        )
+
     def test_detects_youtube_shorts_before_generic_youtube_source(self) -> None:
         plan = build_naming_plan(
             [

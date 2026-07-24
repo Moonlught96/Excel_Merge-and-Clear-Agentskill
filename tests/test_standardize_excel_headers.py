@@ -28,8 +28,7 @@ EXPECTED_HEADER = [
     "评论内容",
     "产品名",
     "电商平台评分",
-    "性别",
-    "年龄",
+    "用户属性",
     "哈希ID",
     "点赞数",
     "子评论数/追评数",
@@ -47,8 +46,7 @@ def expected_standardized_row(
     product_name: object = None,
     *,
     score: object = None,
-    gender: object = None,
-    age: object = None,
+    user_attribute: object = None,
     hash_id: object = None,
     likes: object = None,
     subcomment_count: object = None,
@@ -61,8 +59,7 @@ def expected_standardized_row(
         comment_content,
         product_name,
         score,
-        gender,
-        age,
+        user_attribute,
         hash_id,
         likes,
         subcomment_count,
@@ -241,9 +238,92 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         blank_rows = self.read_standardized_rows(blank_result.output_xlsx)
 
         self.assertEqual(tuple(EXPECTED_HEADER), populated_rows[0])
-        self.assertEqual((5, "女", 28), populated_rows[1][3:6])
+        self.assertEqual((5, "女 28"), populated_rows[1][3:5])
         self.assertEqual(tuple(EXPECTED_HEADER), blank_rows[0])
-        self.assertEqual((None, None, None), blank_rows[1][3:6])
+        self.assertEqual((None, None), blank_rows[1][3:5])
+
+    def test_merges_gender_and_age_into_the_single_user_attribute_column(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-user-attribute"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容", "性别", "年龄", "点赞数"])
+        sheet.append(["2026-07-24", "完整评论内容 A", "女", 28, 1])
+        sheet.append(["2026-07-24", "完整评论内容 B", "男", None, 2])
+        sheet.append(["2026-07-24", "完整评论内容 C", None, 40, 3])
+        sheet.append(["2026-07-24", "完整评论内容 D", None, None, 4])
+        workbook.save(input_path)
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+        )
+
+        rows = self.read_standardized_rows(output_path)
+        user_attribute_index = rows[0].index("用户属性")
+        self.assertNotIn("性别", rows[0])
+        self.assertNotIn("年龄", rows[0])
+        self.assertEqual("女 28", rows[1][user_attribute_index])
+        self.assertEqual("男", rows[2][user_attribute_index])
+        self.assertEqual("40", rows[3][user_attribute_index])
+        self.assertIsNone(rows[4][user_attribute_index])
+
+    def test_combined_user_attribute_formula_like_value_remains_text(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-user-attribute-formula"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容", "性别", "年龄", "点赞数"])
+        sheet.append(["2026-07-24", "完整评论内容", "=1+1", None, 1])
+        workbook.save(input_path)
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+        )
+
+        standardized = load_workbook(output_path, read_only=False, data_only=False)
+        try:
+            user_attribute_column = list(
+                next(standardized.active.iter_rows(min_row=1, max_row=1, values_only=True))
+            ).index("用户属性") + 1
+            cell = standardized.active.cell(row=2, column=user_attribute_column)
+            self.assertEqual("=1+1", cell.value)
+            self.assertEqual("s", cell.data_type)
+        finally:
+            standardized.close()
+
+    def test_direct_user_attribute_has_row_level_priority_over_gender_and_age(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-direct-user-attribute"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容", "用户属性", "性别", "年龄", "点赞数"])
+        sheet.append(["2026-07-24", "完整评论内容 A", "已登记属性", "女", 28, 1])
+        sheet.append(["2026-07-24", "完整评论内容 B", "", "男", 40, 2])
+        workbook.save(input_path)
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+        )
+
+        rows = self.read_standardized_rows(output_path)
+        user_attribute_index = rows[0].index("用户属性")
+        self.assertEqual("已登记属性", rows[1][user_attribute_index])
+        self.assertEqual("男 40", rows[2][user_attribute_index])
 
     def test_rejects_missing_required_header_without_guessing(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-missing-header"
@@ -303,7 +383,12 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         sheet.append(["2026/06/21", "评论 A", "无线护眼屏幕挂灯", 3, 2, "一级 A", "二级 A", "三级 A"])
         workbook.save(input_path)
 
-        result = standardize_workbook(input_path, load_config(), output_dir=tmp / "out")
+        result = standardize_workbook(
+            input_path,
+            load_config(),
+            output_dir=tmp / "out",
+            product_name="ScreenBar系列",
+        )
         standardized = load_workbook(result.output_xlsx, read_only=True, data_only=True)
         rows = list(standardized["SheetA"].iter_rows(values_only=True))
 
@@ -318,6 +403,38 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
                 level_one="一级 A",
                 level_two="二级 A",
                 level_three="三级 A",
+            ),
+            rows[1],
+        )
+
+    def test_fills_confirmed_product_name_when_source_product_column_is_absent(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-confirmed-product-name"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "SheetA"
+        sheet.append(["评论日期", "评论内容", "点赞数"])
+        sheet.append(["2026-07-24", "完整评论内容", 3])
+        workbook.save(input_path)
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+            product_name="ScreenBar系列",
+        )
+
+        rows = self.read_standardized_rows(output_path, "SheetA")
+        self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
+        self.assertEqual(
+            expected_standardized_row(
+                "2026-07-24",
+                "完整评论内容",
+                "ScreenBar系列",
+                likes=3,
             ),
             rows[1],
         )

@@ -59,13 +59,9 @@
       "required": false
     },
     {
-      "header": "性别",
-      "aliases": ["性别"],
-      "required": false
-    },
-    {
-      "header": "年龄",
-      "aliases": ["年龄"],
+      "header": "用户属性",
+      "aliases": ["用户属性"],
+      "composite_aliases": ["性别", "年龄"],
       "required": false
     },
     {
@@ -130,6 +126,7 @@
     "用户名称",
     "用户昵称",
     "昵称",
+    "乐天市场昵称",
     "rpid",
     "parent_rpid",
     "username",

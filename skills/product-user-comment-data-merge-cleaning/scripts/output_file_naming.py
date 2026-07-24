@@ -28,6 +28,12 @@ SOURCE_RULES = (
     ("淘宝", "淘宝评论数据"),
     ("天猫", "天猫评论数据"),
     ("京东", "京东评论数据"),
+    ("乐天市场", "乐天市场评论数据"),
+    ("Rakuten", "乐天市场评论数据"),
+    ("rakuten", "乐天市场评论数据"),
+    ("亚马逊", "亚马逊评论数据"),
+    ("Amazon", "亚马逊评论数据"),
+    ("amazon", "亚马逊评论数据"),
     ("小红书", "小红书评论数据"),
     ("抖音", "抖音评论数据"),
     ("微博", "微博评论数据"),
@@ -37,10 +43,24 @@ SOURCE_RULES = (
     ("Tiktok", "TikTok评论数据"),
     ("tiktok", "TikTok评论数据"),
     ("TTCommentExporter", "TikTok评论数据"),
+    ("Twitter", "Twitter评论数据"),
+    ("twitter", "Twitter评论数据"),
     ("YouTube", "YouTube评论数据"),
     ("youtube", "YouTube评论数据"),
     ("Youtube", "YouTube评论数据"),
     ("yt-comments", "YouTube评论数据"),
+)
+AMAZON_REGION_SOURCE_RULES = (
+    ("亚马逊日本", "亚马逊日本评论数据"),
+    ("Amazon Japan", "亚马逊日本评论数据"),
+    ("amazon.co.jp", "亚马逊日本评论数据"),
+    ("亚马逊美国", "亚马逊美国评论数据"),
+    ("Amazon USA", "亚马逊美国评论数据"),
+    ("Amazon US", "亚马逊美国评论数据"),
+    ("amazon.com", "亚马逊美国评论数据"),
+)
+AMAZON_REGION_DIRECTORY_NAMES = frozenset(
+    keyword.casefold() for keyword, _ in AMAZON_REGION_SOURCE_RULES
 )
 PRODUCT_HEADERS = {"产品名", "购买产品", "商品名称", "商品"}
 COMMENT_DATE_AND_PRODUCT_HEADERS = {"评论日期与产品"}
@@ -52,8 +72,11 @@ GENERIC_PARTS = {
     "社媒_小红书",
     "产品数据",
     "电商平台数据",
+    "乐天市场",
     "Tiktok",
     "TikTok",
+    "Twitter",
+    "twitter",
     "youtube数据",
     "长视频评论",
     "Shorts",
@@ -69,6 +92,7 @@ GENERIC_FILENAME_PATTERNS = (
     r"[0-9a-fA-F]{8}$",
     r"comments[-_ ]?replies",
     r"comments",
+    r"搜索结果",
     r"根据链接采集笔记评论",
     r"采集笔记评论",
     r"评论数据",
@@ -87,6 +111,7 @@ class NamingPlan:
     data_source: str | None
     product_candidates: list[str]
     data_source_candidates: list[str]
+    preprocessing_profile: str | None
     missing_fields: list[str]
     filenames: dict[str, str]
 
@@ -151,15 +176,61 @@ def source_candidates_from_paths(paths: list[Path]) -> list[str]:
         if is_youtube and is_shorts:
             candidates.append("YouTube Shorts评论数据")
             continue
+
+        amazon_region_sources = [
+            source_name
+            for keyword, source_name in AMAZON_REGION_SOURCE_RULES
+            if keyword.casefold() in normalized_text
+        ]
+        if amazon_region_sources:
+            # Region changes only the display name. All Amazon variants continue
+            # through the single deterministic "amazon" preprocessing profile.
+            candidates.extend(amazon_region_sources)
+            continue
+
         for keyword, source_name in SOURCE_RULES:
             if keyword in text:
                 candidates.append(source_name)
     return unique_sorted(candidates)
 
 
+def amazon_region_parent_product_candidate(path: Path) -> str | None:
+    directory_parts = path.parts[:-1]
+    for index, part in enumerate(directory_parts):
+        if part.casefold() not in AMAZON_REGION_DIRECTORY_NAMES or index == 0:
+            continue
+        candidate = normalize_parent_for_product(directory_parts[index - 1])
+        if candidate and candidate not in GENERIC_PARTS:
+            return candidate
+    return None
+
+
+def rakuten_filename_product_candidate(path: Path) -> str | None:
+    stem = path.stem
+    if not any(keyword.casefold() in stem.casefold() for keyword in ("乐天市场", "Rakuten")):
+        return None
+    value = stem
+    for keyword in ("乐天市场", "Rakuten"):
+        value = re.sub(re.escape(keyword), "", value, flags=re.IGNORECASE)
+    value = re.sub(r"\.(xlsx|xlsm|xls|csv)$", "", value, flags=re.IGNORECASE)
+    value = re.sub(r"^[-_ ]+", "", value)
+    value = re.sub(r"[-_ ]+$", "", value)
+    return sanitize_filename_component(value) or None
+
+
 def product_candidates_from_names(paths: list[Path]) -> list[str]:
     candidates: list[str] = []
     for path in paths:
+        amazon_parent_candidate = amazon_region_parent_product_candidate(path)
+        if amazon_parent_candidate:
+            candidates.append(amazon_parent_candidate)
+            continue
+
+        rakuten_filename_candidate = rakuten_filename_product_candidate(path)
+        if rakuten_filename_candidate:
+            candidates.append(rakuten_filename_candidate)
+            continue
+
         stem_candidate = normalize_stem_for_product(path.stem)
         if stem_candidate:
             candidates.append(stem_candidate)
@@ -241,6 +312,16 @@ def output_filenames(date_text: str, product_name: str, data_source: str) -> dic
     return filenames
 
 
+def preprocessing_profile_for_data_source(data_source: str | None) -> str | None:
+    if data_source and data_source.startswith("亚马逊"):
+        return "amazon"
+    if data_source == "乐天市场评论数据":
+        return "rakuten"
+    if data_source == "Twitter评论数据":
+        return "twitter"
+    return None
+
+
 def build_naming_plan(
     input_paths: list[Path],
     *,
@@ -270,6 +351,8 @@ def build_naming_plan(
     if not detected_source or source_ambiguous:
         missing_fields.append("data_source")
 
+    preprocessing_profile = preprocessing_profile_for_data_source(detected_source)
+
     filenames = (
         output_filenames(date_text, detected_product, detected_source)
         if not missing_fields and detected_product and detected_source
@@ -281,6 +364,7 @@ def build_naming_plan(
         data_source=detected_source,
         product_candidates=product_candidates,
         data_source_candidates=source_candidates,
+        preprocessing_profile=preprocessing_profile,
         missing_fields=missing_fields,
         filenames=filenames,
     )
@@ -324,6 +408,14 @@ def main() -> int:
             "missing_fields": plan.missing_fields,
             "product_candidates": plan.product_candidates,
             "data_source_candidates": plan.data_source_candidates,
+            "platform_preprocessing": {
+                "profile": plan.preprocessing_profile,
+                "validation": (
+                    "full_ordered_header_signature_required"
+                    if plan.preprocessing_profile
+                    else "not_registered"
+                ),
+            },
             "filenames": plan.filenames,
         },
         sys.stdout,

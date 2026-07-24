@@ -51,6 +51,9 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "tiktok": (),
             "taobao": (),
             "jd": (),
+            "amazon": (),
+            "rakuten": (),
+            "twitter": ("Twitter用户ID",),
         }
 
         expected_display_name_headers = {
@@ -60,6 +63,9 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "tiktok": ("用户名", "昵称"),
             "taobao": ("用户名称", "用户名"),
             "jd": ("用户名",),
+            "amazon": ("名称",),
+            "rakuten": ("乐天市场昵称",),
+            "twitter": ("Twitter昵称",),
         }
         platforms = {platform["namespace"]: platform for platform in config["platforms"]}
 
@@ -80,7 +86,10 @@ class SkillReferenceCoverageTest(unittest.TestCase):
         account_mapping_block = (
             "- Exact account-ID mappings:\n"
             "  - YouTube: `author_channel_id`, then `authorChannelId`, then `Author Channel ID`.\n"
-            "  - 小红书: `用户ID`."
+            "  - 小红书: `用户ID`.\n"
+            "  - 亚马逊: none.\n"
+            "  - 乐天市场: none.\n"
+            "  - Twitter/X: `Twitter用户ID`."
         )
         display_mapping_block = (
             "- Exact display-name fallback mappings:\n"
@@ -89,7 +98,10 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "  - B站: `username`.\n"
             "  - TikTok: `用户名`, then `昵称`; never `用户身份`.\n"
             "  - 淘宝: `用户名称`, then `用户名`.\n"
-            "  - 京东: `用户名`."
+            "  - 京东: `用户名`.\n"
+            "  - 亚马逊: `名称`.\n"
+            "  - 乐天市场: `乐天市场昵称`.\n"
+            "  - Twitter/X: `Twitter昵称`."
         )
         self.assertIn(account_mapping_block, header_reference)
         self.assertIn(display_mapping_block, header_reference)
@@ -105,6 +117,53 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             self.assertIn(phrase, references)
 
         self.assertNotIn("`用户身份` as a display-name", references)
+
+    def test_platform_preprocessing_config_is_fully_documented_in_references(self) -> None:
+        config = json.loads(
+            (SKILL_ROOT / "config" / "platform-preprocessing.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        references = "\n".join(
+            (SKILL_ROOT / "references" / name).read_text(encoding="utf-8")
+            for name in ("workflow.md", "data-contract.md", "header-standardization.md", "tool-reference.md")
+        )
+
+        self.assertEqual(1, config["schema_version"])
+        for platform in config["platforms"]:
+            self.assertIn(platform["namespace"], references)
+            variants = platform.get("variants") or [platform]
+            if platform["namespace"] == "rakuten":
+                variant_count = len(variants)
+                self.assertIn(
+                    f"has {variant_count} named exact variants",
+                    references,
+                )
+            for variant in variants:
+                if "name" in variant:
+                    self.assertIn(f"`{variant['name']}`", references)
+                for header in variant["header_signature"]:
+                    self.assertIn(f"`{header}`", references)
+                for output_column in variant["output_columns"]:
+                    self.assertIn(f"`{output_column['header']}`", references)
+                    self.assertIn(f"`{output_column['operation']}`", references)
+
+        self.assertIn("No configured platform signature matched", references)
+        self.assertIn("Do not use AI", references)
+
+    def test_mixed_registered_platform_variants_merge_path_is_documented(self) -> None:
+        references = "\n".join(
+            (SKILL_ROOT / "references" / name).read_text(encoding="utf-8")
+            for name in ("workflow.md", "data-contract.md", "tool-reference.md", "known-issues.md")
+        )
+
+        for phrase in (
+            "HeaderMismatchError",
+            "--merge-registered-variants",
+            "platform-preprocessed merged workbook",
+            "Do not fall back to another profile",
+        ):
+            self.assertIn(phrase, references)
 
     def test_display_name_normalization_is_exactly_documented(self) -> None:
         data_contract = (SKILL_ROOT / "references" / "data-contract.md").read_text(
@@ -183,6 +242,28 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "CSV values beginning with `=` must remain text cells when written to XLSX",
             data_contract,
         )
+
+    def test_twitter_keyword_filter_contract_is_fully_documented(self) -> None:
+        reference = (
+            SKILL_ROOT / "references" / "twitter-x-keyword-filter.md"
+        ).read_text(encoding="utf-8")
+        workflow = (SKILL_ROOT / "references" / "workflow.md").read_text(
+            encoding="utf-8"
+        )
+
+        for phrase in (
+            "Twitter`, `twitter`, `X`, and `x`",
+            "请提供本轮 Twitter/X 评论保留关键词。仅保留“评论内容”包含任一关键词的整行数据；请一次性提供所有关键词。",
+            "是否已经提供完成所有 Twitter/X 保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。",
+            "Unicode `casefold()` literal substring check",
+            "does not translate, segment, normalize Unicode, expand abbreviations",
+            "`.keyword-filter.summary.json`",
+            "Do not use AI",
+        ):
+            self.assertIn(phrase, reference)
+
+        self.assertIn("## Twitter/X Keep-Keyword Gate", workflow)
+        self.assertIn("scripts/filter_comments_by_keywords.py", workflow)
 
 
 if __name__ == "__main__":

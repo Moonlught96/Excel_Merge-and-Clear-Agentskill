@@ -7,7 +7,7 @@ All confirmed merge, standardization, cleaning, naming, confirmation, output, an
 Examples of locked behavior include:
 
 - deterministic processing without AI data judgment;
-- the twelve-column standard output order: `评论日期`, `评论内容`, `产品名`, `电商平台评分`, `性别`, `年龄`, `哈希ID`, `点赞数`, `子评论数/追评数`, `一级评论`, `二级评论`, and `三级评论`;
+- the eleven-column standard output order: `评论日期`, `评论内容`, `产品名`, `电商平台评分`, `用户属性`, `哈希ID`, `点赞数`, `子评论数/追评数`, `一级评论`, `二级评论`, and `三级评论`;
 - Chinese main-comment threshold of 7 or fewer characters;
 - non-Chinese threshold of 4 or fewer words and unspaced fallback of 4 or fewer characters;
 - pure numeric legacy threshold;
@@ -28,6 +28,25 @@ Examples of locked behavior include:
 4. Add a representative test proving the new alias maps to the intended standard column with its data intact.
 5. Update `references/header-standardization.md`.
 6. Synchronize the bundled configuration.
+
+## Adding A Platform Preprocessing Profile
+
+1. Require explicit user confirmation and a representative platform schema; record exact headers only, never raw identity values or comment values.
+2. Add one independent profile to `config/platform-preprocessing.json` with a unique namespace, fixed aliases, and either one complete ordered `header_signature` or explicitly named complete ordered variants. Each variant may use only supported deterministic operations. If variants need to participate in `--merge-registered-variants`, their configured temporary output headers must be identical and in the same order.
+3. Do not move platform-specific raw transformations into `config/header-standardizer.json`; the common standardizer keeps the locked final schema and hash-output boundary.
+4. Specify every source field's fixed order, parser, separator, unmatched-value behavior, and whether it exists only temporarily for hash derivation.
+5. Add tests for positive signature detection, unmatched-signature rejection, expected column values, sensitive-field omission, and successful common standardization/hash derivation.
+6. Add a deterministic naming and identity configuration only when the user confirms it; do not infer a platform or identity field from values.
+7. Update `header-standardization.md`, `workflow.md`, `data-contract.md`, `tool-reference.md`, `naming-and-retention.md`, and the change record.
+8. Synchronize the bundled scripts/config and run an isolated Skill copy test.
+
+## Changing The Standardized Output Audit
+
+1. Add a failing test for each new structural check before changing the audit tool.
+2. Audit only deterministic structure, configuration, counts, header names, and hash format. Never inspect comment semantics or raw identity values.
+3. Make failures block standardization approval, KOL collection, and cleaning until the underlying deterministic defect or configuration is corrected.
+4. Ensure the audit JSON contains no raw comment content, raw identity values, or project secret material.
+5. Record the audit artifact as an explicit cleanup intermediate unless the user requests retention before cleaning.
 
 ## Adding A Fixed Delete Word
 
@@ -78,3 +97,14 @@ Use `assets/rule-extension-template.md` to record:
 8. Update `references/data-contract.md`, `references/header-standardization.md`, `references/tool-reference.md`, and the rule-extension record.
 9. Keep every existing merge, cleaning, naming, confirmation, and retention rule unchanged.
 10. Synchronize the bundled scripts/config and verify the isolated Skill package.
+
+## Adding A Platform-Specific Post-Standardization Filter
+
+1. Obtain the exact user-confirmed platform scope, stage order, matching predicate, and confirmation prompts.
+2. Implement the predicate as a standalone deterministic script in `scripts/`; do not add a natural-language decision path to the common cleaner.
+3. Specify whether matching is literal, case-sensitive, case-insensitive, token-boundary-based, or regular-expression-based. Do not leave matching behavior implicit.
+4. Place the filter after standardization audit and user approval, and before the common KOL and cleaner stages, unless the user explicitly changes that order.
+5. Require an explicit completion confirmation for any user-provided dynamic rule list before execution.
+6. Add tests for positive retention, negative deletion, blank/invalid inputs, missing target headers, summary privacy, and output-path safety.
+7. Document input/output/cleanup behavior in `workflow.md`, `data-contract.md` or a dedicated reference, `tool-reference.md`, `naming-and-retention.md`, and reusable confirmation assets.
+8. Preserve the final naming, KOL, common-cleaner, original-file, and intermediate-cleanup rules unless the user explicitly changes them.

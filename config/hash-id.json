@@ -37,6 +37,24 @@
       "aliases": ["京东"],
       "user_id_headers": [],
       "display_name_headers": ["用户名"]
+    },
+    {
+      "namespace": "amazon",
+      "aliases": ["亚马逊", "Amazon", "amazon"],
+      "user_id_headers": [],
+      "display_name_headers": ["名称"]
+    },
+    {
+      "namespace": "rakuten",
+      "aliases": ["乐天市场", "Rakuten", "rakuten"],
+      "user_id_headers": [],
+      "display_name_headers": ["乐天市场昵称"]
+    },
+    {
+      "namespace": "twitter",
+      "aliases": ["Twitter", "twitter", "X", "x"],
+      "user_id_headers": ["Twitter用户ID"],
+      "display_name_headers": ["Twitter昵称"]
     }
   ]
 }
