@@ -393,6 +393,18 @@ class RedditPageTextTest(unittest.TestCase):
                 export,
             )
 
+    def test_rejects_operation_prefix_between_author_and_timestamp(self) -> None:
+        text = COMMENT_TEXT.replace(
+            "eldergooooose__\n",
+            "eldergooooose__\n\u8d5e\u540c\n7\n\u53cd\u5bf9\n\u56de\u590d\n",
+            1,
+        )
+        with self.assertRaisesRegex(RedditPageTextError, "operation"):
+            parse_reddit_page_text(
+                self.write_text(PAGE_PREFIX + text),
+                self.export_for_comments(),
+            )
+
     def test_accepts_all_raw_time_forms_without_changing_them(self) -> None:
         for raw_time in (
             "刚刚",

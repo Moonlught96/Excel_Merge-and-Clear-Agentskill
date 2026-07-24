@@ -231,6 +231,13 @@ def _block_author_and_content(
         raise RedditPageTextError(
             f"comment {comment_number} operation area is incomplete"
         )
+    if any(
+        line in _COMMENT_OPERATION_LABELS
+        for line in block[author_index + 1 : time_index]
+    ):
+        raise RedditPageTextError(
+            f"comment {comment_number} operation area is incomplete"
+        )
     return block[author_index], normalize_content(
         "\n".join(block[time_index + 1 : vote_index])
     )
