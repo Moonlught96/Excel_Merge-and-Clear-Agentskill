@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from tools.reddit_json_export import RedditJsonExport
-from tools.reddit_page_text import RedditPageText
+from tools.reddit_json_export import RedditJsonComment, RedditJsonExport
+from tools.reddit_page_text import RedditPageText, normalize_author
 
 
 JSON_TEXT_OUTPUT_HEADERS = (
@@ -22,17 +22,40 @@ JSON_TEXT_OUTPUT_HEADERS = (
 )
 
 
+def _retained_comments(
+    export: RedditJsonExport,
+    page: RedditPageText,
+) -> tuple[RedditJsonComment, ...]:
+    excluded_ids = page.excluded_comment_ids
+    if not excluded_ids:
+        return export.comments
+    if len(excluded_ids) != 1 or len(set(excluded_ids)) != 1:
+        raise ValueError("invalid collapsed AutoModerator exclusion")
+    first = export.comments[0] if export.comments else None
+    if (
+        first is None
+        or excluded_ids != (first.id,)
+        or normalize_author(first.username) != "AutoModerator"
+        or first.depth != 0
+        or first.parent_id != export.post.id
+        or any(item.parent_id == first.id for item in export.comments)
+    ):
+        raise ValueError("invalid collapsed AutoModerator exclusion")
+    return export.comments[1:]
+
+
 def reconstruct_json_text_rows(
     export: RedditJsonExport,
     page: RedditPageText,
 ) -> list[dict[str, str | int]]:
     if page.post_comment_count != export.post.num_comments:
         raise ValueError("page and JSON post comment counts differ")
-    if len(page.comments) != len(export.comments):
+    retained_comments = _retained_comments(export, page)
+    if len(page.comments) != len(retained_comments):
         raise ValueError("page and JSON matched comment counts differ")
 
     rows: list[dict[str, str | int]] = []
-    for comment, metric in zip(export.comments, page.comments, strict=True):
+    for comment, metric in zip(retained_comments, page.comments, strict=True):
         rows.append(
             {
                 "Title": export.post.title,
@@ -40,7 +63,7 @@ def reconstruct_json_text_rows(
                 "Post Author": export.post.author,
                 "Post Time": page.post_time,
                 "Post Score": page.post_score,
-                "Post Comment Count": page.post_comment_count,
+                "Post Comment Count": len(retained_comments),
                 "Author": comment.username,
                 "Time": comment.date,
                 "Score": "" if metric.score is None else metric.score,

@@ -49,7 +49,76 @@ class RedditJsonTextMergeTests(unittest.TestCase):
         self.assertEqual(["c1", "c2"], [row["Comment ID"] for row in rows])
         self.assertEqual(["No", "Yes"], [row["Is Reply"] for row in rows])
         self.assertEqual([4, ""], [row["Score"] for row in rows])
+        self.assertEqual([2, 2], [row["Post Comment Count"] for row in rows])
         self.assertTrue(all(row["Post Score"] == 99 for row in rows))
+
+    def collapsed_automoderator_fixture(
+        self,
+    ) -> tuple[RedditJsonExport, RedditPageText]:
+        export = RedditJsonExport(
+            meta=RedditMeta(3, 3, 1),
+            post=RedditPost("p1", "desksetup", "Title", "Body", "poster", 3),
+            comments=(
+                RedditJsonComment(
+                    "automod", "p1", "notice", 0, "AutoModerator", "time-0", 0
+                ),
+                RedditJsonComment("root", "p1", "Root", 0, "alpha", "time-1", 1),
+                RedditJsonComment("reply", "root", "Reply", 1, "beta", "time-2", 2),
+            ),
+        )
+        page = RedditPageText(
+            "8 hours ago",
+            99,
+            3,
+            (PageCommentMetric(4), PageCommentMetric(None)),
+            ("automod",),
+        )
+        return export, page
+
+    def test_omits_valid_collapsed_automoderator_and_counts_retained_comments(
+        self,
+    ) -> None:
+        export, page = self.collapsed_automoderator_fixture()
+
+        rows = reconstruct_json_text_rows(export, page)
+
+        self.assertEqual(["root", "reply"], [row["Comment ID"] for row in rows])
+        self.assertEqual([2, 2], [row["Post Comment Count"] for row in rows])
+
+    def test_rejects_unknown_collapsed_automoderator_exclusion(self) -> None:
+        export, page = self.collapsed_automoderator_fixture()
+        page = replace(page, excluded_comment_ids=("unknown",))
+
+        with self.assertRaisesRegex(ValueError, "collapsed AutoModerator exclusion"):
+            reconstruct_json_text_rows(export, page)
+
+    def test_rejects_duplicated_collapsed_automoderator_exclusion(self) -> None:
+        export, page = self.collapsed_automoderator_fixture()
+        page = replace(page, excluded_comment_ids=("automod", "automod"))
+
+        with self.assertRaisesRegex(ValueError, "collapsed AutoModerator exclusion"):
+            reconstruct_json_text_rows(export, page)
+
+    def test_rejects_nonfirst_collapsed_automoderator_exclusion(self) -> None:
+        export, page = self.collapsed_automoderator_fixture()
+        page = replace(page, excluded_comment_ids=("root",))
+
+        with self.assertRaisesRegex(ValueError, "collapsed AutoModerator exclusion"):
+            reconstruct_json_text_rows(export, page)
+
+    def test_rejects_child_owning_collapsed_automoderator_exclusion(self) -> None:
+        export, page = self.collapsed_automoderator_fixture()
+        export = replace(
+            export,
+            comments=(
+                export.comments[0],
+                replace(export.comments[1], parent_id="automod"),
+                export.comments[2],
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "collapsed AutoModerator exclusion"):
+            reconstruct_json_text_rows(export, page)
 
     def test_preserves_json_text_and_rejects_count_mismatches(self) -> None:
         export, page = self.fixture()
