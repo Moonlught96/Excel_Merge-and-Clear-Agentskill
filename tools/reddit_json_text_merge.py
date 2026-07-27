@@ -5,20 +5,17 @@ from tools.reddit_page_text import RedditPageText, normalize_author
 
 
 JSON_TEXT_OUTPUT_HEADERS = (
-    "Title",
-    "Post Body",
-    "Post Author",
-    "Post Time",
-    "Post Score",
-    "Post Comment Count",
-    "Author",
-    "Time",
-    "Score",
-    "Thread Level",
-    "Is Reply",
-    "Comment",
-    "Comment ID",
-    "Parent ID",
+    "记录类型",
+    "标题",
+    "作者",
+    "时间",
+    "内容",
+    "点赞数",
+    "评论/回复数",
+    "层级",
+    "是否回复",
+    "评论ID",
+    "父ID",
 )
 
 
@@ -44,6 +41,19 @@ def _retained_comments(
     return export.comments[1:]
 
 
+def _all_descendant_counts(
+    comments: tuple[RedditJsonComment, ...],
+) -> dict[str, int]:
+    by_id = {comment.id: comment for comment in comments}
+    counts = {comment.id: 0 for comment in comments}
+    for descendant in comments:
+        parent_id = descendant.parent_id
+        while parent_id in by_id:
+            counts[parent_id] += 1
+            parent_id = by_id[parent_id].parent_id
+    return counts
+
+
 def reconstruct_json_text_rows(
     export: RedditJsonExport,
     page: RedditPageText,
@@ -54,24 +64,36 @@ def reconstruct_json_text_rows(
     if len(page.comments) != len(retained_comments):
         raise ValueError("page and JSON matched comment counts differ")
 
-    rows: list[dict[str, str | int]] = []
+    descendant_counts = _all_descendant_counts(retained_comments)
+    rows: list[dict[str, str | int]] = [
+        {
+            "记录类型": "主帖",
+            "标题": export.post.title,
+            "作者": export.post.author,
+            "时间": page.post_time,
+            "内容": export.post.content,
+            "点赞数": page.post_score,
+            "评论/回复数": len(retained_comments),
+            "层级": 0,
+            "是否回复": "否",
+            "评论ID": export.post.id,
+            "父ID": "",
+        }
+    ]
     for comment, metric in zip(retained_comments, page.comments, strict=True):
         rows.append(
             {
-                "Title": export.post.title,
-                "Post Body": export.post.content,
-                "Post Author": export.post.author,
-                "Post Time": page.post_time,
-                "Post Score": page.post_score,
-                "Post Comment Count": len(retained_comments),
-                "Author": comment.username,
-                "Time": comment.date,
-                "Score": "" if metric.score is None else metric.score,
-                "Thread Level": comment.depth,
-                "Is Reply": "No" if comment.depth == 0 else "Yes",
-                "Comment": comment.content,
-                "Comment ID": comment.id,
-                "Parent ID": comment.parent_id,
+                "记录类型": "评论",
+                "标题": "",
+                "作者": comment.username,
+                "时间": comment.date,
+                "内容": comment.content,
+                "点赞数": "" if metric.score is None else metric.score,
+                "评论/回复数": descendant_counts[comment.id],
+                "层级": comment.depth,
+                "是否回复": "否" if comment.depth == 0 else "是",
+                "评论ID": comment.id,
+                "父ID": comment.parent_id,
             }
         )
     return rows

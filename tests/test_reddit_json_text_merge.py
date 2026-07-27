@@ -19,44 +19,93 @@ from tools.reddit_page_text import PageCommentMetric, RedditPageText
 class RedditJsonTextMergeTests(unittest.TestCase):
     def fixture(self) -> tuple[RedditJsonExport, RedditPageText]:
         export = RedditJsonExport(
-            meta=RedditMeta(2, 3, 1),
-            post=RedditPost("p1", "desksetup", "Title", "Body", "poster", 3),
+            meta=RedditMeta(2, 2, 0),
+            post=RedditPost("p1", "desksetup", "Title", "Body", "poster", 2),
             comments=(
                 RedditJsonComment("c1", "p1", "Root", 0, "alpha", "exact-time-1", 1),
                 RedditJsonComment("c2", "c1", "Reply", 1, "beta", "exact-time-2", 2),
             ),
         )
         page = RedditPageText(
-            "8 hours ago", 99, 3, (PageCommentMetric(4), PageCommentMetric(None))
+            "8 hours ago", 99, 2, (PageCommentMetric(4), PageCommentMetric(None))
         )
         return export, page
 
-    def test_builds_fixed_rows_in_json_order(self) -> None:
+    def nested_fixture(self) -> tuple[RedditJsonExport, RedditPageText]:
+        export = RedditJsonExport(
+            meta=RedditMeta(4, 4, 0),
+            post=RedditPost("p1", "desksetup", "Title", "Body", "poster", 4),
+            comments=(
+                RedditJsonComment("c1", "p1", "Root", 0, "alpha", "time-1", 1),
+                RedditJsonComment("c2", "c1", "Child", 1, "beta", "time-2", 2),
+                RedditJsonComment("c3", "c2", "Grandchild", 2, "gamma", "time-3", 3),
+                RedditJsonComment("c4", "p1", "Second root", 0, "delta", "time-4", 4),
+            ),
+        )
+        page = RedditPageText(
+            "8 hours ago",
+            99,
+            4,
+            (
+                PageCommentMetric(4),
+                PageCommentMetric(None),
+                PageCommentMetric(7),
+                PageCommentMetric(0),
+            ),
+        )
+        return export, page
+
+    def test_emits_post_first_then_comments_without_repeating_post_fields(
+        self,
+    ) -> None:
         export, page = self.fixture()
 
         rows = reconstruct_json_text_rows(export, page)
 
-        self.assertEqual(14, len(JSON_TEXT_OUTPUT_HEADERS))
         self.assertEqual(
             (
-                "Title", "Post Body", "Post Author", "Post Time",
-                "Post Score", "Post Comment Count", "Author", "Time",
-                "Score", "Thread Level", "Is Reply", "Comment",
-                "Comment ID", "Parent ID",
+                "记录类型", "标题", "作者", "时间", "内容", "点赞数",
+                "评论/回复数", "层级", "是否回复", "评论ID", "父ID",
             ),
             JSON_TEXT_OUTPUT_HEADERS,
         )
-        self.assertEqual(["c1", "c2"], [row["Comment ID"] for row in rows])
-        self.assertEqual(["No", "Yes"], [row["Is Reply"] for row in rows])
-        self.assertEqual([4, ""], [row["Score"] for row in rows])
-        self.assertEqual([2, 2], [row["Post Comment Count"] for row in rows])
-        self.assertTrue(all(row["Post Score"] == 99 for row in rows))
+        self.assertEqual(["主帖", "评论", "评论"], [row["记录类型"] for row in rows])
+        self.assertEqual("Title", rows[0]["标题"])
+        self.assertEqual("", rows[1]["标题"])
+        self.assertEqual(2, rows[0]["评论/回复数"])
+        self.assertEqual("p1", rows[0]["评论ID"])
+        self.assertEqual("", rows[0]["父ID"])
+        self.assertEqual(["c1", "c2"], [row["评论ID"] for row in rows[1:]])
+        self.assertEqual([4, ""], [row["点赞数"] for row in rows[1:]])
+        self.assertEqual(["否", "是"], [row["是否回复"] for row in rows[1:]])
+
+    def test_counts_all_descendants_for_each_retained_comment(self) -> None:
+        export, page = self.nested_fixture()
+
+        rows = reconstruct_json_text_rows(export, page)
+
+        comments = rows[1:]
+        self.assertEqual([2, 1, 0, 0], [row["评论/回复数"] for row in comments])
+
+    def test_emits_post_row_when_json_has_no_comments(self) -> None:
+        export = RedditJsonExport(
+            meta=RedditMeta(0, 0, 0),
+            post=RedditPost("p1", "desksetup", "Title", "Body", "poster", 0),
+            comments=(),
+        )
+        page = RedditPageText("8 hours ago", 99, 0, ())
+
+        rows = reconstruct_json_text_rows(export, page)
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual("主帖", rows[0]["记录类型"])
+        self.assertEqual(0, rows[0]["评论/回复数"])
 
     def collapsed_automoderator_fixture(
         self,
     ) -> tuple[RedditJsonExport, RedditPageText]:
         export = RedditJsonExport(
-            meta=RedditMeta(3, 3, 1),
+            meta=RedditMeta(3, 3, 0),
             post=RedditPost("p1", "desksetup", "Title", "Body", "poster", 3),
             comments=(
                 RedditJsonComment(
@@ -75,15 +124,16 @@ class RedditJsonTextMergeTests(unittest.TestCase):
         )
         return export, page
 
-    def test_omits_valid_collapsed_automoderator_and_counts_retained_comments(
+    def test_omits_valid_collapsed_automoderator_from_retained_counts(
         self,
     ) -> None:
         export, page = self.collapsed_automoderator_fixture()
 
         rows = reconstruct_json_text_rows(export, page)
 
-        self.assertEqual(["root", "reply"], [row["Comment ID"] for row in rows])
-        self.assertEqual([2, 2], [row["Post Comment Count"] for row in rows])
+        self.assertEqual(["root", "reply"], [row["评论ID"] for row in rows[1:]])
+        self.assertEqual(2, rows[0]["评论/回复数"])
+        self.assertEqual(1, rows[1]["评论/回复数"])
 
     def test_rejects_unknown_collapsed_automoderator_exclusion(self) -> None:
         export, page = self.collapsed_automoderator_fixture()
@@ -124,12 +174,12 @@ class RedditJsonTextMergeTests(unittest.TestCase):
         export, page = self.fixture()
         export = replace(
             export,
-            post=replace(export.post, content="=not-a-formula\nemoji 馃"),
+            post=replace(export.post, content="=not-a-formula\nemoji 🥪"),
         )
 
         rows = reconstruct_json_text_rows(export, page)
 
-        self.assertEqual("=not-a-formula\nemoji 馃", rows[0]["Post Body"])
+        self.assertEqual("=not-a-formula\nemoji 🥪", rows[0]["内容"])
 
         wrong_page = RedditPageText(
             page.post_time,
@@ -164,4 +214,4 @@ class RedditJsonTextMergeTests(unittest.TestCase):
 
         rows = reconstruct_json_text_rows(synthetic, page)
 
-        self.assertEqual("Yes", rows[0]["Is Reply"])
+        self.assertEqual("是", rows[1]["是否回复"])
