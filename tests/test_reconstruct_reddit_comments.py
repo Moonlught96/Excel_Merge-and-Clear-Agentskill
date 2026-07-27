@@ -1112,6 +1112,118 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
         }
         self.json_path.write_text(json.dumps(payload), encoding="utf-8")
 
+    def write_collapsed_automoderator_json(self) -> None:
+        payload = {
+            "meta": {
+                "completeness": "complete",
+                "collectedCommentCount": 3,
+                "reportedByApi": 3,
+                "discrepancy": 0,
+                "failedMore": 0,
+                "failedNodes": [],
+                "failedReasons": [],
+                "failedDetails": [],
+            },
+            "post": {
+                "id": "p1",
+                "subreddit": "python",
+                "title": "SECRET-POST-TITLE",
+                "content": "SECRET-POST-BODY",
+                "author": "SECRET-POST-AUTHOR",
+                "num_comments": 3,
+            },
+            "comments": [
+                {
+                    "id": "automod",
+                    "parent_id": "p1",
+                    "content": "SECRET-AUTOMODERATOR",
+                    "depth": 0,
+                    "username": "AutoModerator",
+                    "date": "exact-time-0",
+                    "created_utc": 0,
+                },
+                {
+                    "id": "root1",
+                    "parent_id": "p1",
+                    "content": "SECRET-RETAINED-ROOT",
+                    "depth": 0,
+                    "username": "alpha",
+                    "date": "exact-time-1",
+                    "created_utc": 1,
+                },
+                {
+                    "id": "reply2",
+                    "parent_id": "root1",
+                    "content": "SECRET-RETAINED-REPLY",
+                    "depth": 1,
+                    "username": "beta",
+                    "date": "exact-time-2",
+                    "created_utc": 2,
+                },
+            ],
+        }
+        self.json_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def write_collapsed_automoderator_page(self) -> None:
+        first = "\n".join(
+            (
+                "alpha",
+                "\u20228\u5c0f\u65f6\u524d",
+                "SECRET-RETAINED-ROOT",
+                "",
+                "\u8d5e\u540c",
+                "1",
+                "\u53cd\u5bf9",
+                "\u56de\u590d",
+                "\u5956\u52b1",
+                "\u5206\u4eab",
+            )
+        )
+        second = "\n".join(
+            (
+                "beta",
+                "\u20228\u5c0f\u65f6\u524d",
+                "SECRET-RETAINED-REPLY",
+                "",
+                "\u8d5e\u540c\u6295\u7968",
+                "\u53cd\u5bf9",
+                "\u56de\u590d",
+                "\u5956\u52b1",
+                "\u5206\u4eab",
+            )
+        )
+        banner = "\n".join(
+            (
+                "AutoModerator",
+                "\u8fd9\u662f\u81ea\u52a8\u5316\u8d26\u6237\u3002",
+                "\u7248\u4e3b",
+                "4\u5929\u524d",
+            )
+        )
+        self.page_text_path.write_text(
+            "\n".join(
+                (
+                    "Reddit",
+                    "r/python",
+                    "u/SECRET-POST-AUTHOR",
+                    "SECRET-POST-AUTHOR \u5934\u50cf",
+                    "8\u5c0f\u65f6\u524d",
+                    "SECRET-POST-TITLE",
+                    "\u6b63\u6587",
+                    "\u8d5e\u540c",
+                    "99",
+                    "\u53cd\u5bf9",
+                    "3",
+                    "\u8f6c\u5230\u8bc4\u8bba",
+                    "\u8bc4\u8bba\u533a\u57df",
+                    banner,
+                    first,
+                    second,
+                )
+            ),
+            encoding="utf-8",
+        )
+
     def write_page(
         self,
         *,
@@ -1205,6 +1317,28 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
         self.assertEqual(3, sheet.cell(2, 9).value)
         self.assertEqual("c2", sheet.cell(3, 13).value)
         self.assertIsNone(sheet.cell(3, 9).value)
+
+    def test_collapsed_automoderator_cli_outputs_only_verified_comments(
+        self,
+    ) -> None:
+        self.write_collapsed_automoderator_json()
+        self.write_collapsed_automoderator_page()
+
+        completed = self.run_cli()
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("JSON comment count: 3", completed.stdout)
+        self.assertIn("Page comment match count: 2", completed.stdout)
+        sheet = load_workbook(self.output_xlsx, data_only=False).active
+        self.assertEqual(3, sheet.max_row)
+        self.assertEqual(2, sheet.cell(2, 6).value)
+        self.assertEqual(2, sheet.cell(3, 6).value)
+        self.assertEqual(
+            ["root1", "reply2"],
+            [sheet.cell(row, 13).value for row in range(2, 4)],
+        )
+        for secret in ("SECRET-AUTOMODERATOR", "SECRET-RETAINED"):
+            self.assertNotIn(secret, completed.stdout + completed.stderr)
 
     def test_overwrite_rejection_preserves_pair_and_overwrite_succeeds(self) -> None:
         self.write_json()
