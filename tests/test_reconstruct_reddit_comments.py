@@ -1125,38 +1125,38 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
                 "failedDetails": [],
             },
             "post": {
-                "id": "p1",
+                "id": "postidk3m7",
                 "subreddit": "python",
-                "title": "SECRET-POST-TITLE",
-                "content": "SECRET-POST-BODY",
-                "author": "SECRET-POST-AUTHOR",
+                "title": "FixtureTitleQx7",
+                "content": "FixtureBodyRz8",
+                "author": "PostAuthorF8",
                 "num_comments": 3,
             },
             "comments": [
                 {
-                    "id": "automod",
-                    "parent_id": "p1",
-                    "content": "SECRET-AUTOMODERATOR",
+                    "id": "autoidp8v2",
+                    "parent_id": "postidk3m7",
+                    "content": "AutoBodyH2j4",
                     "depth": 0,
                     "username": "AutoModerator",
                     "date": "exact-time-0",
                     "created_utc": 0,
                 },
                 {
-                    "id": "root1",
-                    "parent_id": "p1",
-                    "content": "SECRET-RETAINED-ROOT",
+                    "id": "rootidq4w6",
+                    "parent_id": "postidk3m7",
+                    "content": "RootBodyK5n9",
                     "depth": 0,
-                    "username": "alpha",
+                    "username": "RootAuthorD6",
                     "date": "exact-time-1",
                     "created_utc": 1,
                 },
                 {
-                    "id": "reply2",
-                    "parent_id": "root1",
-                    "content": "SECRET-RETAINED-REPLY",
+                    "id": "replyidr9x1",
+                    "parent_id": "rootidq4w6",
+                    "content": "ReplyBodyL6p3",
                     "depth": 1,
-                    "username": "beta",
+                    "username": "ReplyAuthorE7",
                     "date": "exact-time-2",
                     "created_utc": 2,
                 },
@@ -1167,9 +1167,9 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
     def write_collapsed_automoderator_page(self) -> None:
         first = "\n".join(
             (
-                "alpha",
+                "RootAuthorD6",
                 "\u20228\u5c0f\u65f6\u524d",
-                "SECRET-RETAINED-ROOT",
+                "RootBodyK5n9",
                 "",
                 "\u8d5e\u540c",
                 "1",
@@ -1181,9 +1181,9 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
         )
         second = "\n".join(
             (
-                "beta",
+                "ReplyAuthorE7",
                 "\u20228\u5c0f\u65f6\u524d",
-                "SECRET-RETAINED-REPLY",
+                "ReplyBodyL6p3",
                 "",
                 "\u8d5e\u540c\u6295\u7968",
                 "\u53cd\u5bf9",
@@ -1205,10 +1205,10 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
                 (
                     "Reddit",
                     "r/python",
-                    "u/SECRET-POST-AUTHOR",
-                    "SECRET-POST-AUTHOR \u5934\u50cf",
+                    "u/PostAuthorF8",
+                    "PostAuthorF8 \u5934\u50cf",
                     "8\u5c0f\u65f6\u524d",
-                    "SECRET-POST-TITLE",
+                    "FixtureTitleQx7",
                     "\u6b63\u6587",
                     "\u8d5e\u540c",
                     "99",
@@ -1334,11 +1334,37 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
         self.assertEqual(2, sheet.cell(2, 6).value)
         self.assertEqual(2, sheet.cell(3, 6).value)
         self.assertEqual(
-            ["root1", "reply2"],
+            ["rootidq4w6", "replyidr9x1"],
             [sheet.cell(row, 13).value for row in range(2, 4)],
         )
-        for secret in ("SECRET-AUTOMODERATOR", "SECRET-RETAINED"):
-            self.assertNotIn(secret, completed.stdout + completed.stderr)
+        protected_tokens = (
+            "FixtureTitleQx7",
+            "FixtureBodyRz8",
+            "PostAuthorF8",
+            "postidk3m7",
+            "AutoBodyH2j4",
+            "AutoModerator",
+            "autoidp8v2",
+            "RootBodyK5n9",
+            "RootAuthorD6",
+            "rootidq4w6",
+            "ReplyBodyL6p3",
+            "ReplyAuthorE7",
+            "replyidr9x1",
+        )
+        self.assertEqual(
+            len(protected_tokens),
+            len(set(protected_tokens)),
+        )
+        for token in protected_tokens:
+            self.assertFalse(
+                any(
+                    token != other and token in other
+                    for other in protected_tokens
+                ),
+                f"protected token is contained in another token: {token}",
+            )
+            self.assertNotIn(token, completed.stdout + completed.stderr)
 
     def test_overwrite_rejection_preserves_pair_and_overwrite_succeeds(self) -> None:
         self.write_json()
