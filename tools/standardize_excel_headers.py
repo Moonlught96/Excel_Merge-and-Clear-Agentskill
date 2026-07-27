@@ -50,9 +50,19 @@ except ModuleNotFoundError:
     from hash_id_project_store import ProjectStore
 
 try:
-    from tools.output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        OutputPathConflictError,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 except ModuleNotFoundError:
-    from output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
+    from output_path_safety import (
+        OutputPathConflictError,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "header-standardizer.json"
@@ -60,10 +70,31 @@ COMMENT_DATE_AND_PRODUCT_HEADER = "评论日期与产品"
 COMMENT_DATE_HEADER = "评论日期"
 PRODUCT_NAME_HEADER = "产品名"
 HASH_ID_HEADER = "哈希ID"
+ECOMMERCE_RATING_HEADER = "电商平台评分"
+LIKES_HEADER = "点赞数"
 NO_REGISTERED_IDENTITY_HEADER_REASON = "no_registered_identity_header"
 TIMESTAMP_HEADER = "timestamp"
 BEIJING_TZ = timezone(timedelta(hours=8))
 BEIJING_TIMESTAMP_FORMAT = "%Y-%m-%d"
+PLAIN_NUMBER_PATTERN = re.compile(r"^\s*(?P<number>\d+(?:\.\d+)?)\s*$")
+ENGLISH_STAR_RATING_PATTERN = re.compile(
+    r"^\s*(?P<rating>\d+(?:\.\d+)?)\s+out\s+of\s+5\s+stars?\s*$",
+    flags=re.IGNORECASE,
+)
+CHINESE_STAR_RATING_PATTERN = re.compile(
+    r"^\s*(?P<rating>\d+(?:\.\d+)?)\s*颗星，最多\s*5\s*颗星\s*$"
+)
+ENGLISH_HELPFUL_COUNT_PATTERN = re.compile(
+    r"^\s*(?P<count>\d+)\s+people?\s+found\s+this\s+helpful\s*$",
+    flags=re.IGNORECASE,
+)
+ENGLISH_ONE_HELPFUL_COUNT_PATTERN = re.compile(
+    r"^\s*one\s+person\s+found\s+this\s+helpful\s*$",
+    flags=re.IGNORECASE,
+)
+CHINESE_HELPFUL_COUNT_PATTERN = re.compile(
+    r"^\s*(?P<count>\d+)\s*个人发现此评论有用\s*$"
+)
 RELATIVE_COUNT_PATTERN = r"\d+|[一二两三四五六七八九十]+"
 PLATFORM_DATETIME_HEADERS = (
     "评论日期",
@@ -433,6 +464,72 @@ def value_for_selected_column(row: tuple[Any, ...], column: SelectedColumn, toda
     return None
 
 
+def default_likes_to_zero(value: Any) -> Any:
+    if value is None:
+        return 0
+    if isinstance(value, str) and not value.strip():
+        return 0
+    return value
+
+
+def _compact_number(value: int | float) -> int | float:
+    return int(value) if float(value).is_integer() else value
+
+
+def normalize_ecommerce_rating(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return _compact_number(value)
+    if not isinstance(value, str):
+        return value
+
+    text = value.strip()
+    if not text:
+        return None
+
+    match = PLAIN_NUMBER_PATTERN.fullmatch(text)
+    if match is None:
+        match = ENGLISH_STAR_RATING_PATTERN.fullmatch(text)
+    if match is None:
+        match = CHINESE_STAR_RATING_PATTERN.fullmatch(text)
+    if match is None:
+        return value
+
+    rating_text = match.groupdict().get("number") or match.groupdict().get("rating")
+    rating = float(rating_text)
+    if not 1 <= rating <= 5:
+        return value
+    return _compact_number(rating)
+
+
+def normalize_likes_count(value: Any) -> Any:
+    value = default_likes_to_zero(value)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return _compact_number(value)
+    if not isinstance(value, str):
+        return value
+
+    text = value.strip()
+    if not text:
+        return 0
+    if ENGLISH_ONE_HELPFUL_COUNT_PATTERN.fullmatch(text):
+        return 1
+
+    match = re.fullmatch(r"(?P<count>\d+)", text)
+    if match is None:
+        match = ENGLISH_HELPFUL_COUNT_PATTERN.fullmatch(text)
+    if match is None:
+        match = CHINESE_HELPFUL_COUNT_PATTERN.fullmatch(text)
+    if match is None:
+        return value
+    return int(match.group("count"))
+
+
 def load_config(path: Path | None = None) -> HeaderStandardizerConfig:
     config_path = path if path else DEFAULT_CONFIG_PATH
     data = json.loads(config_path.read_text(encoding="utf-8"))
@@ -455,7 +552,7 @@ def load_config(path: Path | None = None) -> HeaderStandardizerConfig:
 
 
 def make_output_paths(input_path: Path, output_dir: Path | None) -> tuple[Path, Path]:
-    timestamp = datetime.now().strftime("%Y%m%d")
+    timestamp = beijing_date_text()
     parent = output_dir if output_dir else input_path.parent
     stem = f"{timestamp}_{input_path.stem}"
     return (
@@ -734,9 +831,12 @@ def standardize_sheet(
                 continue
 
             if output_header != normalize_header(HASH_ID_HEADER):
-                output_row.append(
-                    value_for_selected_column(row_values, column, today=today)
-                )
+                output_value = value_for_selected_column(row_values, column, today=today)
+                if output_header == normalize_header(ECOMMERCE_RATING_HEADER):
+                    output_value = normalize_ecommerce_rating(output_value)
+                if output_header == normalize_header(LIKES_HEADER):
+                    output_value = normalize_likes_count(output_value)
+                output_row.append(output_value)
                 continue
 
             if selected_identity is None:
@@ -1035,12 +1135,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_CONFIG_PATH,
         help="表头标准化配置文件",
     )
-    parser.add_argument("--output-dir", type=Path, default=None, help="输出目录")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="兼容旧程序调用的默认目录；CLI 仍必须传入 --output",
+    )
     parser.add_argument(
         "--output",
         type=Path,
-        default=None,
-        help="输出 .xlsx 文件路径",
+        required=True,
+        help="命名确认后传入的输出 .xlsx 文件路径",
     )
     parser.add_argument(
         "--overwrite",

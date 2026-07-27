@@ -317,6 +317,20 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             hash_user_id("00123", "YouTube", self.context, self.config),
             hash_user_id("00123", "小红书", self.context, self.config),
         )
+        self.assertNotEqual(
+            hash_id_pseudonymizer.hash_display_name(
+                "Same Amazon Display Name",
+                "amazon-japan",
+                self.context,
+                self.config,
+            ),
+            hash_id_pseudonymizer.hash_display_name(
+                "Same Amazon Display Name",
+                "amazon-us",
+                self.context,
+                self.config,
+            ),
+        )
 
     def test_string_normalization_only_trims_outer_whitespace(self) -> None:
         self.assertEqual("001 AbC", normalize_raw_user_id("  001 AbC\t"))
@@ -378,6 +392,10 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             "X": "twitter",
             "淘宝": "taobao",
             "京东": "jd",
+            "亚马逊日本": "amazon-japan",
+            "Amazon Japan": "amazon-japan",
+            "亚马逊美国": "amazon-us",
+            "Amazon US": "amazon-us",
         }
 
         for alias, namespace in expected.items():
@@ -443,7 +461,8 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             "tiktok": ("用户名", "昵称"),
             "taobao": ("用户名称", "用户名"),
             "jd": ("用户名",),
-            "amazon": ("名称",),
+            "amazon-japan": ("名称",),
+            "amazon-us": ("名称",),
             "rakuten": ("乐天市场昵称",),
             "twitter": ("Twitter昵称",),
         }

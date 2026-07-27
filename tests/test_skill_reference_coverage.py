@@ -51,7 +51,8 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "tiktok": (),
             "taobao": (),
             "jd": (),
-            "amazon": (),
+            "amazon-japan": (),
+            "amazon-us": (),
             "rakuten": (),
             "twitter": ("Twitter用户ID",),
         }
@@ -63,7 +64,8 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "tiktok": ("用户名", "昵称"),
             "taobao": ("用户名称", "用户名"),
             "jd": ("用户名",),
-            "amazon": ("名称",),
+            "amazon-japan": ("名称",),
+            "amazon-us": ("名称",),
             "rakuten": ("乐天市场昵称",),
             "twitter": ("Twitter昵称",),
         }
@@ -87,7 +89,8 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "- Exact account-ID mappings:\n"
             "  - YouTube: `author_channel_id`, then `authorChannelId`, then `Author Channel ID`.\n"
             "  - 小红书: `用户ID`.\n"
-            "  - 亚马逊: none.\n"
+            "  - 亚马逊日本: none.\n"
+            "  - 亚马逊美国: none.\n"
             "  - 乐天市场: none.\n"
             "  - Twitter/X: `Twitter用户ID`."
         )
@@ -99,7 +102,8 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "  - TikTok: `用户名`, then `昵称`; never `用户身份`.\n"
             "  - 淘宝: `用户名称`, then `用户名`.\n"
             "  - 京东: `用户名`.\n"
-            "  - 亚马逊: `名称`.\n"
+            "  - 亚马逊日本: `名称`.\n"
+            "  - 亚马逊美国: `名称`.\n"
             "  - 乐天市场: `乐天市场昵称`.\n"
             "  - Twitter/X: `Twitter昵称`."
         )

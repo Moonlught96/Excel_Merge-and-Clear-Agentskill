@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 from tools.output_path_safety import (
     OutputPathConflictError,
     atomic_output_path,
+    beijing_date_text,
     ensure_output_paths_safe,
 )
 
 
 class OutputPathSafetyTest(unittest.TestCase):
+    def test_beijing_date_converts_an_aware_datetime_before_formatting(self) -> None:
+        utc_time = datetime(2026, 7, 27, 16, 30, tzinfo=timezone.utc)
+
+        self.assertEqual("20260728", beijing_date_text(utc_time))
+
     def test_rejects_output_that_matches_any_input(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-output-safety-input-conflict"
         tmp.mkdir(parents=True, exist_ok=True)

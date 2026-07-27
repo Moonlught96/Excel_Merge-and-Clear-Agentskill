@@ -183,8 +183,8 @@ def source_candidates_from_paths(paths: list[Path]) -> list[str]:
             if keyword.casefold() in normalized_text
         ]
         if amazon_region_sources:
-            # Region changes only the display name. All Amazon variants continue
-            # through the single deterministic "amazon" preprocessing profile.
+            # Region selects the explicit deterministic platform contract. Generic
+            # Amazon paths deliberately remain un-routed until confirmed.
             candidates.extend(amazon_region_sources)
             continue
 
@@ -313,8 +313,10 @@ def output_filenames(date_text: str, product_name: str, data_source: str) -> dic
 
 
 def preprocessing_profile_for_data_source(data_source: str | None) -> str | None:
-    if data_source and data_source.startswith("亚马逊"):
-        return "amazon"
+    if data_source == "亚马逊日本评论数据":
+        return "amazon-japan"
+    if data_source == "亚马逊美国评论数据":
+        return "amazon-us"
     if data_source == "乐天市场评论数据":
         return "rakuten"
     if data_source == "Twitter评论数据":

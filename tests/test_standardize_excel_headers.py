@@ -242,6 +242,98 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(tuple(EXPECTED_HEADER), blank_rows[0])
         self.assertEqual((None, None), blank_rows[1][3:5])
 
+    def test_normalizes_registered_rating_and_helpful_text_formats(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-rating-and-likes-text"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容", "电商平台评分", "点赞数"])
+        sheet.append(
+            [
+                "2026-07-27",
+                "英文评分与点赞数格式的完整评论",
+                "5.0 out of 5 stars",
+                "3 people found this helpful",
+            ]
+        )
+        sheet.append(
+            [
+                "2026-07-27",
+                "英文单数点赞格式的完整评论",
+                "2.0 out of 5 stars",
+                "One person found this helpful",
+            ]
+        )
+        sheet.append(
+            [
+                "2026-07-27",
+                "中文评分与点赞数格式的完整评论",
+                "4.0 颗星，最多 5 颗星",
+                "8 个人发现此评论有用",
+            ]
+        )
+        workbook.save(input_path)
+        workbook.close()
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+        )
+
+        rows = self.read_standardized_rows(output_path)
+        rating_index = EXPECTED_HEADER.index("电商平台评分")
+        self.assertEqual((5, 3), (rows[1][rating_index], rows[1][LIKES_INDEX]))
+        self.assertEqual((2, 1), (rows[2][rating_index], rows[2][LIKES_INDEX]))
+        self.assertEqual((4, 8), (rows[3][rating_index], rows[3][LIKES_INDEX]))
+
+    def test_defaults_missing_likes_column_to_zero(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-missing-likes-default"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容"])
+        sheet.append(["2026-07-27", "没有点赞数列的完整评论"])
+        workbook.save(input_path)
+        workbook.close()
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+        )
+
+        rows = self.read_standardized_rows(output_path)
+        self.assertEqual(0, rows[1][LIKES_INDEX])
+
+    def test_defaults_blank_likes_value_to_zero(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-blank-likes-default"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容", "点赞数"])
+        sheet.append(["2026-07-27", "点赞数为空的完整评论", "   "])
+        workbook.save(input_path)
+        workbook.close()
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+        )
+
+        rows = self.read_standardized_rows(output_path)
+        self.assertEqual(0, rows[1][LIKES_INDEX])
+
     def test_merges_gender_and_age_into_the_single_user_attribute_column(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-user-attribute"
         tmp.mkdir(parents=True, exist_ok=True)
@@ -325,7 +417,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("已登记属性", rows[1][user_attribute_index])
         self.assertEqual("男 40", rows[2][user_attribute_index])
 
-    def test_rejects_missing_required_header_without_guessing(self) -> None:
+    def test_rejects_missing_comment_content_header_without_guessing(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-missing-header"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
@@ -333,8 +425,8 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "SheetA"
-        sheet.append(["评论日期", "评论内容", "子评论数", "一级评论", "二级评论"])
-        sheet.append(["2026/01/05", "评论 A", 2, "一级 A", "二级 A"])
+        sheet.append(["评论日期", "子评论数", "一级评论", "二级评论"])
+        sheet.append(["2026/01/05", 2, "一级 A", "二级 A"])
         workbook.save(input_path)
 
         with self.assertRaisesRegex(HeaderNotFoundError, "Available headers"):
@@ -506,7 +598,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(("2023-03-15", "评论 A", None), rows[1][:3])
         self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
-        self.assertEqual(("2", None, None, None, None), rows[1][LIKES_INDEX:])
+        self.assertEqual((2, None, None, None, None), rows[1][LIKES_INDEX:])
 
     def test_standardizes_csv_input_with_same_header_mapping_rules(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-csv-input"
@@ -525,7 +617,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(("2023-03-15", "评论 A", None), rows[1][:3])
         self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
-        self.assertEqual(("2", "0", None, None, None), rows[1][LIKES_INDEX:])
+        self.assertEqual((2, "0", None, None, None), rows[1][LIKES_INDEX:])
 
     def test_maps_tiktok_comment_exporter_aliases_without_ai(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-aliases"
@@ -546,7 +638,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             expected_standardized_row(
                 "2023-03-15",
                 "This monitor light works great",
-                likes="4",
+                likes=4,
                 subcomment_count="7",
             ),
             rows[1],
@@ -572,7 +664,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(tuple(EXPECTED_HEADER), rows[0])
         self.assertEqual(("2023-03-15", "This monitor light works great", None), rows[1][:3])
         self.assertRegex(rows[1][HASH_ID_INDEX], r"^[0-9a-f]{64}$")
-        self.assertEqual(("4", "7", None, None, None), rows[1][LIKES_INDEX:])
+        self.assertEqual((4, "7", None, None, None), rows[1][LIKES_INDEX:])
 
     def test_maps_confirmed_tiktok_chinese_datetime_without_time_output(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-chinese-datetime"
@@ -593,7 +685,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             expected_standardized_row(
                 "2026-07-07",
                 "This monitor light works great",
-                likes="4",
+                likes=4,
                 subcomment_count="7",
             ),
             rows[1],

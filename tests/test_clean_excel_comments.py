@@ -149,7 +149,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
 
         self.assertIsNone(should_delete_comment("漢字좋아요", set(), config, ()))
 
-    def test_clean_workbook_matches_rpa_rules_and_keeps_last_duplicate(self) -> None:
+    def test_clean_workbook_matches_rpa_rules_and_falls_back_to_last_without_like_column(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-rules"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "dirty.xlsx"
@@ -191,6 +191,39 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertTrue(result.output_csv and result.output_csv.exists())
         self.assertTrue(result.deletion_log_csv.exists())
         self.assertTrue(result.summary_json.exists())
+
+    def test_duplicate_main_comments_keep_highest_like_count_then_last_tie(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-duplicate-main-comments-max-likes"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "duplicates.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "SheetA"
+        sheet.append(["评论内容", "点赞数", "标记"])
+        sheet.append(["同一条完整评论内容", 10, "highest-like"])
+        sheet.append(["同一条完整评论内容", 2, "lower-like-later"])
+        sheet.append(["另一条完整评论内容", 5, "tie-earlier"])
+        sheet.append(["另一条完整评论内容", 5, "tie-later"])
+        workbook.save(input_path)
+
+        result = clean_workbook(
+            input_path=input_path,
+            config=CleanerConfig(target_header="评论内容"),
+            clean_words=(),
+            output_dir=tmp / "out",
+        )
+
+        cleaned = load_workbook(result.output_xlsx)
+        rows = list(cleaned["SheetA"].iter_rows(min_row=2, values_only=True))
+        self.assertEqual(
+            [
+                ("同一条完整评论内容", 10, "highest-like"),
+                ("另一条完整评论内容", 5, "tie-later"),
+            ],
+            rows,
+        )
+        self.assertEqual(2, result.rows_deleted)
 
     def test_clean_words_are_optional(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-optional-clean-words"

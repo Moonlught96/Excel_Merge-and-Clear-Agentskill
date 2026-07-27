@@ -193,6 +193,8 @@ class OutputFileNamingTest(unittest.TestCase):
 
         self.assertEqual("亚马逊日本评论数据", japan_plan.data_source)
         self.assertEqual("亚马逊美国评论数据", us_plan.data_source)
+        self.assertEqual("amazon-japan", japan_plan.preprocessing_profile)
+        self.assertEqual("amazon-us", us_plan.preprocessing_profile)
         self.assertEqual(
             "20260724_2017_ScreenBar_亚马逊日本评论数据_合并总表.xlsx",
             japan_plan.filenames["merge"],
@@ -215,12 +217,22 @@ class OutputFileNamingTest(unittest.TestCase):
 
         self.assertEqual("2017_ScreenBar", plan.product_name)
         self.assertEqual("亚马逊日本评论数据", plan.data_source)
-        self.assertEqual("amazon", plan.preprocessing_profile)
+        self.assertEqual("amazon-japan", plan.preprocessing_profile)
         self.assertEqual([], plan.missing_fields)
         self.assertEqual(
             "20260724_2017_ScreenBar_亚马逊日本评论数据_合并总表.xlsx",
             plan.filenames["merge"],
         )
+
+    def test_generic_amazon_source_does_not_select_a_regional_profile(self) -> None:
+        plan = build_naming_plan(
+            [Path("D:/project/Amazon/Amazon_ScreenBar.xlsx")],
+            product_name="ScreenBar",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+
+        self.assertEqual("亚马逊评论数据", plan.data_source)
+        self.assertIsNone(plan.preprocessing_profile)
 
     def test_detects_rakuten_market_and_exposes_its_preprocessing_route(self) -> None:
         plan = build_naming_plan(

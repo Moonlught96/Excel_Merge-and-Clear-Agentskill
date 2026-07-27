@@ -13,7 +13,7 @@
 - Pure numeric comments keep the legacy seven-character threshold for backward compatibility.
 - Delete comments exactly equal to `该用户未填写评价内容` or `此用户未填写评价内容`.
 - Delete a row when the main comment contains any user-confirmed KOL clean word.
-- Delete duplicate main comments only within the same worksheet, keeping the last occurrence and deleting earlier rows.
+- Delete duplicate main comments only within the same worksheet, keeping the row with the highest deterministic numeric value in `点赞数` and deleting the other rows. If likes are tied, blank, non-numeric, or the `点赞数` column is absent, keep the last occurrence. Non-numeric likes are treated as `0`; no semantic or abbreviated-number inference is permitted.
 - Never use AI, semantic quality review, sentiment, relevance, suspected-advertising judgment, or fuzzy matching.
 - Fixed delete words are isolated by deterministic script group. Chinese comments use only Chinese fixed words; Japanese, Korean, Thai, and Hindi comments use only their corresponding script group. English and Spanish share the Latin-script group because script inspection cannot reliably distinguish those languages without semantic inference.
 - Language-neutral URL markers such as `http://` and `https://` apply to every script group.

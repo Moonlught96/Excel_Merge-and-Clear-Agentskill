@@ -69,6 +69,8 @@ Use `scripts/output_file_naming.py` for deterministic naming and `scripts/compar
 
 CLI output writers reject existing destinations by default. Use `--overwrite` only after the user explicitly confirms replacement; library callers must make the same choice explicitly.
 
+Every transformation CLI requires an explicit `--output` path. User-facing phase outputs must use the confirmed naming plan; temporary outputs must use an explicit current-run path. Internal library fallback names exist only for compatibility, use the Beijing date basis, and are not a permitted workflow entry point.
+
 ## Output Standard
 
 During the workflow:
@@ -91,6 +93,6 @@ Retain logs or summaries only when the user requested them before cleaning. Neve
 - `references/`: complete approved workflow and data standards.
 - `assets/`: reusable confirmation and rule-extension templates.
 - `agents/openai.yaml`: Agent interface metadata.
-- `requirements.txt`: portable Python dependency declaration.
+- `requirements.txt`: portable Python dependency declaration; Python 3.10+ is required.
 
 This Skill folder is self-contained. It must remain runnable after the entire `product-user-comment-data-merge-cleaning` directory is copied outside this repository. Automatic creation of a new protected hash-ID project requires Windows DPAPI; non-Windows runtimes can load only a securely pre-provisioned environment project key.

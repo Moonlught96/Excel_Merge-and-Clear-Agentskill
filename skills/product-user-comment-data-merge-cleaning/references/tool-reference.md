@@ -11,8 +11,8 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - `scripts/filter_comments_by_keywords.py`: retain only standardized rows whose `评论内容` contains at least one confirmed literal keyword; used only at the Twitter/X post-standardization gate.
 - `scripts/hash_id_pseudonymizer.py`: select a worksheet-wide registered account ID or display-name fallback, normalize the value, and compute project/platform/identity-type-isolated HMAC-SHA256 values.
 - `scripts/hash_id_project_store.py`: create/load protected project keys; Windows uses current-user DPAPI.
-- `scripts/standardize_excel_headers.py`: map fixed aliases, use a confirmed literal `--product-name` fallback only when a source product value is absent or blank, derive `哈希ID`, reorder complete columns, convert configured dates, and omit non-standard columns.
-- `scripts/audit_standardized_comments.py`: verify the fixed standardized schema, structural source/output consistency, and hash-ID format before cleaning.
+- `scripts/standardize_excel_headers.py`: map fixed aliases, use a confirmed literal `--product-name` fallback only when a source product value is absent or blank, derive `哈希ID`, reorder complete columns, convert configured dates, apply fixed cross-platform rating/likes numeric normalization, and omit non-standard columns.
+- `scripts/audit_standardized_comments.py`: verify the fixed standardized schema, source/output consistency, hash-ID format, and nonblank standardized `点赞数` values before cleaning; it never rewrites the workbook.
 - `scripts/clean_excel_comments.py`: apply deterministic main-comment, KOL, fixed-word, random-heap, duplicate, and subcomment rules.
 - `scripts/cleanup_intermediate_outputs.py`: delete only explicitly supplied current-run intermediates while protecting inputs and final outputs.
 - `scripts/compare_cleaned_workbooks.py`: optional audit-only workbook comparison; it is not part of the default workflow.
@@ -24,8 +24,8 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - `config/comment-cleaner.json`: active cleaning thresholds, exact text, fixed contains terms, random-heap thresholds, duplicate policy, subcomment rules, and CSV encoding.
 - `config/header-standardizer.json`: exact standard output order, fixed aliases, required/optional columns, and known dropped headers.
 - `config/hash-id.json`: platform aliases plus ordered `user_id_headers` and `display_name_headers`; do not add ambiguous identity fields.
-- `config/platform-preprocessing.json`: exact platform header signatures and deterministic pre-standardization field operations. Current registered profiles: `amazon`, `rakuten`, and `twitter`; `rakuten` has five named exact header variants.
-- `schema_version` must be `2`; schema version `1` is rejected.
+- `config/platform-preprocessing.json`: exact platform header signatures and deterministic pre-standardization field operations. Current registered profiles: `amazon-japan`, `amazon-us`, `rakuten`, and `twitter`; `rakuten` has five named exact header variants.
+- In `config/hash-id.json`, `schema_version` must be `2`; schema version `1` is rejected. `config/platform-preprocessing.json` independently requires `schema_version: 1`.
 - `algorithm_version` remains `bazhuayu-hash-id-v1`, and this schema migration does not change hash outputs.
 
 
@@ -40,6 +40,8 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - Comment IDs, parent IDs, URLs, IP fields, `用户身份`, and ambiguous fields are never identity sources.
 - Identity selection, normalization, and hashing are deterministic tooling only; do not use AI.
 ## Command Reference
+
+Every transformation command below requires `--output`. Pass the exact path already shown and confirmed by the naming plan; `--output-dir` alone is not a workflow output contract.
 
 Plan output names:
 
@@ -62,7 +64,7 @@ python scripts\strip_bilibili_reply_prefixes.py "<raw-merged.xlsx>" --output "<r
 Preprocess a registered platform only when its exact configured signature applies:
 
 ```powershell
-python scripts\preprocess_platform_comments.py "<raw-or-prefix-stripped.xlsx>" --platform "amazon-or-rakuten" --output "<platform-preprocessed.xlsx>"
+python scripts\preprocess_platform_comments.py "<raw-or-prefix-stripped.xlsx>" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter" --output "<platform-preprocessed.xlsx>"
 ```
 
 The command stops rather than guessing when the headers do not match the selected profile. It does not replace the common standardizer or apply a profile to unregistered platforms.
@@ -134,7 +136,7 @@ Existing outputs are rejected by CLI unless `--overwrite` is supplied after expl
 
 ## Runtime Requirements
 
-- Python 3.10 or newer is recommended.
+- Python 3.10 or newer is required.
 - `openpyxl` is required.
 - Install portable dependencies with `python -m pip install -r requirements.txt` from the Skill root.
 - Use a Python runtime that includes `zoneinfo` timezone data for deterministic Beijing naming.

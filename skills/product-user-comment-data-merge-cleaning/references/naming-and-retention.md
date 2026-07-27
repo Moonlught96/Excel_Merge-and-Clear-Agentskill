@@ -25,6 +25,8 @@ Examples:
 
 Confirm product name and data source once. After confirmation, do not ask again for later output names; replace only the step name.
 
+Every transformation CLI requires an explicit `--output` path. User-facing phase outputs must use the confirmed naming plan; temporary outputs must use an explicit current-run path. It must not generate a user-facing stage output from a default path. Compatibility-only library fallback names use the Beijing date basis and are not a workflow entry point.
+
 ## Deterministic Name Discovery
 
 Product name may be discovered only from:
@@ -44,7 +46,7 @@ Amazon display naming is determined only from registered path/file keywords:
 - `亚马逊美国`, `Amazon USA`, `Amazon US`, or `amazon.com` -> `亚马逊美国评论数据`.
 - A generic Amazon keyword without one of the above region keywords -> `亚马逊评论数据`.
 
-Japan and US inputs both use the same `amazon` preprocessing profile. The display source name never selects a profile, creates a different standardized schema, or changes the deterministic header-signature requirement. If one input batch contains more than one detected Amazon region, source naming is ambiguous and the workflow must stop for user confirmation.
+Japan and US inputs use distinct deterministic preprocessing profiles and hash namespaces: `亚马逊日本评论数据` selects `amazon-japan`; `亚马逊美国评论数据` selects `amazon-us`. Each still requires its complete registered ordered header signature. A generic Amazon keyword without a registered region does not select either profile. If one input batch contains more than one detected Amazon region, source naming is ambiguous and the workflow must stop for user confirmation.
 
 Rakuten display naming is determined only from the registered `乐天市场`, `Rakuten`, or `rakuten` path/file keyword and becomes `乐天市场评论数据`. It selects the planned `rakuten` preprocessing route for confirmation, but execution still requires one of the complete ordered Rakuten header signatures. For a Rakuten filename containing its platform keyword, the deterministic product-name parser removes only the platform keyword and outer separators; it preserves a product version token such as `ScreenBar 1` instead of treating it as numeric noise.
 

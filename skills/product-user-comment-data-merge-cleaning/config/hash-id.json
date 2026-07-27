@@ -39,8 +39,14 @@
       "display_name_headers": ["用户名"]
     },
     {
-      "namespace": "amazon",
-      "aliases": ["亚马逊", "Amazon", "amazon"],
+      "namespace": "amazon-japan",
+      "aliases": ["亚马逊日本", "Amazon Japan", "amazon.co.jp"],
+      "user_id_headers": [],
+      "display_name_headers": ["名称"]
+    },
+    {
+      "namespace": "amazon-us",
+      "aliases": ["亚马逊美国", "Amazon USA", "Amazon US", "amazon.com"],
       "user_id_headers": [],
       "display_name_headers": ["名称"]
     },

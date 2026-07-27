@@ -144,7 +144,7 @@ Ask exactly:
 ## Platform Preprocessing
 
 - `scripts/preprocess_platform_comments.py` is a deterministic splitter before the common standardizer. It selects only one registered platform/profile variant by a full exact header signature from `config/platform-preprocessing.json`.
-- The registered profiles are `amazon`, `rakuten`, and `twitter`. Amazon Japan and Amazon US both use the one `amazon` profile; the region only changes the deterministic data-source display name used in output naming. `rakuten` contains five explicitly registered exact variants for its confirmed export layouts; all retain the same `rakuten` hash namespace and common standard output schema. `twitter` has one exact full export signature and one shared `twitter` hash namespace for the `Twitter` and `X` labels.
+- The registered profiles are `amazon-japan`, `amazon-us`, `rakuten`, and `twitter`. Amazon Japan and Amazon US use separate profiles and separate hash namespaces: Japan's 13-column profile parses its registered date field, while the US 10-column profile emits a blank date because no date source is registered. `rakuten` contains five explicitly registered exact variants for its confirmed export layouts; all retain the same `rakuten` hash namespace and common standard output schema. `twitter` has one exact full export signature and one shared `twitter` hash namespace for the `Twitter` and `X` labels.
 - The Agent may invoke the splitter only for a registered profile or to inspect the supplied headers deterministically. It must never use AI, fuzzy matching, source-value semantics, or filename guesswork to choose a profile.
 - For a multi-file batch whose raw merge raises `HeaderMismatchError`, `--merge-registered-variants` may preprocess every input sheet using its own full exact registered variant, then append the common configured temporary columns into one platform-preprocessed merged workbook. All output-column headers and order must be identical across those variants. The result is the merge checkpoint and must not be sent through the splitter again.
 - If any input sheet fails its selected profile signature, stop. Do not fall back to another profile, a partial field match, or a partial merged output.
@@ -162,6 +162,7 @@ The audit is deterministic and must pass all of these checks before the standard
 2. No duplicate or raw identity header is present in standardized output.
 3. Each nonblank `哈希ID` is exactly 64 lowercase hexadecimal characters.
 4. Standardized worksheet names/order and data-row counts match the workbook supplied to standardization.
+5. Every standardized data row has a nonblank `点赞数`; source blanks or an absent source column must already have been written as numeric `0` by standardization.
 
 The audit report records only structural metadata, counts, header names, and issue codes; it must not record a raw identity value or comment text. It does not judge semantic quality, sentiment, language, product relevance, or whether a row should be deleted. If any check fails, stop the workflow before user confirmation, KOL-word collection, or cleaning.
 

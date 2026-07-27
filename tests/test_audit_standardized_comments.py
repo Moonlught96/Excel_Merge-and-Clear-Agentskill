@@ -115,6 +115,25 @@ class AuditStandardizedCommentsTest(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertIn("data_row_count_mismatch", {issue.code for issue in result.issues})
 
+    def test_blocks_blank_likes_values(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-standardized-audit-blank-likes"
+        tmp.mkdir(parents=True, exist_ok=True)
+        standardized_path = tmp / "standardized.xlsx"
+        write_workbook(
+            standardized_path,
+            STANDARD_HEADERS,
+            [["2026-07-27", "足够长的评论内容", None, None, None, None, None, None, None, None, None]],
+        )
+
+        result = audit_standardized_workbook(
+            standardized_path,
+            load_config(),
+            output_path=tmp / "audit.json",
+        )
+
+        self.assertFalse(result.passed)
+        self.assertIn("blank_likes_value", {issue.code for issue in result.issues})
+
 
 if __name__ == "__main__":
     unittest.main()

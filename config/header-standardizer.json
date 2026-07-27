@@ -83,7 +83,7 @@
         "diggCount",
         "digg_count"
       ],
-      "required": true
+      "required": false
     },
     {
       "header": "子评论数/追评数",

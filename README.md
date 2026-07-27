@@ -25,8 +25,8 @@ Excel 输入中的公式会按公式文本保留；合并、B站回复前缀处�
 ## 快速运行
 
 ```powershell
-python tools/standardize_excel_headers.py "D:\path\input.xlsx-or.csv" --output-dir "D:\path\output"
-python tools/clean_excel_comments.py "D:\path\output\标准化后的文件.xlsx" --target-header "评论内容" --clean-word "KOL清理词1" --clean-word "KOL清理词2"
+python tools/standardize_excel_headers.py "D:\path\input.xlsx-or.csv" --output "D:\path\20260727_产品名_数据来源_标准化总表.xlsx"
+python tools/clean_excel_comments.py "D:\path\20260727_产品名_数据来源_标准化总表.xlsx" --target-header "评论内容" --clean-word "KOL清理词1" --clean-word "KOL清理词2" --output "D:\path\20260727_产品名_数据来源_清洗后总表.xlsx"
 ```
 
 如果本机没有全局 `python`，让 Codex 运行即可。Codex 会使用内置 Python 环境。
@@ -40,24 +40,24 @@ python tools/standardize_excel_headers.py "D:\path\合并总表_回复前缀已�
 
 这个步骤只处理 `content` 或 `评论内容` 列中开头匹配 `回复@xxx：`、`回复 @xxx：`、`回复@xxx:`、`回复 @xxx:` 的固定文本前缀；不移动回复行，不推断父子层级，不新增列，也不删除行。
 
-已登记的平台会在通用标准化前进入独立的确定性预处理配置。每个平台或具名表头变体都必须完整、有序地命中已登记的 `header_signature`；配置不匹配时工具会停止，不会猜测平台或字段。当前包含 `amazon`、`rakuten` 和 `twitter`：乐天市场的五个已登记变体会把标题与正文固定合并、转换日期和点赞数、保留评分、从`レビュアー属性`中只保留性别/年龄字段，并将精确匿名标记`購入者さん`置空，不参与`哈希ID`。Twitter/X 的固定导出格式会保留评论日期、评论内容、点赞数、回复数，并使用 `user_id` 优先、`screen_name` 整表兜底生成哈希 ID；标准化确认后才会按本轮确认的保留关键词筛选评论行。
+已登记的平台会在通用标准化前进入独立的确定性预处理配置。每个平台或具名表头变体都必须完整、有序且按字面命中已登记的 `header_signature`，包括空白字符；配置不匹配时工具会停止，不会猜测平台或字段。当前包含 `amazon-japan`、`amazon-us`、`rakuten` 和 `twitter`：亚马逊日本和美国使用独立的表头与哈希命名空间，前者按已登记字段解析日期，后者没有日期源而固定留空。乐天市场的五个已登记变体会把标题与正文固定合并、转换日期和点赞数、保留评分、从`レビュアー属性`中只保留性别/年龄字段，并将精确匿名标记`購入者さん`置空，不参与`哈希ID`。Twitter/X 的固定导出格式会保留评论日期、评论内容、点赞数、回复数，并使用 `user_id` 优先、`screen_name` 整表兜底生成哈希 ID；标准化确认后才会按本轮确认的保留关键词筛选评论行。
 
 同一乐天市场批次若包含多个已登记但彼此不同的表头变体，普通原始合并会安全停止，不会产生半成品。此时仅在每张表都完整匹配已登记乐天变体的前提下，工具会按各自固定规则预处理后合并为一个平台预处理合并总表，再进入通用标准化；原始文件不会被改写，也不会使用 AI、模糊匹配或语义判断。
 
 ```powershell
-python tools/preprocess_platform_comments.py "D:\path\平台原始表.xlsx" --platform "amazon-or-rakuten" --output "D:\path\平台预处理表.xlsx"
+python tools/preprocess_platform_comments.py "D:\path\平台原始表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter" --output "D:\path\平台预处理表.xlsx"
 python tools/preprocess_platform_comments.py "D:\path\乐天表1.xlsx" "D:\path\乐天表2.xlsx" --platform "rakuten" --merge-registered-variants --output "D:\path\乐天平台预处理合并总表.xlsx"
-python tools/standardize_excel_headers.py "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.xlsx" --platform "amazon-or-rakuten" --project-name "研究项目"
+python tools/standardize_excel_headers.py "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter" --project-name "研究项目"
 python tools/audit_standardized_comments.py "D:\path\标准化总表.xlsx" --source "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.audit.json"
 ```
 
-审查只检查固定结构、行数和 `哈希ID` 格式，不读取或判断评论语义；审查失败时不进入 KOL 清理词或清洗步骤。
+审查只检查固定结构、行数、`哈希ID` 格式和 `点赞数` 非空，不读取或判断评论语义；审查失败时不进入 KOL 清理词或清洗步骤。
 
 清理词是可选项；不填写时，不执行 KOL 清理词包含判断：
 
 ```powershell
-python tools/standardize_excel_headers.py "D:\path\input.xlsx-or.csv" --output-dir "D:\path\output"
-python tools/clean_excel_comments.py "D:\path\output\标准化后的文件.xlsx" --target-header "评论内容"
+python tools/standardize_excel_headers.py "D:\path\input.xlsx-or.csv" --output "D:\path\20260727_产品名_数据来源_标准化总表.xlsx"
+python tools/clean_excel_comments.py "D:\path\20260727_产品名_数据来源_标准化总表.xlsx" --target-header "评论内容" --output "D:\path\20260727_产品名_数据来源_清洗后总表.xlsx"
 ```
 
 ## 配置
@@ -112,7 +112,9 @@ config/platform-preprocessing.json
 10. `二级评论`
 11. `三级评论`
 
-`评论时间` 会规范成 `评论日期`；`timestamp` 会按北京时间（UTC+8）转换成 `YYYY-MM-DD` 日期，只保留年月日，不保留时分秒；`评论内容` 或 `content` 会规范成 `评论内容`；淘宝表头 `评论日期与产品` 会按固定格式拆分：开头日期进入 `评论日期`，`已购：` 后面的内容进入 `产品名`；京东等独立表头 `购买产品` 会直接进入 `产品名`。`电商平台评分` 当前只按完全一致的表头复制，源文件没有对应列时保留空列；评分通常为 1–5，除已确认的平台预处理固定解析外，工具不校验、推断或改写评分。`用户属性`优先复制已登记同名源列的非空值；未提供该值时，按固定顺序将 `性别` 和 `年龄` 的非空值去除首尾空白后以一个空格拼接，两者都没有时为空；不会推断、补全或语义改写。`点赞量` 或 `like_count` 会规范成 `点赞数`；`子评论数`、`子评论数（追评数）`、`追评数` 或 `评论数` 会规范成 `子评论数/追评数`；`一级评论内容` 或 `追评` 会规范成 `一级评论`；`引用的评论内容` 或 `二级评论内容` 会规范成 `二级评论`。昵称、IP 数据、`rpid`、`parent_rpid`、`username`、`ip_location` 以及其它不在保留清单内的列不会进入标准化后的文件；其中 `parent_rpid` 是父评论 ID，不会映射为 `子评论数/追评数`。若源文件没有 `产品名`、`电商平台评分`、`用户属性`、`一级评论`、`二级评论` 或 `三级评论`，对应列会保留为空，方便后续合并表头一致。
+`评论时间` 会规范成 `评论日期`；`timestamp` 会按北京时间（UTC+8）转换成 `YYYY-MM-DD` 日期，只保留年月日，不保留时分秒；`评论内容` 或 `content` 会规范成 `评论内容`；淘宝表头 `评论日期与产品` 会按固定格式拆分：开头日期进入 `评论日期`，`已购：` 后面的内容进入 `产品名`；京东等独立表头 `购买产品` 会直接进入 `产品名`。`电商平台评分` 只按完全一致的表头映射，源文件没有对应列时保留空列；映射后数值、`N out of 5 stars` 和 `N 颗星，最多 5 颗星` 会按固定规则写为数值 `N`（文本评分仅接受 1–5），其它非空格式不会翻译、猜测、四舍五入或改写。`用户属性`优先复制已登记同名源列的非空值；未提供该值时，按固定顺序将 `性别` 和 `年龄` 的非空值去除首尾空白后以一个空格拼接，两者都没有时为空；不会推断、补全或语义改写。`点赞量` 或 `like_count` 会规范成 `点赞数`；如源表没有点赞列，或该单元格为空/仅空白，标准化表固定写入数值 `0`；数值、纯数字和已确认的固定有用数文本会写为整数，其他非空格式保持原样；`子评论数`、`子评论数（追评数）`、`追评数` 或 `评论数` 会规范成 `子评论数/追评数`；`一级评论内容` 或 `追评` 会规范成 `一级评论`；`引用的评论内容` 或 `二级评论内容` 会规范成 `二级评论`。昵称、IP 数据、`rpid`、`parent_rpid`、`username`、`ip_location` 以及其它不在保留清单内的列不会进入标准化后的文件；其中 `parent_rpid` 是父评论 ID，不会映射为 `子评论数/追评数`。若源文件没有 `产品名`、`电商平台评分`、`用户属性`、`一级评论`、`二级评论` 或 `三级评论`，对应列会保留为空，方便后续合并表头一致。
+
+所有平台在通用标准化阶段都会执行固定数值规范化：`电商平台评分`中的数值、`N out of 5 stars`和`N 颗星，最多 5 颗星`会写为数值 `N`（文本评分只接受 1–5）；`点赞数`中的数值、纯数字、`One person found this helpful`、`N person/people found this helpful`和`N 个人发现此评论有用`会写为整数 `N`。空点赞数固定写为 `0`。其它非空格式不会翻译、猜测、四舍五入或改写，以避免错误处理。
 
 淘宝 `评论日期与产品` 的拆分只使用固定规则，不用 AI：识别开头的 `YYYY年M月D日`、`YYYY/M/D` 或 `YYYY-M-D` 作为评论日期；日期后如有 `已购：`，则把后续文本作为产品名。
 

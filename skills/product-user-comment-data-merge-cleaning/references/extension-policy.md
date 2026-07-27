@@ -12,7 +12,7 @@ Examples of locked behavior include:
 - non-Chinese threshold of 4 or fewer words and unspaced fallback of 4 or fewer characters;
 - pure numeric legacy threshold;
 - fixed-word append-only behavior preserving `链接`;
-- same-worksheet duplicate policy that keeps the last occurrence;
+- same-worksheet main-comment duplicate policy that keeps the highest `点赞数`, with the last occurrence as the deterministic tie, blank, non-numeric, or missing-column fallback;
 - subcomment duplicate/short rules that clear cells instead of deleting rows;
 - confirmation gates between merge, standardization, and cleaning;
 - default retention of only cleaned `.xlsx` and `.csv`.

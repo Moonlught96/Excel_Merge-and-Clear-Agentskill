@@ -74,6 +74,8 @@ class WorkflowDocsTest(unittest.TestCase):
             "Duplicate input paths are rejected",
             "At least one `--protect` path is mandatory",
             "Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation.",
+            "Every transformation CLI requires an explicit `--output` path.",
+            "Literal header characters, including whitespace, must exactly match the registered signature.",
             "Comparison preserves formula text and counts duplicate-row multiplicity.",
             "返回文件链接时，链接文字必须使用实际完整文件名（含扩展名），不得使用泛化标签。",
         )
@@ -129,7 +131,8 @@ class WorkflowDocsTest(unittest.TestCase):
             "Non-Chinese comments with four or fewer words are deleted.",
             "Pure numeric comments keep the legacy seven-character threshold for backward compatibility.",
             "完整固定清理词清单以 `config/comment-cleaner.json` 为准",
-            "缺少必需标准列的已登记别名时必须停止",
+            "缺少必需的`评论日期`或`评论内容`已登记别名时必须停止",
+            "标准化输出固定写入数值 `0`",
             "不得猜测为标准列",
             "完全不含中文字符且命中随机英文/数字堆砌阈值的评论必须整行删除",
             "TikTok/YouTube 平台表头映射",

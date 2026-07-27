@@ -213,6 +213,47 @@ class SkillPackageTest(unittest.TestCase):
         self.assertIn("单独复制", agents)
         self.assertIn("独立运行", agents)
 
+    def test_current_platform_and_runtime_docs_are_unambiguous(self) -> None:
+        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        tool_reference = (
+            SKILL_ROOT / "references" / "tool-reference.md"
+        ).read_text(encoding="utf-8")
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        requirements = (SKILL_ROOT / "requirements.txt").read_text(encoding="utf-8")
+
+        self.assertNotIn("同一个 `amazon` 平台预处理分流器", agents)
+        self.assertNotIn("compact-no-auxiliary-columns", agents)
+        self.assertNotIn("评分或非空点赞数一律原样保留、不做数值转换", agents)
+        self.assertIn("`amazon-japan` 分流", agents)
+        self.assertIn("`amazon-us` 分流", agents)
+        for rakuten_variant in (
+            "reviewer-title-body-review-date",
+            "reviewer-date-body-title",
+            "title-review-date-body-reviewer",
+            "poster-title-body-review-date",
+            "reviewer-name-title-content",
+        ):
+            self.assertIn(f"`{rakuten_variant}`", agents)
+        self.assertIn(
+            "In `config/hash-id.json`, `schema_version` must be `2`",
+            tool_reference,
+        )
+        self.assertIn(
+            "`config/platform-preprocessing.json` independently requires `schema_version: 1`",
+            tool_reference,
+        )
+        self.assertIn(
+            "amazon-japan-or-amazon-us-or-rakuten-or-twitter",
+            tool_reference,
+        )
+        self.assertIn("Python 3.10 or newer is required.", tool_reference)
+        self.assertIn("Requires Python >=3.10", requirements)
+        self.assertIn(
+            "amazon-japan-or-amazon-us-or-rakuten-or-twitter",
+            readme,
+        )
+        self.assertNotIn("非空原值不改写", readme)
+
     def test_copied_skill_runs_without_project_root(self) -> None:
         temp_directory = tempfile.TemporaryDirectory(prefix="standalone-skill-")
         temp_root = Path(temp_directory.name).resolve()

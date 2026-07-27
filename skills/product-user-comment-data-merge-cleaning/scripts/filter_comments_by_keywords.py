@@ -14,14 +14,14 @@ try:
         load_workbook_for_processing,
         unsupported_input_message,
     )
-    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
 except ModuleNotFoundError:
     from csv_excel_compat import (
         is_supported_input_path,
         load_workbook_for_processing,
         unsupported_input_message,
     )
-    from output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
 
 
 DEFAULT_TARGET_HEADER = "评论内容"
@@ -140,7 +140,7 @@ def make_output_paths(
         output_xlsx = output_path.resolve()
     else:
         parent = output_dir.resolve() if output_dir else input_path.parent
-        output_xlsx = parent / f"{input_path.stem}.keyword-filtered.xlsx"
+        output_xlsx = parent / f"{beijing_date_text()}_{input_path.stem}.keyword-filtered.xlsx"
     return output_xlsx, output_xlsx.with_suffix(".keyword-filter.summary.json")
 
 
@@ -237,8 +237,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_TARGET_HEADER,
         help=f"Exact comment header, default: {DEFAULT_TARGET_HEADER}",
     )
-    parser.add_argument("--output-dir", type=Path, default=None, help="Output directory")
-    parser.add_argument("--output", type=Path, default=None, help="Output .xlsx path")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Legacy programmatic fallback directory; CLI still requires --output.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="Explicit current-run temporary output .xlsx path.",
+    )
     parser.add_argument(
         "--overwrite",
         action="store_true",
@@ -247,8 +257,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     result = filter_workbook(
         args.input_path,
         args.keep_keyword,

@@ -3,12 +3,24 @@ from __future__ import annotations
 import os
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
 
 class OutputPathConflictError(ValueError):
     pass
+
+
+BEIJING_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
+
+
+def beijing_date_text(now: datetime | None = None) -> str:
+    """Return a calendar date using the workflow's fixed Beijing time basis."""
+    value = now if now is not None else datetime.now(BEIJING_TIMEZONE)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=BEIJING_TIMEZONE)
+    return value.astimezone(BEIJING_TIMEZONE).strftime("%Y%m%d")
 
 
 def resolved_unique_paths(paths: list[Path] | tuple[Path, ...]) -> list[Path]:

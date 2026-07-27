@@ -44,18 +44,19 @@ Do not use AI, semantic similarity, spelling similarity, or content inspection t
 - When the selected profile does not match, the tool stops with `No configured platform signature matched`; it must not guess a different platform.
 - A profile writes a separate temporary workbook. The common standardizer then only applies the locked final column order, sensitive-field omission, and hash-ID rules.
 
-### Amazon Profile
+### Amazon Japan And Amazon US Profiles
 
-The registered `amazon` profile has this exact ordered signature: `标题`, `标题链接`, `图片`, `aprofile_链接`, `名称`, `aiconalt`, `查看`, `状态`, `查看1`, `asizebase`, `crhelpfultext`, `asizebase_链接`, and `asizebase2`. A workbook is not Amazon-preprocessed merely because it contains `名称`, `查看`, or any other familiar individual field; the whole source header row must match. It intentionally does not copy `crhelpfultext`, links, images, status fields, or any other source column.
+`amazon-japan` and `amazon-us` are separate deterministic platform profiles and separate hash namespaces. `amazon-japan` has one named `default` variant requiring this exact 13-column ordered signature: `标题`, `标题链接`, `图片`, `aprofile_链接`, `名称`, `aiconalt`, `查看`, `状态`, `查看1`, `asizebase`, `crhelpfultext`, `asizebase_链接`, and `asizebase2`. `amazon-us` requires this exact 10-column ordered signature: `标题`, `标题链接`, `图片`, `aprofile_链接`, `名称`, `aiconalt`, `查看`, `状态`, `查看1`, and `asizebase`. A workbook is not routed by a familiar individual field; its whole source header row must exactly equal the registered profile selected from the confirmed region.
 
-Amazon Japan and Amazon US use this same one `amazon` profile. The region is a deterministic output-name/data-source display property only; it never selects a different header mapping or invokes a language/semantic classifier.
+Japan parses `查看` as `评论日期`. US has no confirmed date source, so it uses the fixed `empty` operation and outputs a blank `评论日期`; it must never parse or infer a date from `查看`. Both profiles use `标题` plus `查看1` for comment content, `aiconalt` for e-commerce rating, `asizebase` for likes, and `名称` only as the temporary display-name source for `哈希ID`. They intentionally do not copy links, images, status fields, auxiliary columns, or any other source column.
 
 | Source field(s) | Configured operation | Preprocessing output |
 | --- | --- | --- |
-| `查看` | `amazon_review_date` | `评论日期`: a fixed `YYYY年M月D日在…发布评论` value becomes `YYYY-MM-DD`; an unexpected nonblank value is preserved unchanged rather than guessed. |
+| Japan `查看` | `amazon_review_date` | `评论日期`: a fixed `YYYY年M月D日在…发布评论` value becomes `YYYY-MM-DD`; an unexpected nonblank value is preserved unchanged rather than guessed. |
+| US `评论日期` | `empty` | No registered source date exists; always output a blank value. |
 | `标题` + `查看1` | `join_trimmed` | `评论内容`: trimmed nonblank parts are joined in fixed order with one blank line (`\n\n`); if one part is blank, use the other part alone. |
-| `aiconalt` | `amazon_star_rating` | `电商平台评分`: fixed `X 颗星，最多 5 颗星` text with `1 <= X <= 5` becomes the exact captured score text; unexpected nonblank input is preserved unchanged. |
-| `asizebase` | `amazon_helpful_count` | `点赞数`: fixed `N 个人发现此评论有用` text becomes integer `N`; blank remains blank and unexpected nonblank input is preserved unchanged. |
+| `aiconalt` | `amazon_star_rating` | `电商平台评分`: preprocessing recognizes the fixed Japanese-interface `X 颗星，最多 5 颗星` form. The common post-mapping normalizer used by every platform additionally converts exact `N out of 5 stars` and the Japanese form to numeric `N`; unexpected nonblank input is preserved unchanged. |
+| `asizebase` | `amazon_helpful_count` | `点赞数`: preprocessing recognizes fixed `N 个人发现此评论有用`. The common post-mapping normalizer used by every platform additionally converts exact `One person found this helpful` and `N person/people found this helpful` to integer `N`; blank remains blank at this temporary preprocessing stage, then common standardization writes numeric `0`; unexpected nonblank input is preserved unchanged. |
 | `名称` | `copy` | Temporary identity field only; it is used as the registered Amazon display-name input to derive `哈希ID`, then omitted from standard and cleaned outputs. |
 
 The Amazon parser uses only the registered exact headers, fixed regular expressions, fixed source-field order, and fixed string joining. It never uses AI, translation, semantic inference, or row-level judgment.
@@ -70,7 +71,7 @@ The profile is selected only when the entire source header row has exactly that 
 | --- | --- | --- |
 | `created_at` | `copy` | Temporary `评论日期`, then common standardization applies its fixed Beijing-date conversion. |
 | `full_text` | `copy` | Temporary `评论内容`. |
-| `favorite_count` | `copy` | Temporary `点赞数`. |
+| `favorite_count` | `copy` | Temporary `点赞数`; a blank value remains blank at this temporary preprocessing stage, then common standardization writes numeric `0`. |
 | `reply_count` | `copy` | Temporary `子评论数/追评数`. |
 | `user_id` | `copy` | Temporary `Twitter用户ID`, used only as the registered stable account-ID input for `哈希ID`. |
 | `screen_name` | `copy` | Temporary `Twitter昵称`, used only as the registered display-name fallback when the whole `Twitter用户ID` column is empty. |
@@ -97,7 +98,7 @@ Each Rakuten variant writes the same temporary columns in this order: `评论日
 | `レビュータイトル` + `レビュー本文` or `レビュー内容` | `join_trimmed` | `评论内容`: trimmed nonblank parts are joined in fixed title-then-body order with one blank line (`\n\n`). It does not deduplicate equal title/body text. |
 | `評価` | `copy` | `电商平台评分`: source value is copied as captured; no range inference, rounding, or rewrite is performed. |
 | `レビュアー属性` | `rakuten_user_attribute` | `用户属性`: only fixed `男性` or `女性` and fixed numeric age tokens such as `50代`, `70代以上`, `30歳`, or `30才` are retained, joined with one ASCII space. All other portions, including `自分用｜実用品・普段使い｜はじめて`, are omitted. If no registered gender/age token exists, leave blank. |
-| `参考になった数` | `rakuten_helpful_count` | `点赞数`: exact `N人` becomes integer `N`; blank remains blank and unexpected nonblank input is preserved unchanged. |
+| `参考になった数` | `rakuten_helpful_count` | `点赞数`: exact `N人` becomes integer `N`; blank remains blank at this temporary preprocessing stage, then common standardization writes numeric `0`; unexpected nonblank input is preserved unchanged. |
 | `レビュー投稿者`, `投稿者名`, or `レビュアー名` | `rakuten_display_name` | Temporary `乐天市场昵称` used only for the approved Rakuten display-name hash. Exact trimmed `購入者さん` becomes blank and never produces a `哈希ID`; any other source display name is trimmed and used only in memory during common standardization. |
 
 `注文日`, `カラー`, and every other Rakuten source field are intentionally omitted from the preprocessing output. `乐天市场昵称` is omitted from standardized and cleaned output, logs, and summaries after hash derivation. The Rakuten parser uses only the registered full signatures, fixed regular expressions, fixed source-field order, and fixed text handling. It never uses AI, translation, semantic inference, or row-level judgment.
@@ -110,10 +111,11 @@ This mode does not alter any original input, does not infer a missing field, and
 
 ## Required And Blank Columns
 
-- `评论日期`, `评论内容`, and `点赞数` require one unambiguous source match.
+- `评论日期` and `评论内容` require one unambiguous source match.
+- `点赞数` is always retained. When its configured source column is absent, or a mapped cell is null/empty/whitespace-only, common standardization writes numeric `0`. Across all platforms, an already numeric value, digits-only text, exact `One person found this helpful`, exact `N person/people found this helpful`, or exact `N 个人发现此评论有用` is written as numeric `N`; unmatched nonblank values remain unchanged and are never guessed, translated, or abbreviated.
 - `产品名`, `电商平台评分`, `用户属性`, `子评论数/追评数`, `一级评论`, `二级评论`, and `三级评论` remain in the output when the source has no matching column; their values stay blank.
 - `用户属性` retains a nonblank direct `用户属性` value. If that value is blank or the direct source column is absent, the script trims and joins nonblank registered `性别` then `年龄` values with one ASCII space. It never infers, translates, classifies, or completes an attribute.
-- `电商平台评分` normally contains a source value from 1 through 5. Outside a registered platform-preprocessing parser, the script copies the configured source column as-is and does not validate, infer, round, or rewrite a rating. The Amazon profile's `amazon_star_rating` parser is a fixed, user-confirmed extraction exception; it does not infer or round a score. `用户属性` is a retained output field only and never a `哈希ID` identity source.
+- `电商平台评分` normally contains a source value from 1 through 5. Across all platforms, an already numeric value, exact `N out of 5 stars`, or exact `N 颗星，最多 5 颗星` is written as numeric `N` when the fixed textual score is in the 1-5 range; a whole number is written as an integer and a fractional rating remains numeric. Other nonblank values remain unchanged and are not validated, inferred, rounded, translated, or semantically interpreted. The Amazon profile's `amazon_star_rating` parser is a fixed, user-confirmed extraction step before this common normalizer. `用户属性` is a retained output field only and never a `哈希ID` identity source.
 - `子评论数/追评数` is required in the standard output schema even when the source header is absent.
 - If a required source header is missing or any standard column matches more than one source column, stop and report the actual headers. Do not guess.
 - Do not infer `四级评论` or deeper levels unless the user explicitly extends the fixed schema.
@@ -171,7 +173,8 @@ Unknown columns that are not configured standard aliases are omitted. They are n
 - Exact account-ID mappings:
   - YouTube: `author_channel_id`, then `authorChannelId`, then `Author Channel ID`.
   - 小红书: `用户ID`.
-  - 亚马逊: none.
+  - 亚马逊日本: none.
+  - 亚马逊美国: none.
   - 乐天市场: none.
   - Twitter/X: `Twitter用户ID`.
 - Exact display-name fallback mappings:
@@ -181,7 +184,8 @@ Unknown columns that are not configured standard aliases are omitted. They are n
   - TikTok: `用户名`, then `昵称`; never `用户身份`.
   - 淘宝: `用户名称`, then `用户名`.
   - 京东: `用户名`.
-  - 亚马逊: `名称`.
+  - 亚马逊日本: `名称`.
+  - 亚马逊美国: `名称`.
   - 乐天市场: `乐天市场昵称`.
   - Twitter/X: `Twitter昵称`.
 - The same normalized display name in the same research project and platform produces the same hash regardless of which registered display-name header supplied it.

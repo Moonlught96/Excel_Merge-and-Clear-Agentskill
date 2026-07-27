@@ -9,15 +9,16 @@ from typing import Any
 
 try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
     from tools.standardize_excel_headers import HeaderStandardizerConfig, load_config
 except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
     from standardize_excel_headers import HeaderStandardizerConfig, load_config
 
 
 HASH_ID_HEADER = "哈希ID"
+LIKES_HEADER = "点赞数"
 HASH_ID_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 FORBIDDEN_IDENTITY_HEADERS = frozenset(
     {
@@ -51,6 +52,7 @@ class SheetAuditSummary:
     standardized_data_rows: int
     source_data_rows: int | None
     invalid_hash_id_count: int
+    blank_likes_count: int
     unexpected_headers: tuple[str, ...]
     missing_headers: tuple[str, ...]
 
@@ -137,6 +139,26 @@ def _sheet_summary(
     else:
         issues.append(AuditIssue("missing_hash_id_header", sheet.title))
 
+    likes_columns = [
+        index
+        for index, header in enumerate(actual_headers, start=1)
+        if header == LIKES_HEADER
+    ]
+    blank_likes_count = 0
+    if len(likes_columns) == 1:
+        likes_column = likes_columns[0]
+        for (value,) in sheet.iter_rows(
+            min_row=config.header_row + 1,
+            max_row=sheet.max_row,
+            min_col=likes_column,
+            max_col=likes_column,
+            values_only=True,
+        ):
+            if value is None or (isinstance(value, str) and not value.strip()):
+                blank_likes_count += 1
+        if blank_likes_count:
+            issues.append(AuditIssue("blank_likes_value", sheet.title))
+
     source_data_rows = None
     if source_sheet is not None:
         source_data_rows = _data_row_count(source_sheet, config.header_row)
@@ -149,13 +171,14 @@ def _sheet_summary(
         standardized_data_rows=_data_row_count(sheet, config.header_row),
         source_data_rows=source_data_rows,
         invalid_hash_id_count=invalid_hash_id_count,
+        blank_likes_count=blank_likes_count,
         unexpected_headers=unexpected_headers,
         missing_headers=missing_headers,
     )
 
 
 def default_output_path(input_path: Path) -> Path:
-    return input_path.with_suffix(".audit.json")
+    return input_path.with_name(f"{beijing_date_text()}_{input_path.stem}.audit.json")
 
 
 def audit_standardized_workbook(
@@ -243,6 +266,7 @@ def audit_standardized_workbook(
                 "standardized_data_rows": summary.standardized_data_rows,
                 "source_data_rows": summary.source_data_rows,
                 "invalid_hash_id_count": summary.invalid_hash_id_count,
+                "blank_likes_count": summary.blank_likes_count,
                 "unexpected_headers": list(summary.unexpected_headers),
                 "missing_headers": list(summary.missing_headers),
             }
@@ -277,7 +301,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="The exact workbook passed to standardization, for deterministic row and sheet checks.",
     )
     parser.add_argument("--config", type=Path, default=None)
-    parser.add_argument("--output", type=Path, default=None, help="Audit JSON output path.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="Explicit current-run audit JSON output path.",
+    )
     parser.add_argument(
         "--overwrite",
         action="store_true",

@@ -17,20 +17,21 @@ try:
         load_workbook_for_processing,
         unsupported_input_message,
     )
-    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
 except ModuleNotFoundError:
     from csv_excel_compat import (
         is_supported_input_path,
         load_workbook_for_processing,
         unsupported_input_message,
     )
-    from output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "platform-preprocessing.json"
 SUPPORTED_OPERATIONS = frozenset(
     {
         "copy",
+        "empty",
         "join_trimmed",
         "amazon_review_date",
         "amazon_star_rating",
@@ -197,6 +198,7 @@ def _load_output_columns(
         source_headers = _require_string_list(
             raw_column.get("source_headers"),
             f"{column_prefix}.source_headers",
+            allow_empty=operation == "empty",
         )
         if any(source_header not in header_signature for source_header in source_headers):
             raise PlatformPreprocessConfigError(
@@ -211,6 +213,8 @@ def _load_output_columns(
             )
         if operation == "join_trimmed" and len(source_headers) < 2:
             raise PlatformPreprocessConfigError("join_trimmed requires at least two source headers")
+        if operation == "empty" and source_headers:
+            raise PlatformPreprocessConfigError("empty requires no source headers")
         output_columns.append(
             PreprocessOutputColumn(
                 header=header,
@@ -361,9 +365,9 @@ def _signature_matches(
     definition: PlatformPreprocessDefinition,
     headers: tuple[Any, ...] | list[Any],
 ) -> bool:
-    return tuple(normalize_header(header) for header in headers) == tuple(
-        normalize_header(header) for header in definition.header_signature
-    )
+    # Platform routing is intentionally stricter than common alias lookup.
+    # A registered signature must equal the raw source header sequence literally.
+    return tuple(headers) == definition.header_signature
 
 
 def _find_definitions_by_name(
@@ -537,6 +541,8 @@ def _value_for_column(
     source_columns: dict[str, int],
     output_column: PreprocessOutputColumn,
 ) -> Any:
+    if output_column.operation == "empty":
+        return None
     values = [
         source_values[source_columns[header] - 1]
         if source_columns[header] - 1 < len(source_values)
@@ -817,7 +823,7 @@ def preprocess_and_merge_workbooks(
 
 
 def make_output_paths(input_path: Path, output_dir: Path | None) -> tuple[Path, Path]:
-    timestamp = datetime.now().strftime("%Y%m%d")
+    timestamp = beijing_date_text()
     parent = output_dir if output_dir else input_path.parent
     output_xlsx = parent / f"{timestamp}_{input_path.stem}.platform-preprocessed.xlsx"
     return output_xlsx, output_xlsx.with_suffix(".summary.json")
@@ -934,8 +940,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("input_paths", type=Path, nargs="+", help="Input .xlsx/.xlsm/.csv file(s).")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
-    parser.add_argument("--output", type=Path, default=None, help="Output .xlsx path.")
-    parser.add_argument("--output-dir", type=Path, default=None, help="Output directory.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="Explicit current-run output .xlsx path.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Legacy programmatic fallback directory; CLI still requires --output.",
+    )
     parser.add_argument(
         "--platform",
         default=None,
@@ -958,8 +974,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     config = load_config(args.config)
     if args.merge_registered_variants:
-        if args.output is None:
-            raise SystemExit("--merge-registered-variants requires --output")
         if args.platform is None:
             raise SystemExit("--merge-registered-variants requires --platform")
         result = preprocess_and_merge_workbooks(

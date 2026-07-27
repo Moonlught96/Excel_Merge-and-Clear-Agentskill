@@ -17,6 +17,7 @@ import tools.preprocess_platform_comments as preprocess_module
 from tools.preprocess_platform_comments import (
     PlatformHeaderSignatureError,
     PlatformNotDetectedError,
+    detect_platform,
     load_config,
     preprocess_workbook,
 )
@@ -39,6 +40,7 @@ AMAZON_HEADERS = [
     "asizebase_链接",
     "asizebase2",
 ]
+AMAZON_COMPACT_HEADERS = AMAZON_HEADERS[:10]
 PREPROCESSED_HEADERS = ("评论日期", "评论内容", "电商平台评分", "点赞数", "名称")
 RAKUTEN_PREPROCESSED_HEADERS = (
     "评论日期",
@@ -189,6 +191,29 @@ def write_amazon_source(path: Path) -> None:
     workbook.close()
 
 
+def write_amazon_compact_source(path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Sheet1"
+    sheet.append(AMAZON_COMPACT_HEADERS)
+    sheet.append(
+        [
+            "Compact title",
+            "https://example.invalid/title",
+            "https://example.invalid/image",
+            "https://example.invalid/profile",
+            "Amazon Reviewer",
+            "3.0 颗星，最多 5 颗星",
+            "2026年7月10日在美国发布评论",
+            "已验证购买",
+            "Compact body",
+            "8 个人发现此评论有用",
+        ]
+    )
+    workbook.save(path)
+    workbook.close()
+
+
 def write_rakuten_source(path: Path, headers: list[str], rows: list[dict[str, object]]) -> None:
     workbook = Workbook()
     sheet = workbook.active
@@ -320,7 +345,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
             output_dir=tmp / "out",
         )
 
-        self.assertEqual("amazon", result.platform)
+        self.assertEqual("amazon-japan", result.platform)
         workbook = load_workbook(result.output_xlsx, read_only=True, data_only=True)
         try:
             rows = list(workbook["Sheet1"].iter_rows(values_only=True))
@@ -344,8 +369,40 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
         )
 
         summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
-        self.assertEqual("amazon", summary["platform"])
+        self.assertEqual("amazon-japan", summary["platform"])
         self.assertNotIn("Ricky", result.summary_json.read_text(encoding="utf-8"))
+
+    def test_detects_registered_compact_amazon_signature(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-amazon-compact-preprocess"
+        tmp.mkdir(parents=True, exist_ok=True)
+        source_path = tmp / "amazon-compact.xlsx"
+        write_amazon_compact_source(source_path)
+
+        result = preprocess_workbook(
+            source_path,
+            load_config(),
+            output_dir=tmp / "out",
+        )
+
+        self.assertEqual("amazon-us", result.platform)
+        self.assertEqual("default", result.profile_variant)
+        workbook = load_workbook(result.output_xlsx, read_only=True, data_only=True)
+        try:
+            rows = list(workbook["Sheet1"].iter_rows(values_only=True))
+        finally:
+            workbook.close()
+
+        self.assertEqual(PREPROCESSED_HEADERS, rows[0])
+        self.assertEqual(
+            (
+                None,
+                "Compact title\n\nCompact body",
+                "3.0",
+                8,
+                "Amazon Reviewer",
+            ),
+            rows[1],
+        )
 
     def test_rejects_an_unmatched_header_signature_without_guessing(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-amazon-preprocess-unmatched"
@@ -363,6 +420,13 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
                 load_config(),
                 output_dir=tmp / "out",
             )
+
+    def test_rejects_registered_signature_when_header_whitespace_changes(self) -> None:
+        headers = list(AMAZON_COMPACT_HEADERS)
+        headers[8] = "查看 1"
+
+        with self.assertRaisesRegex(PlatformHeaderSignatureError, "does not match"):
+            detect_platform(headers, load_config(), platform="amazon-us")
 
     def test_rejects_a_selected_profile_when_a_required_header_is_duplicated(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-amazon-preprocess-duplicate-header"
@@ -397,7 +461,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
                 source_path,
                 load_config(),
                 output_dir=tmp / "out",
-                platform="amazon",
+                platform="amazon-japan",
             )
 
     def test_rejects_a_sheet_that_only_partially_resembles_amazon_schema(self) -> None:
@@ -480,10 +544,10 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
             workbook.close()
 
         self.assertEqual(STANDARDIZED_HEADERS, rows[0])
-        expected_hash = hash_display_name("Ricky", "amazon", self.hash_context, self.hash_config)
+        expected_hash = hash_display_name("Ricky", "amazon-japan", self.hash_context, self.hash_config)
         self.assertEqual(expected_hash, rows[1][STANDARDIZED_HASH_ID_INDEX])
         self.assertEqual(expected_hash, rows[2][STANDARDIZED_HASH_ID_INDEX])
-        self.assertEqual("4.0", rows[1][3])
+        self.assertEqual(4, rows[1][3])
         self.assertEqual(4, rows[1][STANDARDIZED_LIKES_INDEX])
         self.assertNotIn("名称", rows[0])
         self.assertNotIn("Ricky", str(rows))
