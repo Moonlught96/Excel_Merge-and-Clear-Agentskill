@@ -166,7 +166,7 @@ self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), xlsx_rows[0])
 self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), csv_rows[0])
 self.assertEqual("主帖", xlsx_rows[1][0])
 self.assertEqual("评论", xlsx_rows[2][0])
-self.assertEqual([2, 2, 1, 0], [
+self.assertEqual([3, 2, 1, 0], [
     row[JSON_TEXT_OUTPUT_HEADERS.index("评论/回复数")]
     for row in xlsx_rows[1:]
 ])
