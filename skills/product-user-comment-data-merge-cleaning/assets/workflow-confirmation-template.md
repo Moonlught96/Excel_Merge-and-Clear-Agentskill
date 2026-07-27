@@ -2,6 +2,14 @@
 
 ## Naming And Merge Entry
 
+### Amazon Routing Constraint
+
+For Amazon inputs, the confirmation must display exactly one region-specific
+preprocessing profile: `amazon-japan` for `亚马逊日本评论数据`, or `amazon-us`
+for `亚马逊美国评论数据`. The generic token `amazon` is only a source-discovery
+keyword and must never be displayed as a preprocessing profile or passed to
+`preprocess_platform_comments.py --platform`.
+
 ```text
 研究项目名：{{RESEARCH_PROJECT_NAME}}
 是否为新研究项目：{{IS_NEW_RESEARCH_PROJECT}}

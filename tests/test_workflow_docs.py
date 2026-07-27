@@ -100,6 +100,16 @@ class WorkflowDocsTest(unittest.TestCase):
         self.assertNotIn("用八爪鱼 Excel 清洗工具", readme)
         self.assertIn("四个输出文件", readme)
 
+        confirmation_template = (
+            SKILL_ROOT / "assets" / "workflow-confirmation-template.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "The generic token `amazon` is only a source-discovery",
+            confirmation_template,
+        )
+        self.assertIn("`amazon-japan`", confirmation_template)
+        self.assertIn("`amazon-us`", confirmation_template)
+
         gitignore = Path(".gitignore").read_text(encoding="utf-8")
         self.assertIn("outputs/", gitignore)
 
