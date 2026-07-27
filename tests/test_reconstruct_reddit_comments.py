@@ -396,20 +396,17 @@ class RedditOutputTests(unittest.TestCase):
 
     def json_text_row(self, **overrides: str | int) -> dict[str, str | int]:
         values: dict[str, str | int] = {
-            "Title": "A title",
-            "Post Body": "A body",
-            "Post Author": "post-author",
-            "Post Time": "8 hours ago",
-            "Post Score": 10,
-            "Post Comment Count": 1,
-            "Author": "comment-author",
-            "Time": "2026-07-23",
-            "Score": 5,
-            "Thread Level": 0,
-            "Is Reply": "No",
-            "Comment": "A comment",
-            "Comment ID": "c1",
-            "Parent ID": "post1",
+            "\u8bb0\u5f55\u7c7b\u578b": "\u8bc4\u8bba",
+            "\u6807\u9898": "",
+            "\u4f5c\u8005": "comment-author",
+            "\u65f6\u95f4": "2026-07-23",
+            "\u5185\u5bb9": "A comment",
+            "\u70b9\u8d5e\u6570": 5,
+            "\u8bc4\u8bba/\u56de\u590d\u6570": 0,
+            "\u5c42\u7ea7": 0,
+            "\u662f\u5426\u56de\u590d": "\u5426",
+            "\u8bc4\u8bbaID": "c1",
+            "\u7236ID": "p1",
         }
         values.update(overrides)
         return values
@@ -453,22 +450,18 @@ class RedditOutputTests(unittest.TestCase):
         json_path.write_text("{}", encoding="utf-8")
         page_text_path.write_text("page", encoding="utf-8")
         rows = [
-            {
-                "Title": "Title",
-                "Post Body": "=FORMULA-LIKE-JSON-TEXT",
-                "Post Author": "poster",
-                "Post Time": "8 hours ago",
-                "Post Score": 12,
-                "Post Comment Count": 2,
-                "Author": "commenter",
-                "Time": "2026-07-23",
-                "Score": 7,
-                "Thread Level": 0,
-                "Is Reply": "No",
-                "Comment": "Comment",
-                "Comment ID": "c1",
-                "Parent ID": "p1",
-            }
+            self.json_text_row(
+                **{
+                    "\u8bb0\u5f55\u7c7b\u578b": "\u4e3b\u5e16",
+                    "\u6807\u9898": "Title",
+                    "\u4f5c\u8005": "poster",
+                    "\u5185\u5bb9": "=FORMULA-LIKE-JSON-TEXT",
+                    "\u70b9\u8d5e\u6570": 12,
+                    "\u8bc4\u8bba/\u56de\u590d\u6570": 2,
+                    "\u8bc4\u8bbaID": "p1",
+                    "\u7236ID": "",
+                }
+            )
         ]
 
         write_outputs(
@@ -482,14 +475,17 @@ class RedditOutputTests(unittest.TestCase):
 
         sheet = load_workbook(self.output_xlsx, data_only=False).active
         self.assertEqual(JSON_TEXT_OUTPUT_HEADERS, list(sheet.values)[0])
-        self.assertEqual(12, sheet.cell(2, 5).value)
-        self.assertEqual(7, sheet.cell(2, 9).value)
-        self.assertEqual("s", sheet.cell(2, 2).data_type)
-        self.assertEqual("=FORMULA-LIKE-JSON-TEXT", sheet.cell(2, 2).value)
+        like_count_column = JSON_TEXT_OUTPUT_HEADERS.index("\u70b9\u8d5e\u6570")
+        content_column = JSON_TEXT_OUTPUT_HEADERS.index("\u5185\u5bb9")
+        self.assertEqual(12, sheet.cell(2, like_count_column + 1).value)
+        self.assertEqual("s", sheet.cell(2, content_column + 1).data_type)
+        self.assertEqual(
+            "=FORMULA-LIKE-JSON-TEXT",
+            sheet.cell(2, content_column + 1).value,
+        )
         csv_rows = self.csv_rows()
         self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), csv_rows[0])
-        self.assertEqual("12", csv_rows[1][4])
-        self.assertEqual("7", csv_rows[1][8])
+        self.assertEqual("12", csv_rows[1][like_count_column])
 
     def test_exact_xlsx_integer_boundaries_round_trip_in_both_outputs(self) -> None:
         maximum = 2**53 - 1
@@ -497,10 +493,9 @@ class RedditOutputTests(unittest.TestCase):
         rows = [
             self.json_text_row(
                 **{
-                    "Post Score": maximum,
-                    "Post Comment Count": maximum,
-                    "Score": minimum,
-                    "Thread Level": maximum,
+                    "\u70b9\u8d5e\u6570": maximum,
+                    "\u8bc4\u8bba/\u56de\u590d\u6570": maximum,
+                    "\u5c42\u7ea7": minimum,
                 }
             )
         ]
@@ -517,10 +512,9 @@ class RedditOutputTests(unittest.TestCase):
         sheet_values = list(load_workbook(self.output_xlsx).active.values)[1]
         csv_values = self.csv_rows()[1]
         for header, expected in (
-            ("Post Score", maximum),
-            ("Post Comment Count", maximum),
-            ("Score", minimum),
-            ("Thread Level", maximum),
+            ("\u70b9\u8d5e\u6570", maximum),
+            ("\u8bc4\u8bba/\u56de\u590d\u6570", maximum),
+            ("\u5c42\u7ea7", minimum),
         ):
             column = JSON_TEXT_OUTPUT_HEADERS.index(header)
             self.assertEqual(expected, sheet_values[column])
@@ -532,10 +526,9 @@ class RedditOutputTests(unittest.TestCase):
         old_xlsx = b"old xlsx"
         old_csv = b"old csv"
         numeric_headers = (
-            "Post Score",
-            "Post Comment Count",
-            "Score",
-            "Thread Level",
+            "\u70b9\u8d5e\u6570",
+            "\u8bc4\u8bba/\u56de\u590d\u6570",
+            "\u5c42\u7ea7",
         )
         for index, header in enumerate(numeric_headers):
             with self.subTest(header=header):
@@ -1242,6 +1235,51 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
             "\u8f6c\u5230\u8bc4\u8bba", "\u8bc4\u8bba\u533a\u57df", *comments,
         )), encoding="utf-8")
 
+    def write_nested_json(self) -> None:
+        payload = {
+            "meta": {"completeness": "complete", "collectedCommentCount": 3,
+                     "reportedByApi": 3, "discrepancy": 0, "failedMore": 0,
+                     "failedNodes": [], "failedReasons": [], "failedDetails": []},
+            "post": {"id": "nestedpostid", "subreddit": "python",
+                     "title": "NESTED-POST-TITLE", "content": "NESTED-POST-BODY",
+                     "author": "nested-poster", "num_comments": 3},
+            "comments": [
+                {"id": "nestedrootid", "parent_id": "nestedpostid",
+                 "content": "NESTED-ROOT-COMMENT", "depth": 0,
+                 "username": "nested-root-author", "date": "nested-time-1",
+                 "created_utc": 1},
+                {"id": "nestedchildid", "parent_id": "nestedrootid",
+                 "content": "NESTED-CHILD-COMMENT", "depth": 1,
+                 "username": "nested-child-author", "date": "nested-time-2",
+                 "created_utc": 2},
+                {"id": "nestedgrandchildid", "parent_id": "nestedchildid",
+                 "content": "NESTED-GRANDCHILD-COMMENT", "depth": 2,
+                 "username": "nested-grandchild-author", "date": "nested-time-3",
+                 "created_utc": 3},
+            ],
+        }
+        self.json_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def write_nested_page(self) -> None:
+        def comment(author: str, content: str, score: str | None) -> str:
+            score_lines = (
+                ("\u8d5e\u540c\u6295\u7968",)
+                if score is None
+                else ("\u8d5e\u540c", score)
+            )
+            return "\n".join((
+                author, "\u20228\u5c0f\u65f6\u524d", content, "", *score_lines, "\u53cd\u5bf9", "\u56de\u590d", "\u5956\u52b1", "\u5206\u4eab",
+            ))
+
+        self.page_text_path.write_text("\n".join((
+            "Reddit", "r/python", "u/nested-poster", "nested-poster \u5934\u50cf",
+            "8\u5c0f\u65f6\u524d", "NESTED-POST-TITLE", "\u6b63\u6587", "\u8d5e\u540c", "99", "\u53cd\u5bf9", "3",
+            "\u8f6c\u5230\u8bc4\u8bba", "\u8bc4\u8bba\u533a\u57df",
+            comment("nested-root-author", "NESTED-ROOT-COMMENT", "8"),
+            comment("nested-child-author", "NESTED-CHILD-COMMENT", None),
+            comment("nested-grandchild-author", "NESTED-GRANDCHILD-COMMENT", "4"),
+        )), encoding="utf-8")
+
     def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "tools/reconstruct_reddit_comments.py", "--json", str(self.json_path),
@@ -1313,10 +1351,50 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
             self.assertNotIn(secret, completed.stdout + completed.stderr)
         sheet = load_workbook(self.output_xlsx, data_only=False).active
         self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), list(next(sheet.values)))
-        self.assertEqual(99, sheet.cell(2, 5).value)
-        self.assertEqual(3, sheet.cell(2, 9).value)
-        self.assertEqual("c2", sheet.cell(3, 13).value)
-        self.assertIsNone(sheet.cell(3, 9).value)
+        like_count_column = JSON_TEXT_OUTPUT_HEADERS.index("\u70b9\u8d5e\u6570") + 1
+        reply_count_column = JSON_TEXT_OUTPUT_HEADERS.index("\u8bc4\u8bba/\u56de\u590d\u6570") + 1
+        comment_id_column = JSON_TEXT_OUTPUT_HEADERS.index("\u8bc4\u8bbaID") + 1
+        self.assertEqual(99, sheet.cell(2, like_count_column).value)
+        self.assertEqual(2, sheet.cell(2, reply_count_column).value)
+        self.assertEqual("c2", sheet.cell(4, comment_id_column).value)
+        self.assertIsNone(sheet.cell(4, like_count_column).value)
+
+    def test_json_page_text_nested_thread_writes_matching_post_first_files(self) -> None:
+        self.write_nested_json()
+        self.write_nested_page()
+
+        completed = self.run_cli()
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        sheet = load_workbook(self.output_xlsx, data_only=False).active
+        xlsx_rows = [list(row) for row in sheet.iter_rows(values_only=True)]
+        with self.output_csv.open("r", encoding="utf-8-sig", newline="") as handle:
+            csv_rows = list(csv.reader(handle))
+        self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), xlsx_rows[0])
+        self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), csv_rows[0])
+        self.assertEqual("\u4e3b\u5e16", xlsx_rows[1][0])
+        self.assertEqual("\u8bc4\u8bba", xlsx_rows[2][0])
+        reply_count_column = JSON_TEXT_OUTPUT_HEADERS.index("\u8bc4\u8bba/\u56de\u590d\u6570")
+        self.assertEqual([3, 2, 1, 0], [row[reply_count_column] for row in xlsx_rows[1:]])
+        content_column = JSON_TEXT_OUTPUT_HEADERS.index("\u5185\u5bb9")
+        like_count_column = JSON_TEXT_OUTPUT_HEADERS.index("\u70b9\u8d5e\u6570")
+        self.assertEqual("s", sheet.cell(2, content_column + 1).data_type)
+        self.assertEqual("NESTED-POST-BODY", xlsx_rows[1][content_column])
+        self.assertEqual(8, xlsx_rows[2][like_count_column])
+        self.assertIsNone(xlsx_rows[3][like_count_column])
+        self.assertEqual(4, xlsx_rows[4][like_count_column])
+        self.assertEqual(
+            [["" if value is None else str(value) for value in row] for row in xlsx_rows],
+            csv_rows,
+        )
+        for protected in (
+            "NESTED-POST-TITLE", "NESTED-POST-BODY", "nested-poster",
+            "nestedpostid", "NESTED-ROOT-COMMENT", "nested-root-author",
+            "nestedrootid", "NESTED-CHILD-COMMENT", "nested-child-author",
+            "nestedchildid", "NESTED-GRANDCHILD-COMMENT",
+            "nested-grandchild-author", "nestedgrandchildid",
+        ):
+            self.assertNotIn(protected, completed.stdout + completed.stderr)
 
     def test_collapsed_automoderator_cli_outputs_only_verified_comments(
         self,
@@ -1330,12 +1408,16 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
         self.assertIn("JSON comment count: 3", completed.stdout)
         self.assertIn("Page comment match count: 2", completed.stdout)
         sheet = load_workbook(self.output_xlsx, data_only=False).active
-        self.assertEqual(3, sheet.max_row)
-        self.assertEqual(2, sheet.cell(2, 6).value)
-        self.assertEqual(2, sheet.cell(3, 6).value)
+        self.assertEqual(4, sheet.max_row)
+        reply_count_column = JSON_TEXT_OUTPUT_HEADERS.index("\u8bc4\u8bba/\u56de\u590d\u6570") + 1
+        comment_id_column = JSON_TEXT_OUTPUT_HEADERS.index("\u8bc4\u8bbaID") + 1
+        self.assertEqual(
+            [2, 1, 0],
+            [sheet.cell(row, reply_count_column).value for row in range(2, 5)],
+        )
         self.assertEqual(
             ["rootidq4w6", "replyidr9x1"],
-            [sheet.cell(row, 13).value for row in range(2, 4)],
+            [sheet.cell(row, comment_id_column).value for row in range(3, 5)],
         )
         protected_tokens = (
             "FixtureTitleQx7",
