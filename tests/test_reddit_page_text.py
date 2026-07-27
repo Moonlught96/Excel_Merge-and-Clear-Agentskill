@@ -128,6 +128,13 @@ What monitor? \U0001f914
 
 COMMENT_TEXT = FIRST_COMMENT + PROMOTED_BLOCK + SECOND_COMMENT
 
+COLLAPSED_AUTOMODERATOR_BANNER = """
+AutoModerator
+\u8fd9\u662f\u81ea\u52a8\u5316\u8d26\u6237\u3002
+\u7248\u4e3b
+4\u5929\u524d
+"""
+
 
 class RedditPageTextTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -209,6 +216,19 @@ class RedditPageTextTest(unittest.TestCase):
         )
         return replace(export, comments=comments)
 
+    def export_for_collapsed_automoderator_banner(self) -> RedditJsonExport:
+        export = self.export_for_comments()
+        comments = (
+            replace(
+                export.comments[0],
+                username="AutoModerator",
+                content="collapsed banner body is not copied",
+            ),
+            replace(export.comments[0], id="comment2", username="second-user", content="second"),
+            replace(export.comments[1], id="comment3", username="third-user", content="third"),
+        )
+        return replace(export, comments=comments)
+
     def assert_invalid(
         self, text: str, *, export: RedditJsonExport | None = None
     ) -> None:
@@ -248,6 +268,96 @@ class RedditPageTextTest(unittest.TestCase):
             self.write_text(PAGE_PREFIX + COMMENT_TEXT),
             self.export_for_comments(),
         )
+        self.assertEqual([3, None], [item.score for item in result.comments])
+        self.assertEqual((), result.excluded_comment_ids)
+
+    def test_excludes_exact_collapsed_automoderator_banner_at_comment_area_start(
+        self,
+    ) -> None:
+        export = self.export_for_collapsed_automoderator_banner()
+        page = (
+            PAGE_PREFIX
+            + COLLAPSED_AUTOMODERATOR_BANNER
+            + """
+second-user
+\u20228\u5c0f\u65f6\u524d
+second
+
+\u8d5e\u540c
+2
+\u53cd\u5bf9
+\u56de\u590d
+\u5956\u52b1
+\u5206\u4eab
+
+third-user
+\u20228\u5c0f\u65f6\u524d
+third
+
+\u8d5e\u540c\u6295\u7968
+\u53cd\u5bf9
+\u56de\u590d
+\u5956\u52b1
+\u5206\u4eab
+"""
+        )
+
+        result = parse_reddit_page_text(self.write_text(page), export)
+
+        self.assertEqual(("comment1",), result.excluded_comment_ids)
+        self.assertEqual([2, None], [metric.score for metric in result.comments])
+
+    def test_rejects_invalid_collapsed_automoderator_banner(self) -> None:
+        export = self.export_for_collapsed_automoderator_banner()
+        cases = (
+            (
+                COLLAPSED_AUTOMODERATOR_BANNER.replace(
+                    "\u8fd9\u662f\u81ea\u52a8\u5316\u8d26\u6237\u3002", "unexpected account label"
+                )
+                + SECOND_COMMENT,
+                export,
+                "unexpected account label",
+            ),
+            (
+                COLLAPSED_AUTOMODERATOR_BANNER + SECOND_COMMENT,
+                replace(
+                    export,
+                    comments=(
+                        replace(export.comments[0], username="not-automoderator"),
+                        *export.comments[1:],
+                    ),
+                ),
+                "not-automoderator",
+            ),
+            (
+                COLLAPSED_AUTOMODERATOR_BANNER + SECOND_COMMENT,
+                replace(
+                    export,
+                    comments=(
+                        export.comments[0],
+                        replace(export.comments[1], parent_id=export.comments[0].id),
+                        export.comments[2],
+                    ),
+                ),
+                "comment1",
+            ),
+        )
+        for page_comments, invalid_export, sensitive_value in cases:
+            with self.subTest():
+                with self.assertRaises(RedditPageTextError) as caught:
+                    parse_reddit_page_text(
+                        self.write_text(PAGE_PREFIX + page_comments), invalid_export
+                    )
+                self.assertNotIn(sensitive_value, str(caught.exception))
+
+    def test_accepts_configured_shared_action_label_alias(self) -> None:
+        localized = COMMENT_TEXT.replace("分享", "共享")
+
+        result = parse_reddit_page_text(
+            self.write_text(PAGE_PREFIX + localized),
+            self.export_for_comments(),
+        )
+
         self.assertEqual([3, None], [item.score for item in result.comments])
 
     def test_deleted_author_and_markdown_html_normalization_are_fixed(self) -> None:
@@ -682,6 +792,29 @@ class RedditPageTextTest(unittest.TestCase):
     def test_rejects_nonblank_line_between_metric_count_and_action(self) -> None:
         page = valid_page().replace("5\n转到评论", "5\n广告尾行\n转到评论")
         self.assert_invalid(page)
+
+    def test_treats_standalone_clipboard_object_lines_as_blank(self) -> None:
+        metrics = "\u8d5e\u540c\n99\n\u53cd\u5bf9\n5\n\u8f6c\u5230\u8bc4\u8bba"
+        object_replacement = "\uFFFC"
+        page = valid_page().replace(
+            metrics,
+            "\n".join(
+                (
+                    object_replacement,
+                    "\u8d5e\u540c",
+                    "99",
+                    object_replacement,
+                    "\u53cd\u5bf9",
+                    "5",
+                    object_replacement,
+                    "\u8f6c\u5230\u8bc4\u8bba",
+                )
+            ),
+        )
+
+        result = self.parse(page)
+
+        self.assertEqual((99, 5), (result.post_score, result.post_comment_count))
 
     def test_oversized_score_and_comment_count_raise_safe_error(self) -> None:
         oversized = "9" * 5000

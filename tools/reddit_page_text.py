@@ -7,7 +7,7 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools.reddit_json_export import RedditJsonExport
+from tools.reddit_json_export import RedditJsonComment, RedditJsonExport
 
 
 class RedditPageTextError(ValueError):
@@ -25,6 +25,7 @@ class RedditPageText:
     post_score: int
     post_comment_count: int
     comments: tuple[PageCommentMetric, ...]
+    excluded_comment_ids: tuple[str, ...] = ()
 
 
 _TIME_PATTERN = re.compile(
@@ -39,7 +40,11 @@ _MARKDOWN_HEADING = re.compile(r"(?m)^\s{0,3}#{1,6}\s*")
 _WHITESPACE = re.compile(r"\s+")
 _MARKDOWN_ESCAPABLE = frozenset(string.punctuation)
 _XLSX_EXACT_INTEGER_MAX = 2**53 - 1
+_CLIPBOARD_OBJECT_REPLACEMENT = "\uFFFC"
+_SHARE_ACTION_LABELS = frozenset(("\u5206\u4eab", "\u5171\u4eab"))
 _COMMENT_TIME_PATTERN = re.compile(r"\u2022?" + _TIME_PATTERN.pattern)
+_COLLAPSED_AUTOMODERATOR_ACCOUNT_LABEL = "\u8fd9\u662f\u81ea\u52a8\u5316\u8d26\u6237\u3002"
+_COLLAPSED_AUTOMODERATOR_MODERATOR_LABEL = "\u7248\u4e3b"
 _COMMENT_OPERATION_LABELS = frozenset(
     (
         "\u8d5e\u540c",
@@ -47,7 +52,7 @@ _COMMENT_OPERATION_LABELS = frozenset(
         "\u53cd\u5bf9",
         "\u56de\u590d",
         "\u5956\u52b1",
-        "\u5206\u4eab",
+        *_SHARE_ACTION_LABELS,
     )
 )
 
@@ -235,7 +240,7 @@ def _operation_blocks(comment_lines: list[str]) -> list[list[str]]:
     blocks: list[list[str]] = []
     start = 0
     for index, line in enumerate(comment_lines):
-        if line != "\u5206\u4eab":
+        if line not in _SHARE_ACTION_LABELS:
             continue
         candidate = comment_lines[start : index + 1]
         start = index + 1
@@ -268,7 +273,7 @@ def _operation_prefix(
     nonblank = [(index, line) for index, line in enumerate(block) if line]
     try:
         share = len(nonblank) - 1
-        if nonblank[share][1] != "\u5206\u4eab":
+        if nonblank[share][1] not in _SHARE_ACTION_LABELS:
             raise ValueError
         reply = max(
             index
@@ -345,16 +350,49 @@ def _block_author_and_content(
     )
 
 
+def _split_collapsed_automoderator_banner(
+    comment_lines: list[str], export: RedditJsonExport
+) -> tuple[list[str], tuple[str, ...]]:
+    nonblank = [
+        (index, line) for index, line in enumerate(comment_lines) if line
+    ]
+    if (
+        len(nonblank) < 2
+        or nonblank[0][1] != "AutoModerator"
+        or nonblank[1][1] != _COLLAPSED_AUTOMODERATOR_ACCOUNT_LABEL
+    ):
+        return comment_lines, ()
+
+    if (
+        len(nonblank) < 4
+        or nonblank[2][1] != _COLLAPSED_AUTOMODERATOR_MODERATOR_LABEL
+        or _COMMENT_TIME_PATTERN.fullmatch(nonblank[3][1]) is None
+    ):
+        raise RedditPageTextError("collapsed AutoModerator banner is invalid")
+
+    if not export.comments:
+        raise RedditPageTextError("collapsed AutoModerator banner does not match JSON")
+    first = export.comments[0]
+    if (
+        normalize_author(first.username) != "AutoModerator"
+        or first.depth != 0
+        or first.parent_id != export.post.id
+        or any(item.parent_id == first.id for item in export.comments)
+    ):
+        raise RedditPageTextError("collapsed AutoModerator banner does not match JSON")
+    return comment_lines[nonblank[3][0] + 1 :], (first.id,)
+
+
 def _comment_metrics(
     comment_lines: list[str],
-    export: RedditJsonExport,
+    comments: tuple[RedditJsonComment, ...],
 ) -> tuple[PageCommentMetric, ...]:
     blocks = _operation_blocks(comment_lines)
-    if len(blocks) != len(export.comments):
+    if len(blocks) != len(comments):
         raise RedditPageTextError("page comment block count does not match JSON comments")
     metrics: list[PageCommentMetric] = []
     for number, (block, expected) in enumerate(
-        zip(blocks, export.comments, strict=True),
+        zip(blocks, comments, strict=True),
         start=1,
     ):
         actual_author, actual_content = _block_author_and_content(block, number)
@@ -393,7 +431,10 @@ def parse_reddit_page_text(
     require_comments: bool = True,
 ) -> RedditPageText:
     text = _decode_page(path).replace("\r\n", "\n").replace("\r", "\n")
-    lines = [line.strip() for line in text.split("\n")]
+    lines = [
+        "" if (stripped := line.strip()) == _CLIPBOARD_OBJECT_REPLACEMENT else stripped
+        for line in text.split("\n")
+    ]
 
     marker_index = _unique_index(lines, "评论区域", "comment area marker invalid")
     post_lines = lines[:marker_index]
@@ -442,13 +483,18 @@ def parse_reddit_page_text(
     if comment_count != export.post.num_comments:
         raise RedditPageTextError("post comment count mismatch")
 
+    comment_lines, excluded_comment_ids = _split_collapsed_automoderator_banner(
+        lines[marker_index + 1 :], export
+    )
     comments = ()
     if require_comments:
-        comments = _comment_metrics(lines[marker_index + 1 :], export)
+        retained_comments = export.comments[1:] if excluded_comment_ids else export.comments
+        comments = _comment_metrics(comment_lines, retained_comments)
 
     return RedditPageText(
         post_time=time_lines[0],
         post_score=score,
         post_comment_count=comment_count,
         comments=comments,
+        excluded_comment_ids=excluded_comment_ids,
     )
