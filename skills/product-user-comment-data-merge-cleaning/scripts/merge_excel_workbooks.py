@@ -11,10 +11,20 @@ from openpyxl import Workbook
 
 try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from tools.output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        OutputPathConflictError,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
+    from output_path_safety import (
+        OutputPathConflictError,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 
 
 class HeaderMismatchError(ValueError):
@@ -75,7 +85,7 @@ def validate_input_paths(input_paths: list[Path]) -> list[Path]:
 
 
 def default_output_path() -> Path:
-    timestamp = datetime.now().strftime("%Y%m%d")
+    timestamp = beijing_date_text()
     return Path.cwd() / "outputs" / "merged" / f"{timestamp}_merged.xlsx"
 
 
@@ -204,10 +214,15 @@ def merge_workbooks(
     )
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Merge explicitly provided user-comment Excel/CSV files into one workbook.")
     parser.add_argument("input_paths", type=Path, nargs="+", help="Explicit .xlsx/.xlsm/.csv files to merge.")
-    parser.add_argument("--output", type=Path, default=None, help="Output .xlsx path.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="Confirmed output .xlsx path from the naming plan.",
+    )
     parser.add_argument(
         "--overwrite",
         action="store_true",
@@ -218,15 +233,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Append source_file and source_sheet columns for audit.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
-    output_path = args.output if args.output else default_output_path()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     result = merge_workbooks(
         args.input_paths,
-        output_path,
+        args.output,
         add_source_columns=args.add_source_columns,
         overwrite=args.overwrite,
     )

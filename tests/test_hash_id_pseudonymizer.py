@@ -317,6 +317,20 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             hash_user_id("00123", "YouTube", self.context, self.config),
             hash_user_id("00123", "小红书", self.context, self.config),
         )
+        self.assertNotEqual(
+            hash_id_pseudonymizer.hash_display_name(
+                "Same Amazon Display Name",
+                "amazon-japan",
+                self.context,
+                self.config,
+            ),
+            hash_id_pseudonymizer.hash_display_name(
+                "Same Amazon Display Name",
+                "amazon-us",
+                self.context,
+                self.config,
+            ),
+        )
 
     def test_string_normalization_only_trims_outer_whitespace(self) -> None:
         self.assertEqual("001 AbC", normalize_raw_user_id("  001 AbC\t"))
@@ -373,8 +387,15 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             "bilibili": "bilibili",
             "TikTok": "tiktok",
             "TTCommentExporter": "tiktok",
+            "Twitter": "twitter",
+            "twitter": "twitter",
+            "X": "twitter",
             "淘宝": "taobao",
             "京东": "jd",
+            "亚马逊日本": "amazon-japan",
+            "Amazon Japan": "amazon-japan",
+            "亚马逊美国": "amazon-us",
+            "Amazon US": "amazon-us",
         }
 
         for alias, namespace in expected.items():
@@ -440,6 +461,10 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             "tiktok": ("用户名", "昵称"),
             "taobao": ("用户名称", "用户名"),
             "jd": ("用户名",),
+            "amazon-japan": ("名称",),
+            "amazon-us": ("名称",),
+            "rakuten": ("乐天市场昵称",),
+            "twitter": ("Twitter昵称",),
         }
 
         self.assertEqual(
@@ -515,6 +540,27 @@ class HashIdPseudonymizerTest(unittest.TestCase):
         self.assertEqual(2, selected.source_column)
         self.assertEqual("account_id", selected.identity_type)
 
+    def test_twitter_uses_only_registered_account_id_and_display_name_headers(self) -> None:
+        account_header = select_user_id_header(
+            ["Twitter昵称", "Twitter用户ID"],
+            "X",
+            self.config,
+        )
+        display_header = select_identity_header(
+            ["Twitter昵称"],
+            "twitter",
+            self.config,
+        )
+
+        self.assertIsNotNone(account_header)
+        assert account_header is not None
+        self.assertEqual("Twitter用户ID", account_header.source_header)
+        self.assertEqual("account_id", account_header.identity_type)
+        self.assertIsNotNone(display_header)
+        assert display_header is not None
+        self.assertEqual("Twitter昵称", display_header.source_header)
+        self.assertEqual("display_name", display_header.identity_type)
+
     def test_each_verified_youtube_header_can_be_selected(self) -> None:
         for user_id_header in (
             "author_channel_id",
@@ -578,14 +624,14 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             "youtube_comment_id",
         ]
 
-        for platform in ("YouTube", "小红书", "B站", "TikTok", "淘宝", "京东"):
+        for platform in ("YouTube", "小红书", "B站", "TikTok", "淘宝", "京东", "乐天市场"):
             with self.subTest(platform=platform):
                 self.assertIsNone(
                     select_user_id_header(forbidden_headers, platform, self.config)
                 )
 
     def test_platforms_without_verified_user_id_headers_select_nothing(self) -> None:
-        for platform in ("B站", "TikTok", "淘宝", "京东"):
+        for platform in ("B站", "TikTok", "淘宝", "京东", "乐天市场"):
             with self.subTest(platform=platform):
                 self.assertIsNone(
                     select_user_id_header(
@@ -695,7 +741,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             "ip_location",
         ]
 
-        for platform in ("YouTube", "小红书", "B站", "TikTok", "淘宝", "京东"):
+        for platform in ("YouTube", "小红书", "B站", "TikTok", "淘宝", "京东", "乐天市场"):
             with self.subTest(platform=platform):
                 self.assertIsNone(
                     select_identity_header(unapproved_headers, platform, self.config)

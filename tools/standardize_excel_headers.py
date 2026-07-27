@@ -50,9 +50,19 @@ except ModuleNotFoundError:
     from hash_id_project_store import ProjectStore
 
 try:
-    from tools.output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        OutputPathConflictError,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 except ModuleNotFoundError:
-    from output_path_safety import OutputPathConflictError, atomic_output_path, ensure_output_paths_safe
+    from output_path_safety import (
+        OutputPathConflictError,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "header-standardizer.json"
@@ -60,10 +70,31 @@ COMMENT_DATE_AND_PRODUCT_HEADER = "评论日期与产品"
 COMMENT_DATE_HEADER = "评论日期"
 PRODUCT_NAME_HEADER = "产品名"
 HASH_ID_HEADER = "哈希ID"
+ECOMMERCE_RATING_HEADER = "电商平台评分"
+LIKES_HEADER = "点赞数"
 NO_REGISTERED_IDENTITY_HEADER_REASON = "no_registered_identity_header"
 TIMESTAMP_HEADER = "timestamp"
 BEIJING_TZ = timezone(timedelta(hours=8))
 BEIJING_TIMESTAMP_FORMAT = "%Y-%m-%d"
+PLAIN_NUMBER_PATTERN = re.compile(r"^\s*(?P<number>\d+(?:\.\d+)?)\s*$")
+ENGLISH_STAR_RATING_PATTERN = re.compile(
+    r"^\s*(?P<rating>\d+(?:\.\d+)?)\s+out\s+of\s+5\s+stars?\s*$",
+    flags=re.IGNORECASE,
+)
+CHINESE_STAR_RATING_PATTERN = re.compile(
+    r"^\s*(?P<rating>\d+(?:\.\d+)?)\s*颗星，最多\s*5\s*颗星\s*$"
+)
+ENGLISH_HELPFUL_COUNT_PATTERN = re.compile(
+    r"^\s*(?P<count>\d+)\s+people?\s+found\s+this\s+helpful\s*$",
+    flags=re.IGNORECASE,
+)
+ENGLISH_ONE_HELPFUL_COUNT_PATTERN = re.compile(
+    r"^\s*one\s+person\s+found\s+this\s+helpful\s*$",
+    flags=re.IGNORECASE,
+)
+CHINESE_HELPFUL_COUNT_PATTERN = re.compile(
+    r"^\s*(?P<count>\d+)\s*个人发现此评论有用\s*$"
+)
 RELATIVE_COUNT_PATTERN = r"\d+|[一二两三四五六七八九十]+"
 PLATFORM_DATETIME_HEADERS = (
     "评论日期",
@@ -118,6 +149,7 @@ UnsafeUserIdValueError = UnsafeIdentityValueError
 class StandardColumn:
     header: str
     aliases: tuple[str, ...]
+    composite_aliases: tuple[str, ...] = ()
     required: bool = True
 
 
@@ -133,6 +165,8 @@ class SelectedColumn:
     output_header: str
     source_header: str | None
     source_column: int | None
+    composite_source_headers: tuple[str, ...] = ()
+    composite_source_columns: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -387,29 +421,113 @@ def convert_platform_datetime_to_beijing_date(value: Any, today: date | None = N
 
 
 def value_for_selected_column(row: tuple[Any, ...], column: SelectedColumn, today: date | None = None) -> Any:
-    if column.source_column is None:
+    raw_value = None
+    if column.source_column is not None and column.source_column - 1 < len(row):
+        raw_value = row[column.source_column - 1]
+        if not (
+            column.composite_source_columns
+            and isinstance(raw_value, str)
+            and not raw_value.strip()
+        ):
+            source_key = normalize_header(column.source_header)
+            output_key = normalize_header(column.output_header)
+            if source_key == normalize_header(COMMENT_DATE_AND_PRODUCT_HEADER):
+                comment_date, product_name = split_comment_date_and_product(raw_value)
+                if output_key == normalize_header(COMMENT_DATE_HEADER):
+                    return comment_date
+                if output_key == normalize_header(PRODUCT_NAME_HEADER):
+                    return product_name
+            if source_key in {normalize_header("评论日期"), normalize_header("评论时间")} and output_key == normalize_header(COMMENT_DATE_HEADER):
+                if is_numeric_timestamp_value(raw_value) or is_datetime_text_value(raw_value):
+                    return convert_platform_datetime_to_beijing_date(raw_value, today=today)
+                return raw_value
+            platform_datetime_keys = {normalize_header(header) for header in PLATFORM_DATETIME_HEADERS}
+            if source_key in platform_datetime_keys and output_key == normalize_header(COMMENT_DATE_HEADER):
+                return convert_platform_datetime_to_beijing_date(raw_value, today=today)
+
+            if raw_value is not None or not column.composite_source_columns:
+                return raw_value
+
+    if column.composite_source_columns:
+        parts = []
+        for source_column in column.composite_source_columns:
+            if source_column - 1 >= len(row):
+                continue
+            value = row[source_column - 1]
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                parts.append(text)
+        return " ".join(parts) if parts else None
+
+    return None
+
+
+def default_likes_to_zero(value: Any) -> Any:
+    if value is None:
+        return 0
+    if isinstance(value, str) and not value.strip():
+        return 0
+    return value
+
+
+def _compact_number(value: int | float) -> int | float:
+    return int(value) if float(value).is_integer() else value
+
+
+def normalize_ecommerce_rating(value: Any) -> Any:
+    if value is None:
         return None
-    if column.source_column - 1 >= len(row):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return _compact_number(value)
+    if not isinstance(value, str):
+        return value
+
+    text = value.strip()
+    if not text:
         return None
 
-    raw_value = row[column.source_column - 1]
-    source_key = normalize_header(column.source_header)
-    output_key = normalize_header(column.output_header)
-    if source_key == normalize_header(COMMENT_DATE_AND_PRODUCT_HEADER):
-        comment_date, product_name = split_comment_date_and_product(raw_value)
-        if output_key == normalize_header(COMMENT_DATE_HEADER):
-            return comment_date
-        if output_key == normalize_header(PRODUCT_NAME_HEADER):
-            return product_name
-    if source_key in {normalize_header("评论日期"), normalize_header("评论时间")} and output_key == normalize_header(COMMENT_DATE_HEADER):
-        if is_numeric_timestamp_value(raw_value) or is_datetime_text_value(raw_value):
-            return convert_platform_datetime_to_beijing_date(raw_value, today=today)
-        return raw_value
-    platform_datetime_keys = {normalize_header(header) for header in PLATFORM_DATETIME_HEADERS}
-    if source_key in platform_datetime_keys and output_key == normalize_header(COMMENT_DATE_HEADER):
-        return convert_platform_datetime_to_beijing_date(raw_value, today=today)
+    match = PLAIN_NUMBER_PATTERN.fullmatch(text)
+    if match is None:
+        match = ENGLISH_STAR_RATING_PATTERN.fullmatch(text)
+    if match is None:
+        match = CHINESE_STAR_RATING_PATTERN.fullmatch(text)
+    if match is None:
+        return value
 
-    return raw_value
+    rating_text = match.groupdict().get("number") or match.groupdict().get("rating")
+    rating = float(rating_text)
+    if not 1 <= rating <= 5:
+        return value
+    return _compact_number(rating)
+
+
+def normalize_likes_count(value: Any) -> Any:
+    value = default_likes_to_zero(value)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return _compact_number(value)
+    if not isinstance(value, str):
+        return value
+
+    text = value.strip()
+    if not text:
+        return 0
+    if ENGLISH_ONE_HELPFUL_COUNT_PATTERN.fullmatch(text):
+        return 1
+
+    match = re.fullmatch(r"(?P<count>\d+)", text)
+    if match is None:
+        match = ENGLISH_HELPFUL_COUNT_PATTERN.fullmatch(text)
+    if match is None:
+        match = CHINESE_HELPFUL_COUNT_PATTERN.fullmatch(text)
+    if match is None:
+        return value
+    return int(match.group("count"))
 
 
 def load_config(path: Path | None = None) -> HeaderStandardizerConfig:
@@ -419,6 +537,9 @@ def load_config(path: Path | None = None) -> HeaderStandardizerConfig:
         StandardColumn(
             header=str(item["header"]),
             aliases=tuple(str(alias) for alias in item.get("aliases", [])),
+            composite_aliases=tuple(
+                str(alias) for alias in item.get("composite_aliases", [])
+            ),
             required=bool(item.get("required", True)),
         )
         for item in data["output_columns"]
@@ -431,7 +552,7 @@ def load_config(path: Path | None = None) -> HeaderStandardizerConfig:
 
 
 def make_output_paths(input_path: Path, output_dir: Path | None) -> tuple[Path, Path]:
-    timestamp = datetime.now().strftime("%Y%m%d")
+    timestamp = beijing_date_text()
     parent = output_dir if output_dir else input_path.parent
     stem = f"{timestamp}_{input_path.stem}"
     return (
@@ -473,7 +594,28 @@ def select_columns(headers: list[Any], config: HeaderStandardizerConfig) -> tupl
             matched_columns.extend(lookup.get(key, []))
 
         matched_columns = sorted(set(matched_columns))
-        if not matched_columns:
+        if len(matched_columns) > 1:
+            raise DuplicateHeaderError(f"Multiple columns match required header: {output_column.header}")
+
+        composite_source_headers: list[str] = []
+        composite_source_columns: list[int] = []
+        for alias in output_column.composite_aliases:
+            composite_matches = sorted(
+                set(lookup.get(normalize_header(alias), []))
+            )
+            if len(composite_matches) > 1:
+                raise DuplicateHeaderError(
+                    f"Multiple columns match composite header: {output_column.header}"
+                )
+            if composite_matches:
+                composite_source_column = composite_matches[0]
+                composite_source_columns.append(composite_source_column)
+                source_header = headers[composite_source_column - 1]
+                composite_source_headers.append(
+                    "" if source_header is None else str(source_header)
+                )
+
+        if not matched_columns and not composite_source_columns:
             if not output_column.required:
                 selected.append(
                     SelectedColumn(
@@ -488,16 +630,20 @@ def select_columns(headers: list[Any], config: HeaderStandardizerConfig) -> tupl
                 f"Accepted aliases: {list(output_column.aliases)}. "
                 f"Available headers: {available_headers}"
             )
-        if len(matched_columns) > 1:
-            raise DuplicateHeaderError(f"Multiple columns match required header: {output_column.header}")
 
-        source_column = matched_columns[0]
-        source_header = headers[source_column - 1]
+        source_column = matched_columns[0] if matched_columns else None
+        source_header = (
+            headers[source_column - 1]
+            if source_column is not None
+            else None
+        )
         selected.append(
             SelectedColumn(
                 output_header=output_column.header,
                 source_header="" if source_header is None else str(source_header),
                 source_column=source_column,
+                composite_source_headers=tuple(composite_source_headers),
+                composite_source_columns=tuple(composite_source_columns),
             )
         )
 
@@ -618,6 +764,7 @@ def standardize_sheet(
     platform: str | None = None,
     hash_context: HashProjectContext | None = None,
     hash_config: HashIdConfig | None = None,
+    product_name: str | None = None,
 ) -> SheetStandardizeSummary:
     header_values = next(
         source_sheet.iter_rows(
@@ -644,9 +791,12 @@ def standardize_sheet(
         header_row=config.header_row,
     )
     selected_column_indexes = {
-        column.source_column
+        source_column
         for column in selected_columns
-        if column.source_column is not None
+        for source_column in (
+            *((column.source_column,) if column.source_column is not None else ()),
+            *column.composite_source_columns,
+        )
     }
 
     output_sheet.append([column.output_header for column in selected_columns])
@@ -666,10 +816,27 @@ def standardize_sheet(
         row_values = tuple(cell.value for cell in row)
         output_row: list[Any] = []
         for column in selected_columns:
-            if normalize_header(column.output_header) != normalize_header(HASH_ID_HEADER):
-                output_row.append(
-                    value_for_selected_column(row_values, column, today=today)
+            output_header = normalize_header(column.output_header)
+            if output_header == normalize_header(PRODUCT_NAME_HEADER):
+                product_value = value_for_selected_column(
+                    row_values,
+                    column,
+                    today=today,
                 )
+                if product_value is None or (
+                    isinstance(product_value, str) and not product_value.strip()
+                ):
+                    product_value = product_name
+                output_row.append(product_value)
+                continue
+
+            if output_header != normalize_header(HASH_ID_HEADER):
+                output_value = value_for_selected_column(row_values, column, today=today)
+                if output_header == normalize_header(ECOMMERCE_RATING_HEADER):
+                    output_value = normalize_ecommerce_rating(output_value)
+                if output_header == normalize_header(LIKES_HEADER):
+                    output_value = normalize_likes_count(output_value)
+                output_row.append(output_value)
                 continue
 
             if selected_identity is None:
@@ -710,7 +877,34 @@ def standardize_sheet(
             zip(selected_columns, output_row),
             start=1,
         ):
-            if column.source_column is None or column.source_column - 1 >= len(row):
+            has_direct_source = (
+                column.source_column is not None
+                and column.source_column - 1 < len(row)
+            )
+            direct_source_value = (
+                row_values[column.source_column - 1]
+                if has_direct_source and column.source_column is not None
+                else None
+            )
+            uses_composite_source = bool(column.composite_source_columns) and (
+                not has_direct_source
+                or direct_source_value is None
+                or (
+                    isinstance(direct_source_value, str)
+                    and not direct_source_value.strip()
+                )
+            )
+            if (
+                uses_composite_source
+                and isinstance(output_value, str)
+                and output_value.startswith("=")
+            ):
+                output_sheet.cell(
+                    row=output_row_number,
+                    column=output_column_index,
+                ).data_type = "s"
+                continue
+            if not has_direct_source or column.source_column is None:
                 continue
             source_cell = row[column.source_column - 1]
             if (
@@ -783,6 +977,7 @@ def standardize_workbook(
     platform: str | None = None,
     hash_context: HashProjectContext | None = None,
     hash_config: HashIdConfig | None = None,
+    product_name: str | None = None,
     overwrite: bool = True,
 ) -> StandardizeResult:
     input_path = input_path.resolve()
@@ -835,6 +1030,7 @@ def standardize_workbook(
                     platform=canonical_platform,
                     hash_context=hash_context,
                     hash_config=effective_hash_config,
+                    product_name=product_name,
                 )
             )
         with atomic_output_path(output_xlsx) as staged_output:
@@ -852,6 +1048,7 @@ def standardize_workbook(
         ),
         "header_row": config.header_row,
         "output_headers": [column.header for column in config.output_columns],
+        "product_name_fallback": product_name,
         "drop_headers": list(config.drop_headers),
         "hash_id": {
             "enabled": hash_context is not None and canonical_platform is not None,
@@ -873,6 +1070,12 @@ def standardize_workbook(
                         "output_header": column.output_header,
                         "source_header": value_for_json(column.source_header),
                         "source_column": column.source_column,
+                        "composite_source_headers": list(
+                            column.composite_source_headers
+                        ),
+                        "composite_source_columns": list(
+                            column.composite_source_columns
+                        ),
                     }
                     for column in sheet.selected_columns
                 ],
@@ -932,12 +1135,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_CONFIG_PATH,
         help="表头标准化配置文件",
     )
-    parser.add_argument("--output-dir", type=Path, default=None, help="输出目录")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="兼容旧程序调用的默认目录；CLI 仍必须传入 --output",
+    )
     parser.add_argument(
         "--output",
         type=Path,
-        default=None,
-        help="输出 .xlsx 文件路径",
+        required=True,
+        help="命名确认后传入的输出 .xlsx 文件路径",
     )
     parser.add_argument(
         "--overwrite",
@@ -948,6 +1156,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--platform",
         default=None,
         help="已登记的数据平台，例如 YouTube 或 小红书",
+    )
+    parser.add_argument(
+        "--product-name",
+        default=None,
+        help="已确认的产品名；仅在源产品字段缺失或为空时写入标准化输出",
     )
     project_group = parser.add_mutually_exclusive_group()
     project_group.add_argument("--project-name", default=None)
@@ -978,6 +1191,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("a project selector requires --platform")
     if args.platform and not has_project_selector:
         parser.error("--platform requires --project-name or --project-id")
+    if args.product_name is not None:
+        args.product_name = args.product_name.strip()
+        if not args.product_name:
+            parser.error("--product-name must not be blank")
     return args
 
 
@@ -1002,6 +1219,7 @@ def main(argv: list[str] | None = None) -> int:
         platform=args.platform,
         hash_context=hash_context,
         hash_config=load_hash_id_config(args.hash_config),
+        product_name=args.product_name,
         overwrite=args.overwrite,
     )
     print(f"Standardized xlsx: {result.output_xlsx}")

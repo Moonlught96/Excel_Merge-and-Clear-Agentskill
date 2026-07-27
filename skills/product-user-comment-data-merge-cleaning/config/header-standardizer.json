@@ -54,6 +54,17 @@
       "required": false
     },
     {
+      "header": "电商平台评分",
+      "aliases": ["电商平台评分"],
+      "required": false
+    },
+    {
+      "header": "用户属性",
+      "aliases": ["用户属性"],
+      "composite_aliases": ["性别", "年龄"],
+      "required": false
+    },
+    {
       "header": "哈希ID",
       "aliases": [],
       "required": false
@@ -72,7 +83,7 @@
         "diggCount",
         "digg_count"
       ],
-      "required": true
+      "required": false
     },
     {
       "header": "子评论数/追评数",
@@ -115,6 +126,7 @@
     "用户名称",
     "用户昵称",
     "昵称",
+    "乐天市场昵称",
     "rpid",
     "parent_rpid",
     "username",

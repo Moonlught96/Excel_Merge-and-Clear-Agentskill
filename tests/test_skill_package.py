@@ -20,6 +20,7 @@ REFERENCE_FILES = (
     "data-contract.md",
     "header-standardization.md",
     "cleaning-rules.md",
+    "twitter-x-keyword-filter.md",
     "naming-and-retention.md",
     "tool-reference.md",
     "extension-policy.md",
@@ -27,15 +28,18 @@ REFERENCE_FILES = (
 )
 
 SCRIPT_FILES = (
+    "audit_standardized_comments.py",
     "cleanup_intermediate_outputs.py",
     "clean_excel_comments.py",
     "compare_cleaned_workbooks.py",
     "csv_excel_compat.py",
+    "filter_comments_by_keywords.py",
     "merge_excel_workbooks.py",
     "hash_id_project_store.py",
     "hash_id_pseudonymizer.py",
     "output_file_naming.py",
     "output_path_safety.py",
+    "preprocess_platform_comments.py",
     "standardize_excel_headers.py",
     "strip_bilibili_reply_prefixes.py",
 )
@@ -44,6 +48,7 @@ CONFIG_FILES = (
     "comment-cleaner.json",
     "hash-id.json",
     "header-standardizer.json",
+    "platform-preprocessing.json",
 )
 
 
@@ -132,6 +137,9 @@ class SkillPackageTest(unittest.TestCase):
             self.assertIn(f"references/{reference_name}", skill)
         self.assertIn("scripts/merge_excel_workbooks.py", skill)
         self.assertIn("scripts/standardize_excel_headers.py", skill)
+        self.assertIn("scripts/preprocess_platform_comments.py", skill)
+        self.assertIn("scripts/filter_comments_by_keywords.py", skill)
+        self.assertIn("scripts/audit_standardized_comments.py", skill)
         self.assertIn("scripts/clean_excel_comments.py", skill)
         self.assertIn("in a confirmed single-file run, use the original input as the source", skill)
         self.assertIn("Automatic creation of a new protected hash-ID project requires Windows DPAPI", skill)
@@ -145,10 +153,12 @@ class SkillPackageTest(unittest.TestCase):
         combined = "\n".join(references.values())
 
         required_rules = (
-            "请确认以上产品名、数据来源和文件命名是否正确，并确认是否可以进入合并流程。",
+            "请确认以上产品名、数据来源、平台预处理分流和文件命名是否正确，并确认是否可以进入合并流程。",
             "是否已经提供并合并完所有需要合并的表格？你确认后我再进行标准化。",
             "是否已经提供完成所有 KOL 清理词？你确认后我再进行清洗。",
-            "`评论日期`、`评论内容`、`产品名`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
+            "是否已经提供完成所有 Twitter/X 保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。",
+            "`评论日期`、`评论内容`、`产品名`、`电商平台评分`、`用户属性`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
+            "the tool does not validate, infer, round, or rewrite a rating.",
             "`评论日期与产品`",
             "Beijing date (`UTC+8`)",
             "Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.",
@@ -202,6 +212,47 @@ class SkillPackageTest(unittest.TestCase):
         self.assertIn("`assets/`", agents)
         self.assertIn("单独复制", agents)
         self.assertIn("独立运行", agents)
+
+    def test_current_platform_and_runtime_docs_are_unambiguous(self) -> None:
+        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        tool_reference = (
+            SKILL_ROOT / "references" / "tool-reference.md"
+        ).read_text(encoding="utf-8")
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        requirements = (SKILL_ROOT / "requirements.txt").read_text(encoding="utf-8")
+
+        self.assertNotIn("同一个 `amazon` 平台预处理分流器", agents)
+        self.assertNotIn("compact-no-auxiliary-columns", agents)
+        self.assertNotIn("评分或非空点赞数一律原样保留、不做数值转换", agents)
+        self.assertIn("`amazon-japan` 分流", agents)
+        self.assertIn("`amazon-us` 分流", agents)
+        for rakuten_variant in (
+            "reviewer-title-body-review-date",
+            "reviewer-date-body-title",
+            "title-review-date-body-reviewer",
+            "poster-title-body-review-date",
+            "reviewer-name-title-content",
+        ):
+            self.assertIn(f"`{rakuten_variant}`", agents)
+        self.assertIn(
+            "In `config/hash-id.json`, `schema_version` must be `2`",
+            tool_reference,
+        )
+        self.assertIn(
+            "`config/platform-preprocessing.json` independently requires `schema_version: 1`",
+            tool_reference,
+        )
+        self.assertIn(
+            "amazon-japan-or-amazon-us-or-rakuten-or-twitter",
+            tool_reference,
+        )
+        self.assertIn("Python 3.10 or newer is required.", tool_reference)
+        self.assertIn("Requires Python >=3.10", requirements)
+        self.assertIn(
+            "amazon-japan-or-amazon-us-or-rakuten-or-twitter",
+            readme,
+        )
+        self.assertNotIn("非空原值不改写", readme)
 
     def test_copied_skill_runs_without_project_root(self) -> None:
         temp_directory = tempfile.TemporaryDirectory(prefix="standalone-skill-")
@@ -310,7 +361,9 @@ class SkillPackageTest(unittest.TestCase):
         self.assertEqual("评论日期", cleaned.active.cell(row=1, column=1).value)
         self.assertEqual("2023-03-15", cleaned.active.cell(row=2, column=1).value)
         self.assertEqual("这个显示器挂灯使用体验确实很好", cleaned.active.cell(row=2, column=2).value)
-        hash_id = cleaned.active.cell(row=2, column=4).value
+        standardized_headers = [cell.value for cell in cleaned.active[1]]
+        hash_id_column = standardized_headers.index("哈希ID") + 1
+        hash_id = cleaned.active.cell(row=2, column=hash_id_column).value
         self.assertIsInstance(hash_id, str)
         self.assertRegex(hash_id, r"^[0-9a-f]{64}$")
 

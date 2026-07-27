@@ -7,6 +7,7 @@ import re
 import unicodedata
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,10 +16,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
 except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "comment-cleaner.json"
@@ -28,6 +29,7 @@ KOREAN_HANGUL_PATTERN = re.compile(r"[\uac00-\ud7af\u1100-\u11ff]")
 THAI_PATTERN = re.compile(r"[\u0e00-\u0e7f]")
 DEVANAGARI_PATTERN = re.compile(r"[\u0900-\u097f]")
 ALNUM_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
+LIKE_COUNT_PATTERN = re.compile(r"[+-]?\d+(?:\.\d+)?")
 LATIN_LETTER_PATTERN = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿĀ-ž]")
 DEFAULT_DELETE_CONTAINS_TEXTS = (
     "链接",
@@ -228,6 +230,8 @@ class CleanerConfig:
     random_letter_min_consonant_run: int = 5
     subcomment_deduplicate_headers: tuple[str, ...] = ("一级评论", "二级评论", "三级评论")
     subcomment_min_trimmed_length: int = 6
+    main_comment_duplicate_keep: str = "max_likes_last_tiebreak"
+    main_comment_duplicate_like_header: str = "点赞数"
     duplicate_keep: str = "last"
     export_first_sheet_csv: bool = True
     csv_encoding: str = "utf-8-sig"
@@ -286,6 +290,8 @@ def load_config(path: Path) -> CleanerConfig:
             data.get("subcomment_deduplicate_headers", ["一级评论", "二级评论", "三级评论"])
         ),
         subcomment_min_trimmed_length=int(data.get("subcomment_min_trimmed_length", 6)),
+        main_comment_duplicate_keep=str(data.get("main_comment_duplicate_keep", "max_likes_last_tiebreak")),
+        main_comment_duplicate_like_header=str(data.get("main_comment_duplicate_like_header", "点赞数")),
         duplicate_keep=str(data.get("duplicate_keep", "last")),
         export_first_sheet_csv=bool(data.get("export_first_sheet_csv", True)),
         csv_encoding=str(data.get("csv_encoding", "utf-8-sig")),
@@ -422,6 +428,23 @@ def resolve_optional_header_columns(sheet: Worksheet, config: CleanerConfig, hea
     return columns
 
 
+def resolve_optional_single_header_column(sheet: Worksheet, config: CleanerConfig, header: str) -> int | None:
+    columns = resolve_optional_header_columns(sheet, config, (header,))
+    if len(columns) > 1:
+        raise ValueError(f"重复列标题: {header}")
+    return columns[0][0] if columns else None
+
+
+def parse_like_count(value: Any) -> Decimal:
+    text = normalize_cell(value)
+    if not text or not LIKE_COUNT_PATTERN.fullmatch(text):
+        return Decimal(0)
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return Decimal(0)
+
+
 def fixed_term_script_group(text: str) -> str:
     normalized = text.casefold()
     if normalized in {"http://", "https://"}:
@@ -502,6 +525,55 @@ def iter_row_numbers(sheet: Worksheet, config: CleanerConfig) -> range:
     raise ValueError("duplicate_keep 只能是 first 或 last")
 
 
+def collect_main_comment_deletions(
+    sheet: Worksheet,
+    config: CleanerConfig,
+    clean_words: tuple[str, ...],
+) -> list[DeletedRow]:
+    if config.main_comment_duplicate_keep != "max_likes_last_tiebreak":
+        raise ValueError("main_comment_duplicate_keep 只能是 max_likes_last_tiebreak")
+
+    target_column = resolve_target_column(sheet, config)
+    like_column = resolve_optional_single_header_column(sheet, config, config.main_comment_duplicate_like_header)
+    candidates: dict[str, list[tuple[int, Decimal]]] = {}
+    pending_deletions: list[DeletedRow] = []
+
+    for row_number in range(config.first_data_row, sheet.max_row + 1):
+        comment = normalize_cell(sheet.cell(row=row_number, column=target_column).value)
+        reason = should_delete_comment(comment, set(), config, clean_words)
+        if reason:
+            pending_deletions.append(
+                DeletedRow(
+                    sheet=sheet.title,
+                    row_number=row_number,
+                    reason=reason,
+                    value=comment,
+                )
+            )
+            continue
+
+        like_count = parse_like_count(sheet.cell(row=row_number, column=like_column).value) if like_column else Decimal(0)
+        candidates.setdefault(comment, []).append((row_number, like_count))
+
+    for comment, duplicate_rows in candidates.items():
+        if len(duplicate_rows) < 2:
+            continue
+        retained_row, _ = max(duplicate_rows, key=lambda row: (row[1], row[0]))
+        for row_number, _ in duplicate_rows:
+            if row_number == retained_row:
+                continue
+            pending_deletions.append(
+                DeletedRow(
+                    sheet=sheet.title,
+                    row_number=row_number,
+                    reason="同一工作表内重复评论（保留点赞数最高，点赞相同保留最后一条）",
+                    value=comment,
+                )
+            )
+
+    return pending_deletions
+
+
 def iter_cell_positions(sheet: Worksheet, config: CleanerConfig, columns: list[tuple[int, str]]) -> list[tuple[int, int, str]]:
     if config.duplicate_keep == "last":
         row_numbers = range(sheet.max_row, config.first_data_row - 1, -1)
@@ -559,25 +631,7 @@ def clear_duplicate_subcomments(sheet: Worksheet, config: CleanerConfig) -> list
 
 def clean_sheet(sheet: Worksheet, config: CleanerConfig, clean_words: tuple[str, ...]) -> tuple[list[DeletedRow], list[ClearedCell]]:
     deleted: list[DeletedRow] = []
-    seen_comments: set[str] = set()
-    pending_deletions: list[DeletedRow] = []
-    target_column = resolve_target_column(sheet, config)
-
-    for row_number in iter_row_numbers(sheet, config):
-        comment = normalize_cell(sheet.cell(row=row_number, column=target_column).value)
-        reason = should_delete_comment(comment, seen_comments, config, clean_words)
-
-        if reason:
-            pending_deletions.append(
-                DeletedRow(
-                    sheet=sheet.title,
-                    row_number=row_number,
-                    reason=reason,
-                    value=comment,
-                )
-            )
-        else:
-            seen_comments.add(comment)
+    pending_deletions = collect_main_comment_deletions(sheet, config, clean_words)
 
     for deleted_row in sorted(pending_deletions, key=lambda row: row.row_number, reverse=True):
         sheet.delete_rows(deleted_row.row_number, 1)
@@ -598,7 +652,7 @@ def make_output_paths(input_path: Path, output_dir: Path | None, output_path: Pa
             output_xlsx.with_suffix(".summary.json"),
         )
 
-    timestamp = datetime.now().strftime("%Y%m%d")
+    timestamp = beijing_date_text()
     parent = output_dir if output_dir else input_path.parent
     stem = f"{timestamp}_{input_path.stem}"
     return (
@@ -721,6 +775,8 @@ def clean_workbook(
         "random_mixed_min_length": config.random_mixed_min_length,
         "random_letter_max_vowel_ratio": config.random_letter_max_vowel_ratio,
         "random_letter_min_consonant_run": config.random_letter_min_consonant_run,
+        "main_comment_duplicate_keep": config.main_comment_duplicate_keep,
+        "main_comment_duplicate_like_header": config.main_comment_duplicate_like_header,
         "duplicate_keep": config.duplicate_keep,
         "subcomment_deduplicate_headers": list(config.subcomment_deduplicate_headers),
         "subcomment_min_trimmed_length": config.subcomment_min_trimmed_length,
@@ -763,7 +819,7 @@ def clean_workbook(
     )
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="清洗抓取或导出的用户评论 Excel/CSV 表")
     parser.add_argument("input_path", type=Path, help="需要清洗的 .xlsx/.xlsm/.csv 文件")
     parser.add_argument(
@@ -779,18 +835,28 @@ def parse_args() -> argparse.Namespace:
         help="额外清理词，可重复传入。例如 --clean-word KOL清理词1 --clean-word KOL清理词2",
     )
     parser.add_argument("--target-header", default=None, help="按表头定位评论列，例如 评论内容")
-    parser.add_argument("--output-dir", type=Path, default=None, help="输出目录，默认写到输入文件同目录")
-    parser.add_argument("--output", type=Path, default=None, help="输出 .xlsx 文件路径")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="兼容旧程序调用的默认目录；CLI 仍必须传入 --output",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="命名确认后传入的输出 .xlsx 文件路径",
+    )
     parser.add_argument(
         "--overwrite",
         action="store_true",
         help="仅在已明确确认覆盖已有输出时使用",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     config = load_config(args.config)
     if args.target_header:
         config = replace(config, target_header=args.target_header)

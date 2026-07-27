@@ -9,15 +9,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SKILL_ROOT = PROJECT_ROOT / "skills" / "product-user-comment-data-merge-cleaning"
 
 SCRIPT_FILES = (
+    "audit_standardized_comments.py",
     "cleanup_intermediate_outputs.py",
     "clean_excel_comments.py",
     "compare_cleaned_workbooks.py",
     "csv_excel_compat.py",
+    "filter_comments_by_keywords.py",
     "merge_excel_workbooks.py",
     "hash_id_project_store.py",
     "hash_id_pseudonymizer.py",
     "output_file_naming.py",
     "output_path_safety.py",
+    "preprocess_platform_comments.py",
     "standardize_excel_headers.py",
     "strip_bilibili_reply_prefixes.py",
 )
@@ -26,6 +29,7 @@ CONFIG_FILES = (
     "comment-cleaner.json",
     "hash-id.json",
     "header-standardizer.json",
+    "platform-preprocessing.json",
 )
 
 

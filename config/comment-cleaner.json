@@ -198,6 +198,8 @@
     "三级评论"
   ],
   "subcomment_min_trimmed_length": 6,
+  "main_comment_duplicate_keep": "max_likes_last_tiebreak",
+  "main_comment_duplicate_like_header": "点赞数",
   "duplicate_keep": "last",
   "export_first_sheet_csv": true,
   "csv_encoding": "utf-8-sig"
