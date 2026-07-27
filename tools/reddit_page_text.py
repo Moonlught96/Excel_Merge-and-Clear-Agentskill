@@ -253,6 +253,25 @@ def _operation_blocks(comment_lines: list[str]) -> list[list[str]]:
 
 
 def _is_promoted_trailing(lines: list[str]) -> bool:
+    if len(lines) == 5:
+        avatar_suffix = " \u5934\u50cf"
+        advertiser = (
+            lines[0][2 : -len(avatar_suffix)]
+            if lines[0].startswith("u/")
+            and lines[0].endswith(avatar_suffix)
+            else ""
+        )
+        if (
+            advertiser
+            and lines[1] == advertiser
+            and lines[2:] == ["\u2022", "\u5df2\u63a8\u5e7f", "Advertisement"]
+        ):
+            return not any(
+                line in _COMMENT_OPERATION_LABELS
+                or _COMMENT_TIME_PATTERN.fullmatch(line) is not None
+                for line in lines
+            )
+        return False
     if len(lines) not in (3, 4):
         return False
     if not lines[0].startswith("u/") or not lines[0].endswith("\u5934\u50cf"):

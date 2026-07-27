@@ -114,6 +114,14 @@ ad-user
 \u2022\u5df2\u63a8\u5e7f Advertisement
 """
 
+TRAILING_FIVE_LINE_PROMOTED_BLOCK = """
+u/ad-user \u5934\u50cf
+ad-user
+\u2022
+\u5df2\u63a8\u5e7f
+Advertisement
+"""
+
 SECOND_COMMENT = """
 eldergooooose__
 \u20228\u5c0f\u65f6\u524d
@@ -502,6 +510,35 @@ third
             export,
         )
         self.assertEqual([3, None], [item.score for item in result.comments])
+
+    def test_ignores_registered_five_line_promoted_block_after_last_comment(
+        self,
+    ) -> None:
+        result = parse_reddit_page_text(
+            self.write_text(
+                PAGE_PREFIX
+                + FIRST_COMMENT
+                + SECOND_COMMENT
+                + TRAILING_FIVE_LINE_PROMOTED_BLOCK
+            ),
+            self.export_for_comments(),
+        )
+
+        self.assertEqual([3, None], [item.score for item in result.comments])
+
+    def test_rejects_near_miss_five_line_promoted_block_after_last_comment(
+        self,
+    ) -> None:
+        near_miss = TRAILING_FIVE_LINE_PROMOTED_BLOCK.replace(
+            "Advertisement",
+            "Advertisement extra",
+            1,
+        )
+        with self.assertRaisesRegex(RedditPageTextError, "trailing"):
+            parse_reddit_page_text(
+                self.write_text(PAGE_PREFIX + FIRST_COMMENT + SECOND_COMMENT + near_miss),
+                self.export_for_comments(),
+            )
 
     def test_rejects_nonstructural_author_substring_and_unparsed_candidates(
         self,
