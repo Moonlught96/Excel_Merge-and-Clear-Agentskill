@@ -16,13 +16,62 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from tools.output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
+    from output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "comment-cleaner.json"
+STANDARDIZED_COMMENT_HEADER = "评论内容"
+
+
+class ExternalCleanerConfigError(ValueError):
+    pass
+
+
+class FinalizedCleaningAuditArtifactsError(ValueError):
+    pass
+
+
+class CleanerConfigError(ValueError):
+    pass
+
+
+def require_canonical_cleaner_config_path(config_path: Path) -> Path:
+    """Reject per-run or copied cleaner configurations at the executable boundary."""
+    configured_path = config_path.resolve()
+    canonical_path = DEFAULT_CONFIG_PATH.resolve()
+    if configured_path != canonical_path:
+        raise ExternalCleanerConfigError(
+            "External or temporary cleaner configs are forbidden. "
+            f"Use the bundled canonical config only: {canonical_path}"
+        )
+    return canonical_path
+
+
+def refuse_finalized_audit_artifact_restoration(
+    output_xlsx: Path,
+    deletion_log_csv: Path,
+) -> None:
+    """Keep default-retention cleanup irreversible for a finalized output path."""
+    if output_xlsx.exists() and not deletion_log_csv.exists():
+        raise FinalizedCleaningAuditArtifactsError(
+            "Refusing to regenerate a deletion log that was removed by the retention policy. "
+            "Choose a new confirmed final output path for a fresh run; do not restore finalized audit artifacts."
+        )
+
+
 CHINESE_CHAR_PATTERN = re.compile(r"[\u4e00-\u9fff]")
 JAPANESE_KANA_PATTERN = re.compile(r"[\u3040-\u30ff]")
 KOREAN_HANGUL_PATTERN = re.compile(r"[\uac00-\ud7af\u1100-\u11ff]")
@@ -53,17 +102,10 @@ DEFAULT_DELETE_CONTAINS_TEXTS = (
     "点击链接",
     "http://",
     "https://",
-    "第一",
     "打卡",
-    "路过",
-    "来了",
     "冒泡",
     "占座",
-    "测试",
-    "test",
-    "无",
     "无内容",
-    "略",
     "暂无评价",
     "蹲",
     "蹲一个",
@@ -123,14 +165,10 @@ DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS = (
     "discount code",
     "whatsapp",
     "telegram",
-    "first",
-    "test",
     "n/a",
     "no content",
     "no comment",
     "nothing to say",
-    "how much",
-    "price?",
     "what brand",
     "brand?",
     "share link",
@@ -213,8 +251,11 @@ DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS = (
 
 @dataclass(frozen=True)
 class CleanerConfig:
-    target_column: int = 3
-    target_header: str | None = None
+    # Kept only as an ignored compatibility field for callers that still pass it.
+    # Cleaning always resolves the locked standardized comment header instead.
+    target_column: int | None = None
+    target_header: str | None = STANDARDIZED_COMMENT_HEADER
+    platform_profile: str | None = None
     first_data_row: int = 2
     min_trimmed_length: int = 8
     non_chinese_max_short_words: int = 4
@@ -266,11 +307,97 @@ class CleanResult:
     cells_cleared: int
 
 
-def load_config(path: Path) -> CleanerConfig:
+def _require_platform_profile_terms(value: Any, field_name: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise CleanerConfigError(f"{field_name} must be a list of strings")
+    return tuple(value)
+
+
+def _apply_platform_profile(
+    config: CleanerConfig,
+    raw_config: dict[str, Any],
+    platform: str | None,
+) -> CleanerConfig:
+    if platform is None:
+        return config
+
+    requested_platform = platform.strip().casefold()
+    if not requested_platform:
+        return config
+
+    raw_profiles = raw_config.get("platform_profiles", {})
+    if raw_profiles is None:
+        raw_profiles = {}
+    if not isinstance(raw_profiles, dict):
+        raise CleanerConfigError("platform_profiles must be an object")
+
+    matches: list[tuple[str, dict[str, Any]]] = []
+    for profile_name, raw_profile in raw_profiles.items():
+        if not isinstance(profile_name, str) or not isinstance(raw_profile, dict):
+            raise CleanerConfigError("Each platform profile must have a string name and object value")
+        aliases = _require_platform_profile_terms(
+            raw_profile.get("aliases", []),
+            f"platform_profiles.{profile_name}.aliases",
+        )
+        names = {profile_name.casefold(), *(alias.strip().casefold() for alias in aliases)}
+        if requested_platform in names:
+            matches.append((profile_name, raw_profile))
+
+    if not matches:
+        return config
+    if len(matches) > 1:
+        raise CleanerConfigError(
+            f"Platform matches multiple cleaner profiles: {platform!r}"
+        )
+
+    profile_name, raw_profile = matches[0]
+    remove_sensitive = _require_platform_profile_terms(
+        raw_profile.get("remove_delete_contains_texts", []),
+        f"platform_profiles.{profile_name}.remove_delete_contains_texts",
+    )
+    remove_insensitive = _require_platform_profile_terms(
+        raw_profile.get("remove_delete_contains_case_insensitive_texts", []),
+        f"platform_profiles.{profile_name}.remove_delete_contains_case_insensitive_texts",
+    )
+    unknown_sensitive = set(remove_sensitive) - set(config.delete_contains_texts)
+    unknown_insensitive = set(remove_insensitive) - set(
+        config.delete_contains_case_insensitive_texts
+    )
+    if unknown_sensitive or unknown_insensitive:
+        unknown = sorted(unknown_sensitive | unknown_insensitive)[0]
+        raise CleanerConfigError(
+            f"Platform cleaner profile {profile_name!r} removes an unconfigured term: {unknown!r}"
+        )
+
+    return replace(
+        config,
+        platform_profile=profile_name,
+        delete_contains_texts=tuple(
+            text for text in config.delete_contains_texts if text not in set(remove_sensitive)
+        ),
+        delete_contains_case_insensitive_texts=tuple(
+            text
+            for text in config.delete_contains_case_insensitive_texts
+            if text not in set(remove_insensitive)
+        ),
+    )
+
+
+def load_config(path: Path, platform: str | None = None) -> CleanerConfig:
     data = json.loads(path.read_text(encoding="utf-8"))
-    return CleanerConfig(
-        target_column=int(data.get("target_column", 3)),
-        target_header=data.get("target_header"),
+    if "target_column" in data:
+        raise CleanerConfigError(
+            "target_column is not supported. Cleaning must resolve the standardized 评论内容 header."
+        )
+    configured_target_header = data.get("target_header", STANDARDIZED_COMMENT_HEADER)
+    if configured_target_header != STANDARDIZED_COMMENT_HEADER:
+        raise CleanerConfigError(
+            "target_header must be exactly 评论内容 for the standardized cleaning workflow."
+        )
+    config = CleanerConfig(
+        target_header=STANDARDIZED_COMMENT_HEADER,
         first_data_row=int(data.get("first_data_row", 2)),
         min_trimmed_length=int(data.get("min_trimmed_length", 8)),
         non_chinese_max_short_words=int(data.get("non_chinese_max_short_words", 4)),
@@ -296,6 +423,7 @@ def load_config(path: Path) -> CleanerConfig:
         export_first_sheet_csv=bool(data.get("export_first_sheet_csv", True)),
         csv_encoding=str(data.get("csv_encoding", "utf-8-sig")),
     )
+    return _apply_platform_profile(config, data, platform)
 
 
 def normalize_cell(value: Any) -> str:
@@ -389,11 +517,13 @@ def is_random_alnum_without_chinese(comment: str, config: CleanerConfig) -> bool
 
 
 def resolve_target_column(sheet: Worksheet, config: CleanerConfig) -> int:
-    if not config.target_header:
-        return config.target_column
+    if config.target_header != STANDARDIZED_COMMENT_HEADER:
+        raise ValueError(
+            "Cleaning requires the standardized 评论内容 header; numeric target_column fallback is disabled."
+        )
 
     header_row = max(1, config.first_data_row - 1)
-    target_key = normalize_header(config.target_header)
+    target_key = normalize_header(STANDARDIZED_COMMENT_HEADER)
     headers = next(
         sheet.iter_rows(min_row=header_row, max_row=header_row, max_col=sheet.max_column, values_only=True),
         (),
@@ -404,9 +534,9 @@ def resolve_target_column(sheet: Worksheet, config: CleanerConfig) -> int:
         if normalize_header(header) == target_key
     ]
     if not matches:
-        raise ValueError(f"未找到评论列表头: {config.target_header}")
+        raise ValueError(f"未找到评论列表头: {STANDARDIZED_COMMENT_HEADER}")
     if len(matches) > 1:
-        raise ValueError(f"评论列表头重复: {config.target_header}")
+        raise ValueError(f"评论列表头重复: {STANDARDIZED_COMMENT_HEADER}")
     return matches[0]
 
 
@@ -706,6 +836,7 @@ def clean_workbook(
     output_path: Path | None = None,
     *,
     overwrite: bool = True,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> CleanResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -727,10 +858,12 @@ def clean_workbook(
     outputs_to_create = [output_xlsx, deletion_log_csv, summary_json]
     if config.export_first_sheet_csv:
         outputs_to_create.append(output_csv)
+    refuse_finalized_audit_artifact_restoration(output_xlsx, deletion_log_csv)
     ensure_output_paths_safe(
         [input_path],
         outputs_to_create,
         overwrite=overwrite,
+        overwrite_confirmations=overwrite_confirmations,
     )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
@@ -760,8 +893,8 @@ def clean_workbook(
         "sheets_processed": len(workbook.worksheets),
         "rows_deleted": len(deleted_rows),
         "cells_cleared": len(cleared_cells),
-        "target_column": config.target_column,
         "target_header": config.target_header,
+        "platform_profile": config.platform_profile,
         "first_data_row": config.first_data_row,
         "min_trimmed_length": config.min_trimmed_length,
         "non_chinese_max_short_words": config.non_chinese_max_short_words,
@@ -826,7 +959,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--config",
         type=Path,
         default=DEFAULT_CONFIG_PATH,
-        help=f"清洗规则配置文件，默认 {DEFAULT_CONFIG_PATH}",
+        help=(
+            "仅接受 Skill 内置的正式清洗配置；外部或临时配置会被拒绝。"
+        ),
     )
     parser.add_argument(
         "--clean-word",
@@ -834,7 +969,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[],
         help="额外清理词，可重复传入。例如 --clean-word KOL清理词1 --clean-word KOL清理词2",
     )
-    parser.add_argument("--target-header", default=None, help="按表头定位评论列，例如 评论内容")
+    parser.add_argument(
+        "--target-header",
+        required=True,
+        help="必须显式指定标准化后的评论列表头：评论内容",
+    )
+    parser.add_argument(
+        "--platform",
+        required=True,
+        help="本轮已确认的平台名称；用于选择内置的固定清洗例外规则",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -847,19 +991,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="命名确认后传入的输出 .xlsx 文件路径",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="仅在已明确确认覆盖已有输出时使用",
+    add_confirmed_overwrite_arguments(
+        parser,
+        overwrite_help="仅在用户明确确认每个既有输出路径后才允许覆盖。",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    args.target_header = args.target_header.strip()
+    if args.target_header != STANDARDIZED_COMMENT_HEADER:
+        parser.error(
+            f"--target-header must be exactly {STANDARDIZED_COMMENT_HEADER!r} for the standardized workflow"
+        )
+    args.platform = args.platform.strip()
+    if not args.platform:
+        parser.error("--platform must not be blank")
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    config = load_config(args.config)
-    if args.target_header:
-        config = replace(config, target_header=args.target_header)
+    config = load_config(
+        require_canonical_cleaner_config_path(args.config),
+        platform=args.platform,
+    )
+    config = replace(config, target_header=args.target_header)
     clean_words = tuple(word.strip() for word in args.clean_word if word and word.strip())
     result = clean_workbook(
         args.input_path.resolve(),
@@ -868,6 +1022,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output_dir,
         args.output,
         overwrite=args.overwrite,
+        overwrite_confirmations=tuple(args.confirm_overwrite),
     )
 
     print(f"处理完成: {result.input_path}")

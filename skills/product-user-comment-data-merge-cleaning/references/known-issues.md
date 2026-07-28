@@ -1,5 +1,39 @@
 # Known Issues And Deterministic Resolutions
 
+## Contents
+
+- [Contextual Latin Fixed-Word False Positives](#contextual-latin-fixed-word-false-positives-resolved)
+- [Positional Comment-Column Fallback](#positional-comment-column-fallback-resolved)
+- [CSV Physical-Line Counts](#csv-physical-line-counts-resolved)
+- [Blank Stable Account-ID Column Blocks Display-Name Hashing](#blank-stable-account-id-column-blocks-display-name-hashing)
+- [Literal Exporter `None` Is Not A Stable Account ID](#literal-exporter-none-is-not-a-stable-account-id)
+- [Known Trailing `(edited)` Date Suffix](#known-trailing-edited-date-suffix)
+- [YouTube Export Variants Use Different Display-Name Headers](#youtube-export-variants-use-different-display-name-headers)
+- [Output Collision And Partial-Write Risks](#output-collision-and-partial-write-risks)
+- [Compact Dates Mistaken For Unix Timestamps](#compact-dates-mistaken-for-unix-timestamps)
+- [Audit Comparison Lost Formula And Duplicate Detail](#audit-comparison-lost-formula-and-duplicate-detail)
+- [YouTube Shorts Paths Fell Through To Generic YouTube Naming](#youtube-shorts-paths-fell-through-to-generic-youtube-naming)
+- [Emoji Filenames Failed On Windows GBK Consoles](#emoji-filenames-failed-on-windows-gbk-consoles)
+- [Platform Profile Cannot Be Guessed From Partial Headers](#platform-profile-cannot-be-guessed-from-partial-headers)
+- [Twitter/X Relevance Is Not Semantic Classification](#twitterx-relevance-is-not-semantic-classification)
+- [Rakuten Anonymous Buyer Is Not A Stable Identity](#rakuten-anonymous-buyer-is-not-a-stable-identity)
+- [Mixed Registered Platform Variants Cannot Use Raw Merge](#mixed-registered-platform-variants-cannot-use-raw-merge)
+- [Standardized Output Audit Stops Unsafe Progression](#standardized-output-audit-stops-unsafe-progression)
+- [Short Chinese Fixed Terms Can Cause False Positives](#short-chinese-fixed-terms-can-cause-false-positives)
+- [Finalized Cleaning Logs Must Not Be Restored](#finalized-cleaning-logs-must-not-be-restored)
+
+## Contextual Latin Fixed-Word False Positives (resolved)
+
+The old global configuration treated `first`, `test`, `how much`, and `price?` as fixed contains terms. That could delete a normal long English review merely because it discussed a first purchase, test result, or price. These four terms are now absent from both executable fixed-term lists. Short standalone comments still use the existing deterministic non-Chinese length threshold; no semantic classifier was added.
+
+## Positional Comment-Column Fallback (resolved)
+
+The public CLI already required `--target-header 评论内容`, but an internal `CleanerConfig` call could still silently clean numeric column 3. The cleaner now rejects any header other than the locked standardized `评论内容` header; numeric fallback is disabled. This prevents a direct caller from deleting data in an unstandardized third column.
+
+## CSV Physical-Line Counts (resolved)
+
+Counting text-file lines is incorrect when a quoted CSV comment contains a newline. `scripts/inventory_comment_inputs.py` now reads the explicit supplied inputs through the existing CSV parser and reports logical data rows only. It rejects folders and duplicate paths, so it cannot substitute a folder scan or an old memory total.
+
 ## Blank Stable Account-ID Column Blocks Display-Name Hashing
 
 ### Symptom
@@ -43,6 +77,16 @@ Tests must prove both cases:
 - an entirely blank account-ID column falls back to the registered display name and repeated names receive the same hash;
 - an account-ID column containing at least one value remains selected for the worksheet, and individual blank rows do not fall back to display names.
 
+## Literal Exporter `None` Is Not A Stable Account ID
+
+Some YouTube exports write the literal text `None` in every `author_channel_id` cell. That value is not a usable account ID: hashing it would assign the same `哈希ID` to unrelated commenters. The standardizer now treats only the trimmed, case-insensitive account-ID marker `None` as blank. When every registered account-ID column is blank under that rule, it selects the configured worksheet-wide display-name fallback such as `author`. It does not treat a literal display name `None` as blank, and it does not add unconfirmed null markers such as `null` or `nan`.
+
+Regression coverage proves that two different YouTube `author` values paired with account-ID values `None` generate two different hashes. No AI, value semantics, or row-by-row identity switching is involved.
+
+## Known Trailing `(edited)` Date Suffix
+
+Some YouTube exports append the exact literal suffix `(edited)` to relative or ISO dates, such as `1 year ago (edited)`. Before the standardizer applies its registered deterministic date parser, it strips that one trailing suffix for parsing only. Relative values still use the configured Beijing-date granularity, so `1 year ago (edited)` becomes the year only. Unknown suffixes and unmatched nonblank values are preserved unchanged instead of being guessed.
+
 ## YouTube Export Variants Use Different Display-Name Headers
 
 ### Symptom
@@ -61,7 +105,7 @@ This is exact configured header mapping, not AI inference or fuzzy identity matc
 
 ## Output Collision And Partial-Write Risks
 
-Earlier tools could replace an existing output without an explicit CLI choice, and a CSV input could collide with the cleaner's derived `.csv` sidecar. All workflow writers now reject input/output collisions, reject existing CLI destinations unless `--overwrite` was explicitly confirmed, and stage files beside the destination before atomic replacement. Cleanup also refuses to run without at least one protected path.
+Earlier tools could replace an existing output without an explicit CLI choice, and a CSV input could collide with the cleaner's derived `.csv` sidecar. All workflow writers now reject input/output collisions and stage files beside the destination before atomic replacement. Replacing an existing file requires `--overwrite` plus one exact `--confirm-overwrite` argument for every existing output the command will replace; `--overwrite` by itself is rejected. Cleanup also refuses to run without at least one protected path.
 
 ## Compact Dates Mistaken For Unix Timestamps
 
@@ -106,3 +150,17 @@ When the user has confirmed the platform profile, use `scripts/preprocess_platfo
 The automatic audit is intentionally structural. It checks locked header order, unexpected raw identity headers, hash format, worksheet order, and row-count preservation against the exact standardization source. A failed audit blocks standardization approval, KOL-word collection, and cleaning.
 
 The audit does not evaluate the meaning, language, quality, sentiment, or correctness of a comment. It emits issue codes and counts only, never raw identity values or comment values. Correct an underlying fixed configuration or tool defect, then rerun the standardization and audit; do not manually alter the audit report to continue.
+
+## Short Chinese Fixed Terms Can Cause False Positives
+
+Chinese configured fixed terms use literal substring containment. Short generic terms can therefore match an otherwise useful review. The canonical cleaner configuration deliberately excludes `无`, `第一`, `略`, `测试`, `来了`, and `路过`; it must not delete a comment merely because it contains one of those strings.
+
+Examples that must remain when no other rule matches include `无炫光设计让我很满意`, `第一次购买屏幕挂灯效果很好`, `价格略贵但整体品质不错`, `感应到人来了就会自动亮灯`, `测试使用两周后光线非常舒服`, and `路过时人体感应会自动亮灯`.
+
+Do not create a custom per-run cleaner JSON to override the canonical configuration. The cleaner CLI rejects every non-canonical `--config` path. A user-confirmed rule change must update the root configuration, the bundled Skill configuration, this reference, and deterministic positive/negative tests together.
+
+## Finalized Cleaning Logs Must Not Be Restored
+
+The default retention policy deletes cleaner `.deletions.csv` and `.summary.json` after the final `.xlsx` and `.csv` are verified. Retrying the cleaner against the same final `.xlsx` path used to recreate a log that the workflow intentionally removed, which creates inconsistent audit state.
+
+The cleaner now refuses that rerun when its final output exists and the deletion log is absent. Do not restore a deletion log from another location or use the cleanup tool's `--summary` option to recreate a `.deletions.csv` file. If a fresh run is required, use a new user-confirmed final output path.

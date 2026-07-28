@@ -1,10 +1,25 @@
 # Workflow And Confirmation Gates
 
+## Contents
+
+- [Global Order](#global-order)
+- [Identity Selection During Standardization](#identity-selection-during-standardization)
+- [Initial File Handling](#initial-file-handling)
+- [Single-File Workflow](#single-file-workflow)
+- [Multi-File Workflow](#multi-file-workflow)
+- [KOL Clean-Word Gate](#kol-clean-word-gate)
+- [Twitter/X Keep-Keyword Gate](#twitterx-keep-keyword-gate)
+- [B站 Reply Prefix Step](#b站-reply-prefix-step)
+- [Platform Preprocessing](#platform-preprocessing)
+- [Standardized Output Audit](#standardized-output-audit)
+- [Execution Safeguards](#execution-safeguards)
+- [Completion](#completion)
+
 ## Global Order
 
 The fixed workflow is:
 
-1. Confirm research project name, product name, data source, and planned filenames once.
+1. Confirm research project name, product name, data source, and planned filenames once. For a new research project, separately confirm the DPAPI project-key privacy notice before initialization.
 2. Confirm whether the supplied file list is complete enough to enter merge or, for one file, whether it is the only intended input.
 3. Merge multiple raw inputs into a new raw merged workbook, except for a validated registered mixed-variant batch.
 4. Return the raw merged workbook, or the platform-preprocessed merged workbook for that exception, and wait for merge-completion confirmation.
@@ -30,6 +45,8 @@ For each worksheet, the deterministic standardizer applies this order before pro
 4. After selecting a nonblank account-ID column, keep `哈希ID` blank for individual rows whose selected account-ID cell is blank; never fall back row-by-row.
 5. Omit raw account IDs, usernames, and nicknames from standardized and cleaned outputs, logs, and summaries.
 
+When the workflow creates a new research project, show the privacy confirmation template before standardization. Only after the user confirms it may the Agent run `scripts/standardize_excel_headers.py` with `--initialize-project --confirm-project-key-creation <exact-project-name>`. A later run for the same project loads the existing protected key and must not reinitialize it.
+
 Do not use AI to choose, normalize, or hash an identity source. The exact mappings and risk limits are in `header-standardization.md` and `data-contract.md`.
 
 ## Initial File Handling
@@ -38,6 +55,7 @@ Do not use AI to choose, normalize, or hash an identity source. The exact mappin
 - Accept `.xlsx`, `.xlsm`, and `.csv`.
 - Use only files explicitly provided by the user. Never scan a folder for additional files.
 - Reject duplicate input paths before merge instead of silently duplicating their rows.
+- When reporting a file, platform, or product total, run `scripts/inventory_comment_inputs.py` on the exact supplied input paths and report only its logical `data_rows`. Never count CSV physical lines or reuse a remembered total.
 - Confirm research project name, product name, and data source once per workflow. Reuse the existing protected key until the user explicitly identifies a new research project. Later phases change only the step name in the output filename.
 
 ## Single-File Workflow
@@ -166,9 +184,18 @@ The audit is deterministic and must pass all of these checks before the standard
 
 The audit report records only structural metadata, counts, header names, and issue codes; it must not record a raw identity value or comment text. It does not judge semantic quality, sentiment, language, product relevance, or whether a row should be deleted. If any check fails, stop the workflow before user confirmation, KOL-word collection, or cleaning.
 
+## Execution Safeguards
+
+- Run the cleaner only with its bundled canonical `config/comment-cleaner.json`. Do not create, copy, load, or pass an external or temporary cleaner JSON for one batch.
+- Run the public cleaner CLI only with the exact `--target-header 评论内容` and the confirmed nonblank `--platform`. Canonical URL/link marker terms apply to every platform, including Twitter/X, and may not be bypassed through a per-run configuration.
+- The merge, merge-completion, standardized-workbook, and word-list confirmation gates require an explicit reply in the current conversation. Do not treat a CLI option, JSON marker, old log, historical approval, or urgency request as confirmation.
+- If a planned output already exists, first show every exact replacement path and obtain explicit user confirmation. The CLI must then receive `--overwrite` and one `--confirm-overwrite <exact-existing-path>` argument for every existing file it will replace, including generated summaries or CSV sidecars. `--overwrite` by itself is not confirmation.
+- If default retention has removed a final cleaner `.deletions.csv` or `.summary.json`, that log is finalized. Do not rerun the cleaner at the same final `.xlsx` path to recreate it, do not copy it back, and do not use cleanup `--summary` to write a replacement. Use a new confirmed output path for a fresh run.
+
 ## Completion
 
 - Verify the cleaned `.xlsx` and `.csv` exist before cleanup.
+- Pass those exact two existing files as the two `--final-output` values and also as protected paths. The cleanup command must stop before deleting any intermediate if either declared final output is missing or unprotected.
 - Do not ask for another cleanup confirmation.
 - Return only the final cleaned `.xlsx` and `.csv` unless the user requested audit files before cleaning.
 - Do not overwrite an existing phase or final output unless the user explicitly confirms that exact replacement.

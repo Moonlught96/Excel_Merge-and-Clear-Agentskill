@@ -18,6 +18,7 @@ SCRIPT_FILES = (
     "merge_excel_workbooks.py",
     "hash_id_project_store.py",
     "hash_id_pseudonymizer.py",
+    "inventory_comment_inputs.py",
     "output_file_naming.py",
     "output_path_safety.py",
     "preprocess_platform_comments.py",

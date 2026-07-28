@@ -16,6 +16,8 @@
 
 本项目的基础清洗规则以 `skills/product-user-comment-data-merge-cleaning/` 中的 `SKILL.md`、`references/` 和 `config/` 为准。后续新增功能时，不得修改其中的基础规则；只有用户明确指出要修改某一条规则时，才允许同步修改 Skill、配置、代码和测试。
 
+执行防护为固定规则：`tools/clean_excel_comments.py` 的 CLI 只能读取其相对 Skill 或仓库内置的正式 `config/comment-cleaner.json`，禁止创建、复制、传入或恢复外部/临时清洗配置；公共清洗 CLI 必须显式传入 `--target-header 评论内容` 与已确认的非空 `--platform`，不得退回按第 3 列清洗。所有平台均执行正式配置中的 URL、链接类和其它固定清理词；当前没有平台专用清洗豁免。用户确认规则变更时必须更新正式根配置、Skill 配置、文档和测试。所有会写入文件的 CLI 在目标已存在时必须同时收到 `--overwrite` 和针对每个确切既有目标的 `--confirm-overwrite <路径>`，仅 `--overwrite` 不得覆盖。默认留存清理已经删除最终清洗文件的 `.deletions.csv` 或 `.summary.json` 后，任何脚本入口均不得在同一最终输出路径重新生成、复制恢复或借 `cleanup_intermediate_outputs.py --summary` 重建该日志；需要重新处理时只能使用新的、经用户确认的输出路径。
+
 当用户提供抓取或导出的 Excel/CSV 用户评论文件进行合并或清洗时，必须执行表头标准化：新建一个独立的标准化 Excel 文档，只保留并排序为 `评论日期`、`评论内容`、`产品名`、`电商平台评分`、`用户属性`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`。昵称、IP 数据以及其它不在保留清单内的列不得进入后续文件。`电商平台评分`、`用户属性`均为可选保留列：评分源列只按完全一致的已登记表头读取，源表不存在时保留空列；映射后仅可按已确认的固定数值格式将数值、`N out of 5 stars` 或 `N 颗星，最多 5 颗星` 写为数值 N，其它非空值保持原样，绝不推断、翻译、四舍五入或语义判断。`用户属性`逐行按固定规则生成：优先保留已登记源表头 `用户属性` 的非空值；该值为空或不存在时，依次读取已登记的 `性别`、`年龄`，去除首尾空白后用一个空格拼接非空值；两者都没有时保留空列。不得推断、补全或语义改写用户属性；`性别`、`年龄`不再作为输出表头，且评分和用户属性均不得作为 `哈希ID` 身份来源。`点赞数`是必保留数值列：源列不存在或对应单元格为空/仅空白时，标准化输出固定写入数值 `0`；数值、纯数字和已确认固定有用数文本按规则写为整数，其它非空值保持原样，绝不推断、翻译、缩写解析或语义判断。该过程必须使用确定性工具，不接入 AI 判断。源表头名称不一致时，只能通过固定别名映射处理；缺少必需的`评论日期`或`评论内容`已登记别名时必须停止并让用户确认映射。未登记且不在保留清单内的额外列按删除规则省略，不得猜测为标准列。
 CSV 输入必须先通过确定性兼容层读取；CSV 单元格值按文本保留，不得自动推断数字、日期、ID 或时间戳类型。CSV 原文件不得修改，后续标准化、合并和清洗输出仍然生成新的 `.xlsx` 工作簿，并按既有规则导出清洗后的 `.csv`。
 CSV 兼容层只按确定性顺序支持 UTF-8、带 BOM 的 UTF-16 和 GB18030；无法解码时必须停止，不得猜测其它编码。
@@ -31,8 +33,8 @@ CSV 中以 `=` 开头的值在合并、B站回复前缀处理、标准化和直�
 显示名关联属于弱伪名化，不是法律意义上的匿名化：昵称变化会拆分同一用户，同名用户可能被合并。不得把显示名哈希解释为稳定账号归属或法律匿名化。
 原始账号 ID、用户名、昵称不得进入标准化或清洗输出、日志或摘要；已登记字段即使仅在内存中参与哈希，原始列仍必须省略。评论 ID、父评论 ID、URL、主页链接、IP、来源自带的 `哈希ID`、`用户身份` 和其它含义不明确的字段绝不得作为身份来源。
 新增账号 ID 或显示名别名必须先获得用户确认和平台专属证据，且只能加入对应平台和身份类型的固定配置；不得根据字段值或 AI 语义猜测。整个选择、标准化和哈希过程必须由确定性工具完成，不接入 AI。
-项目密钥必须由 Windows DPAPI 保护并保存在用户本地项目密钥仓库，不得进入仓库、输出文件、日志或摘要。新增显示名兜底不得改变任何既有合并、清洗、命名、确认或留存规则。
-当前已确认的 TikTok/YouTube 平台表头映射包括：`createTime`、`publishedAt`、`published_at`、`publishedTime`、`createdAt`、`created_at`、`date`、`time` -> `评论日期`；`评论`、`text`、`comment`、`commentText`、`comment_text`、`Comment Text`、`message`、`body` -> `评论内容`；`Digg Count`、`likeCount`、`likes`、`diggCount` -> `点赞数`；`回复数`、`replyCount`、`replyCommentTotal`、`replies` -> `子评论数/追评数`；`replyText`、`reply_text` -> `一级评论`。这些平台时间字段必须按确定性规则转换为北京时间 `YYYY-MM-DD`，支持 Unix 秒/毫秒时间戳和 ISO 时间；不得使用 AI 判断。中文 `评论时间` 或 `评论日期` 源列只在值为数字时间戳或带时分秒的日期时间文本时转换为 `YYYY-MM-DD`；纯日期文本保持原值。Relative platform time values such as `1年前`, `9个月前`, `1 year ago`, and `9 months ago` are converted deterministically from the current Beijing date. Relative year values output only `YYYY`; relative month values output only `YYYY-MM`. Relative day/week values output `YYYY-MM-DD`, and missing month/day must not be inferred beyond that fixed granularity. `id`、`comment_id`、`commentId`、`cid`、`uid`、`user_id`、`userId`、`uniqueId`、`author`、`authorName`、`authorDisplayName`、`authorChannelId`、`channelId`、`profileUrl`、`avatar`、`videoId`、`videoUrl`、`url`、`permalink` 必须作为 ID、昵称、账号或链接相关列丢弃。
+项目密钥必须由 Windows DPAPI 保护并保存在用户本地项目密钥仓库，不得进入仓库、输出文件、日志或摘要。新项目首次创建密钥前，必须向用户展示哈希伪名化与非匿名化风险并取得明确确认；实际命令必须同时传入 `--initialize-project --confirm-project-key-creation <与 --project-name 完全一致的项目名>`。该命令参数仅记录已确认的命令意图，不能替代对话中的用户确认。新增显示名兜底不得改变任何既有合并、清洗、命名、确认或留存规则。
+当前已确认的 TikTok/YouTube 平台表头映射包括：`createTime`、`publishedAt`、`published_at`、`publishedTime`、`createdAt`、`created_at`、`date`、`time` -> `评论日期`；`评论`、`text`、`comment`、`commentText`、`comment_text`、`Comment Text`、`message`、`body` -> `评论内容`；`Digg Count`、`likeCount`、`likes`、`diggCount` -> `点赞数`；`回复数`、`replyCount`、`replyCommentTotal`、`replies` -> `子评论数/追评数`；`replyText`、`reply_text` -> `一级评论`。这些平台时间字段必须按确定性规则转换为北京时间 `YYYY-MM-DD`，支持 Unix 秒/毫秒时间戳和 ISO 时间；不得使用 AI 判断。中文 `评论时间` 或 `评论日期` 源列只在值为数字时间戳或带时分秒的日期时间文本时转换为 `YYYY-MM-DD`；纯日期文本保持原值。Relative platform time values such as `1年前`, `9个月前`, `1 year ago`, and `9 months ago` are converted deterministically from the current Beijing date. 对已登记的相对/ISO/固定日期解析，仅在末尾精确存在 `(edited)` 时先移除该后缀再解析；未知后缀或不匹配的非空值不得猜测。Relative year values output only `YYYY`; relative month values output only `YYYY-MM`. Relative day/week values output `YYYY-MM-DD`, and missing month/day must not be inferred beyond that fixed granularity. `id`、`comment_id`、`commentId`、`cid`、`uid`、`user_id`、`userId`、`uniqueId`、`author`、`authorName`、`authorDisplayName`、`authorChannelId`、`channelId`、`profileUrl`、`avatar`、`videoId`、`videoUrl`、`url`、`permalink` 必须作为 ID、昵称、账号或链接相关列丢弃。
 八位数字 `YYYYMMDD` 必须先按日历日期解析，再判断 Unix 时间戳，避免被转换成 1970 年日期。
 
 B站数据在标准化前必须按固定规则去掉 `回复@xxx：` 或 `回复 @xxx:` 前缀，只保留冒号后的真实评论内容。多文件流程在用户确认合并完成后处理原始合并总表；单文件流程在用户确认只有该文件后处理原始输入。该步骤只处理 `content` 或 `评论内容` 列的固定文本前缀，必须输出新的临时前缀清理表，不得覆盖原始输入或原始合并总表；不得在该步骤中移动回复行或推断父子层级，不得新增层级列，不得删除行。
@@ -46,10 +48,11 @@ Twitter/X 使用独立 `twitter` 分流器，且仅当完整有序原始表头�
 每次标准化完成后、返回用户确认之前，必须运行 `tools/audit_standardized_comments.py`，并传入标准化输入源文件。审查只做确定性、非语义核验：每个工作表是否具有锁定的完整表头及顺序、是否存在重复或原始身份表头、每个非空 `哈希ID` 是否为 64 位小写十六进制、每个数据行的`点赞数`是否非空、工作表名称/顺序以及源文件与标准化输出的数据行数是否一致。标准化脚本必须在审查前把缺失或空白点赞数写为数值`0`；审查只验证，不改写表格。审查报告只能包含路径、工作表名、表头、计数和问题代码，不得包含评论文本或原始身份值。任一核验失败时，必须停止，不得把标准化表格送入用户确认、KOL 清理词或清洗流程；审查通过后仍必须保留原有“标准化后的表格已生成，请确认是否可以进入清洗流程”的用户确认门槛。该审查也必须完全由工具完成，不接入 AI。
 
 清洗工具成功生成并核对清洗后的 `.xlsx` 和 `.csv` 后，必须立即删除本次流程生成的合并总表、回复前缀清理表、平台预处理表、Twitter/X 关键词筛选表及其摘要、标准化总表、标准化审查报告及其摘要文件，默认同时删除清洗日志和清洗摘要，不再额外询问用户是否清理；除非用户在清洗前明确要求保留日志、摘要或审查报告用于核对，最终默认只保留清洗后的 `.xlsx` 和 `.csv`。删除时只能使用明确传入的中间文件路径，不得扫描文件夹批量删除；不得删除原始输入文件、清洗后的 `.xlsx`、清洗后的 `.csv`，也不得删除用户明确要求保留的日志或摘要。调用清理工具时，必须把所有原始输入文件以及最终清洗后的 `.xlsx`、`.csv` 作为受保护路径传入；默认不得生成额外的清理摘要文件。
-中间文件清理至少必须传入一个受保护路径；没有 `--protect` 时工具必须拒绝执行。
+中间文件清理至少必须传入一个受保护路径；没有 `--protect` 时工具必须拒绝执行。清理时还必须同时传入恰好一个存在且受保护的最终 `.xlsx` 和一个存在且受保护的最终 `.csv` 作为 `--final-output`；任一不存在或未受保护时必须在删除任何中间文件前停止。
 
 当用户提供多个 Excel/CSV 文件并要求合并时，只合并用户明确提供的文件清单，不扫描文件夹内的其它 Excel/CSV 文件。合并过程也必须使用确定性工具处理，不接入 AI 判断或改写数据。
 合并输入中出现重复路径时必须停止，不得把同一文件重复追加。每个转换阶段 CLI 都必须传入命名确认后得到的显式 `--output` 路径；不得使用默认输出路径绕过文件命名确认。所有 CLI 输出默认禁止覆盖已有文件；只有展示确切目标路径并获得用户明确确认后才可传入 `--overwrite`。输出必须先写入目标目录内的临时文件，成功后再原子替换。
+任何向用户报告输入文件、平台或产品的评论总量时，必须先对本轮用户明确提供的路径运行 `tools/inventory_comment_inputs.py`。只报告该工具解析出的逻辑数据行数；不得按 CSV 物理换行数、目录扫描结果、聊天记忆或旧摘要估算总量。
 
 合并之前必须先确认研究项目名、产品名和数据来源。研究项目名在同一研究项目中固定复用；用户明确说明新项目时才创建新的项目密钥。文件名格式固定为 `YYYYMMDD_产品名_数据来源_步骤名`，日期使用北京时间（Asia/Shanghai），步骤名固定为 `合并总表`、`标准化总表`、`清洗后总表`。同一流程只确认一次产品名和数据来源；确认后后续文件名只根据步骤自动替换步骤名，不再重复确认命名。
 
@@ -103,6 +106,7 @@ Twitter/X 使用独立 `twitter` 分流器，且仅当完整有序原始表头�
 - 不要基于语义、情绪、质量、疑似广告等主观判断删除评论。
 - 不要添加用户未确认的额外清理词。
 - 不要使用旧的八爪鱼 RPA 画布或不存在的 CLI。
+- 三道用户确认（进入合并、合并完整、标准化后进入清洗）以及 KOL/Twitter 词完整性确认必须来自当前对话中的明确用户回复；不得用 CLI 参数、JSON 状态文件、旧日志、历史确认或“尽快处理”等表述替代或伪造确认。
 
 ## 当前工具规则
 
@@ -116,7 +120,7 @@ Twitter/X 使用独立 `twitter` 分流器，且仅当完整有序原始表头�
 
 - 支持 `.xlsx`、`.xlsm` 和 `.csv`。
 - CSV 输入必须先通过确定性兼容层读取；CSV 单元格值按文本保留，不自动推断数字、日期、ID 或时间戳类型。
-- 旧的直接清洗模式默认第 3 列是评论列；标准化后的文件按“评论内容”表头定位评论列。
+- 清洗只能按标准化后的“评论内容”表头定位评论列；旧的第 3 列/`target_column` 位置兜底已禁用。
 - 默认第 1 行是表头，从第 2 行开始清洗。
 - 删除首尾空白后长度小于等于 7 的中文主评论。
 - Chinese comments delete by character length; non-Chinese comments delete by deterministic word count.
@@ -126,13 +130,15 @@ Twitter/X 使用独立 `twitter` 分流器，且仅当完整有序原始表头�
 - Pure numeric comments keep the legacy seven-character threshold for backward compatibility.
 - 删除完全等于占位文案的评论。
 - 删除包含用户提供 KOL 清理词的评论。
-- 固定清理词只能追加，不能覆盖或移除原有固定词“链接”。
+- 默认基础固定清理词只能追加，不能覆盖或移除原有固定词“链接”。`http://`、`https://`及已登记的链接类固定词对所有平台生效，包括 Twitter/X；不得通过平台专用或临时配置绕过。
 - When adding a fixed delete word later, add confirmed equivalents for Chinese, English, Japanese, Korean, Spanish, Thai, and Hindi where applicable.
-- Fixed delete words must be isolated by deterministic script group. Chinese comments only use Chinese fixed words; Japanese, Korean, Thai, and Hindi comments only use their respective script groups. English and Spanish share the Latin-script group because deterministic script inspection cannot distinguish them reliably. Language-neutral URL markers `http://` and `https://` apply to all groups.
-- Latin-script fixed words must match complete lexical boundaries. Matching remains case-insensitive where configured, but `test` may match `test` or `TEST` and must not match `TESTV`, `contest`, or `testing`.
+- Fixed delete words must be isolated by deterministic script group. Chinese comments only use Chinese fixed words; Japanese, Korean, Thai, and Hindi comments only use their respective script groups. English and Spanish share the Latin-script group because deterministic script inspection cannot distinguish them reliably. The base profile applies language-neutral URL markers `http://` and `https://` to all groups, including Twitter/X; no platform-specific URL/link exemption is active.
+- Latin-script fixed words must match complete lexical boundaries. Matching remains case-insensitive where configured; for example, an active fixed word must not match a longer token such as `TESTV`, `contest`, or `testing`.
 - 完整固定清理词清单以 `config/comment-cleaner.json` 为准；当前配置覆盖中文、英文、日文、韩文、西语、泰文和印地语。
-- 删除包含任一固定清理词的整行评论。当前固定清理词包括：“链接”、“凑字数”、“水经验”、“赚积分”、“为了金币”、“赚硬币”、“赚京豆”、“淘气值”、“为了评论而评论”、“混个脸熟”、“完成任务”、“代下”、“代买”、“内部券”、“加微”、“加v”、“私聊我”、“主页看”、“点击链接”、“http://”、“https://”、“第一”、“打卡”、“路过”、“来了”、“冒泡”、“占座”、“测试”、“test”、“无”、“无内容”、“略”、“暂无评价”、“蹲”、“蹲一个”、“求链接”、“求分享”、“多少钱”、“怎么卖”、“啥牌子”、“什么牌子”、“求品牌”、“求私”、“加群”、“裙内”、“互赞”、“互粉”、“互关”、“回关”、“秒回”、“交朋友”、“リンク”、“プロフィール見て”、“プロフ見て”、“DMして”、“フォロー返し”、“相互フォロー”、“テスト”、“内容なし”、“評価なし”、“コメント稼ぎ”、“링크”、“맞팔”、“테스트”、“내용 없음”。
-- “加v”以及英文固定清理词必须按大小写不敏感方式匹配，例如“加v”和“加V”都删除；英文固定清理词包括：“link in bio”、“click link”、“click the link”、“check my profile”、“see my profile”、“visit my profile”、“dm me”、“message me”、“follow me”、“follow back”、“follow for follow”、“sub4sub”、“sub for sub”、“subscribe to my channel”、“earn coins”、“free coins”、“for coins”、“comment for points”、“promo code”、“coupon code”、“discount code”、“whatsapp”、“telegram”、“first”、“test”、“n/a”、“no content”、“no comment”、“nothing to say”。
+- 中文短词误删保护：`无`、`第一`、`略`、`测试`、`来了`、`路过`已从可执行固定词表移除，不能因中文子串包含而删除整行；例如“无炫光”“第一次买”“价格略贵”“感应到人来了就亮灯”必须进入后续规则判断。不得创建临时清洗配置绕过该文件；未来如需改动，必须经用户明确确认并同步更新正式配置、Skill 文档与回归测试。
+- 英文语境误删保护：`first`、`test`、`how much`、`price?`已从可执行固定词表移除，不得因包含这些泛化产品讨论词而删除长评论；短评论仍只按既有非中文长度规则处理。不得用临时配置重新加入这些词。
+- 删除包含任一固定清理词的整行评论。具体固定词仅以 `config/comment-cleaner.json` 的当前值为准；不得复制历史清单、临时增删或用语义判断替代配置。
+- “加v”以及英文固定清理词必须按大小写不敏感方式匹配，例如“加v”和“加V”都删除；英文固定清理词包括：“link in bio”、“click link”、“click the link”、“check my profile”、“see my profile”、“visit my profile”、“dm me”、“message me”、“follow me”、“follow back”、“follow for follow”、“sub4sub”、“sub for sub”、“subscribe to my channel”、“earn coins”、“free coins”、“for coins”、“comment for points”、“promo code”、“coupon code”、“discount code”、“whatsapp”、“telegram”、“n/a”、“no content”、“no comment”、“nothing to say”。
 - 完全不含中文字符且命中随机英文/数字堆砌阈值的评论必须整行删除；该规则只能使用确定性正则和阈值，不得接入 AI 或语义判断。
 - 删除同一工作表内重复评论，保留点赞数最高的一条；点赞数相同、缺失、非数值或没有 `点赞数` 列时，保留最后一条。点赞数只按确定性数值解析，不能解析的值视为 0；该规则只影响主评论整行去重，不改变子评论去重规则。
 - 对 `一级评论`、`二级评论`、`三级评论` 的重复内容只清空重复子评论单元格，默认保留最后一次出现；不得删除整行，不得修改主评论列 `评论内容`。

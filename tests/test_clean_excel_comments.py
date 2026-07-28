@@ -6,10 +6,137 @@ from unittest import mock
 
 from openpyxl import Workbook, load_workbook
 
-from tools.clean_excel_comments import CleanerConfig, clean_workbook, should_delete_comment
+from tools.clean_excel_comments import (
+    DEFAULT_CONFIG_PATH,
+    CleanerConfig,
+    ExternalCleanerConfigError,
+    FinalizedCleaningAuditArtifactsError,
+    clean_workbook,
+    load_config,
+    main,
+    parse_args,
+    should_delete_comment,
+)
 
 
 class CleanExcelCommentsTest(unittest.TestCase):
+    def test_cli_requires_explicit_standard_comment_header_and_platform(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cleaner-explicit-comment-column"
+        tmp.mkdir(parents=True, exist_ok=True)
+
+        with self.assertRaises(SystemExit):
+            parse_args(
+                [
+                    str(tmp / "source.xlsx"),
+                    "--output",
+                    str(tmp / "cleaned.xlsx"),
+                    "--platform",
+                    "B站",
+                ]
+            )
+
+        with self.assertRaises(SystemExit):
+            parse_args(
+                [
+                    str(tmp / "source.xlsx"),
+                    "--output",
+                    str(tmp / "cleaned.xlsx"),
+                    "--target-header",
+                    "产品名",
+                    "--platform",
+                    "B站",
+                ]
+            )
+
+        args = parse_args(
+            [
+                str(tmp / "source.xlsx"),
+                "--output",
+                str(tmp / "cleaned.xlsx"),
+                "--target-header",
+                "评论内容",
+                "--platform",
+                "B站",
+            ]
+        )
+        self.assertEqual("评论内容", args.target_header)
+        self.assertEqual("B站", args.platform)
+
+    def test_twitter_uses_base_url_and_spam_rules(self) -> None:
+        twitter_config = load_config(DEFAULT_CONFIG_PATH, platform="Twitter")
+
+        self.assertIsNone(twitter_config.platform_profile)
+        self.assertEqual(
+            "评论包含固定删除词: https://",
+            should_delete_comment(
+                "This is a normal ScreenBar review https://t.co/example",
+                set(),
+                twitter_config,
+                (),
+            ),
+        )
+        self.assertEqual(
+            "评论包含固定删除词: link in bio",
+            should_delete_comment(
+                "This is a normal ScreenBar review, link in bio for a coupon",
+                set(),
+                twitter_config,
+                (),
+            ),
+        )
+
+    def test_cli_rejects_external_or_temporary_cleaner_config(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cleaner-external-config"
+        tmp.mkdir(parents=True, exist_ok=True)
+        external_config = tmp / "comment-cleaner-temporary.json"
+        external_config.write_text(
+            DEFAULT_CONFIG_PATH.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(ExternalCleanerConfigError, "External or temporary"):
+            main(
+                [
+                    str(tmp / "source.xlsx"),
+                    "--output",
+                    str(tmp / "cleaned.xlsx"),
+                    "--target-header",
+                    "评论内容",
+                    "--platform",
+                    "B站",
+                    "--config",
+                    str(external_config),
+                ]
+            )
+
+    def test_refuses_to_regenerate_a_deleted_cleaning_log_at_finalized_path(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cleaner-finalized-log-restoration"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "cleaned.xlsx"
+        deletion_log_path = output_path.with_suffix(".deletions.csv")
+
+        workbook = Workbook()
+        workbook.active.append(["评论内容"])
+        workbook.active.append(["这是需要保留的完整评论内容"])
+        workbook.save(input_path)
+        workbook.close()
+        output_path.write_text("finalized-cleaned-output", encoding="utf-8")
+        deletion_log_path.unlink(missing_ok=True)
+
+        with self.assertRaisesRegex(FinalizedCleaningAuditArtifactsError, "Refusing to regenerate"):
+            clean_workbook(
+                input_path,
+                CleanerConfig(target_header="评论内容"),
+                (),
+                output_path=output_path,
+                overwrite=True,
+                overwrite_confirmations=(output_path,),
+            )
+
+        self.assertEqual("finalized-cleaned-output", output_path.read_text(encoding="utf-8"))
+        self.assertFalse(deletion_log_path.exists())
+
     def test_closes_input_workbook_when_cleaning_fails(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-clean-closes-on-error"
         tmp.mkdir(parents=True, exist_ok=True)
@@ -88,6 +215,44 @@ class CleanExcelCommentsTest(unittest.TestCase):
             ),
         )
 
+    def test_canonical_chinese_fixed_terms_do_not_delete_normal_comments(self) -> None:
+        config = load_config(DEFAULT_CONFIG_PATH)
+        removed_ambiguous_terms = ("无", "第一", "略", "测试", "来了", "路过")
+        normal_comments = (
+            "无炫光设计让我很满意",
+            "第一次购买屏幕挂灯效果很好",
+            "价格略贵但整体品质不错",
+            "感应到人来了就会自动亮灯",
+            "测试使用两周后光线非常舒服",
+            "路过时人体感应会自动亮灯",
+        )
+
+        for term in removed_ambiguous_terms:
+            self.assertNotIn(term, config.delete_contains_texts)
+            self.assertNotIn(term, CleanerConfig().delete_contains_texts)
+
+        for comment in normal_comments:
+            self.assertIsNone(should_delete_comment(comment, set(), config, ()))
+
+    def test_contextual_latin_words_do_not_delete_normal_reviews(self) -> None:
+        config = load_config(DEFAULT_CONFIG_PATH)
+        contextual_terms = ("first", "test", "how much", "price?")
+        normal_reviews = (
+            "This is my first ScreenBar and it works great every evening.",
+            "This test report explains why the lamp works well for my desk.",
+            "How much does this ScreenBar cost in Japan after shipping today?",
+            "Price? The ScreenBar has excellent build quality and useful light.",
+        )
+
+        for term in contextual_terms:
+            self.assertNotIn(term, config.delete_contains_texts)
+            self.assertNotIn(term, config.delete_contains_case_insensitive_texts)
+            self.assertNotIn(term, CleanerConfig().delete_contains_texts)
+            self.assertNotIn(term, CleanerConfig().delete_contains_case_insensitive_texts)
+
+        for comment in normal_reviews:
+            self.assertIsNone(should_delete_comment(comment, set(), config, ()))
+
     def test_fixed_delete_words_are_isolated_by_script_group(self) -> None:
         config = CleanerConfig(
             delete_contains_texts=("https://",),
@@ -149,7 +314,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
 
         self.assertIsNone(should_delete_comment("漢字좋아요", set(), config, ()))
 
-    def test_clean_workbook_matches_rpa_rules_and_falls_back_to_last_without_like_column(self) -> None:
+    def test_clean_workbook_matches_rpa_rules_without_like_column(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-rules"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "dirty.xlsx"
@@ -158,7 +323,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "SheetA"
-        sheet.append(["id", "name", "comment"])
+        sheet.append(["id", "name", "评论内容"])
         sheet.append([1, "keep", "正常评论内容很完整"])
         sheet.append([2, "short", "abcd"])
         sheet.append([3, "placeholder", "该用户未填写评价内容"])
@@ -168,7 +333,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         sheet.append([7, "link", "这里包含链接"])
 
         second = workbook.create_sheet("SheetB")
-        second.append(["id", "name", "comment"])
+        second.append(["id", "name", "评论内容"])
         second.append([1, "same-text-different-sheet", "重复评论内容很完整"])
         workbook.save(input_path)
 
@@ -191,6 +356,26 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertTrue(result.output_csv and result.output_csv.exists())
         self.assertTrue(result.deletion_log_csv.exists())
         self.assertTrue(result.summary_json.exists())
+
+    def test_clean_workbook_rejects_legacy_numeric_target_column_fallback(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-reject-legacy-target-column"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "legacy.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["id", "name", "comment"])
+        sheet.append([1, "user", "This is a normal review with enough detail."])
+        workbook.save(input_path)
+        workbook.close()
+
+        with self.assertRaisesRegex(ValueError, "numeric target_column fallback"):
+            clean_workbook(
+                input_path=input_path,
+                config=CleanerConfig(target_column=3, target_header=None),
+                clean_words=(),
+                output_path=tmp / "cleaned.xlsx",
+            )
 
     def test_duplicate_main_comments_keep_highest_like_count_then_last_tie(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-duplicate-main-comments-max-likes"
@@ -233,7 +418,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "SheetA"
-        sheet.append(["id", "name", "comment"])
+        sheet.append(["id", "name", "评论内容"])
         sheet.append([1, "keep", "这里包含KOL清理词1但没有传入清理词"])
         workbook.save(input_path)
 
@@ -347,7 +532,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "SheetA"
-        sheet.append(["id", "name", "comment"])
+        sheet.append(["id", "name", "评论内容"])
         sheet.append([1, "delete", "1234567"])
         sheet.append([2, "keep", "12345678"])
         workbook.save(input_path)
@@ -527,7 +712,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "SheetA"
-        sheet.append(["date", "comment", "likes"])
+        sheet.append(["date", "评论内容", "likes"])
         sheet.append(["2026/01/01", "This works very well", 1])
         sheet.append(["2026/01/02", "This monitor light works very well", 1])
         sheet.append(["2026/01/03", "muy buen producto", 1])
@@ -537,7 +722,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
 
         result = clean_workbook(
             input_path=input_path,
-            config=CleanerConfig(target_column=2),
+            config=CleanerConfig(),
             clean_words=(),
             output_dir=tmp / "out",
         )
@@ -563,7 +748,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "SheetA"
-        sheet.append(["date", "comment", "likes"])
+        sheet.append(["date", "评论内容", "likes"])
         sheet.append(["2026/01/01", "This monitor light works great on my desk", 1])
         sheet.append(["2026/01/02", "pásame el link por favor", 1])
         sheet.append(["2026/01/03", "\u0e02\u0e2d\u0e25\u0e34\u0e07\u0e01\u0e4c\u0e2a\u0e34\u0e19\u0e04\u0e49\u0e32\u0e2b\u0e19\u0e48\u0e2d\u0e22", 1])
@@ -573,7 +758,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
 
         result = clean_workbook(
             input_path=input_path,
-            config=CleanerConfig(target_column=2),
+            config=CleanerConfig(),
             clean_words=(),
             output_dir=tmp / "out",
         )

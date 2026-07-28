@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -37,6 +38,7 @@ SCRIPT_FILES = (
     "merge_excel_workbooks.py",
     "hash_id_project_store.py",
     "hash_id_pseudonymizer.py",
+    "inventory_comment_inputs.py",
     "output_file_naming.py",
     "output_path_safety.py",
     "preprocess_platform_comments.py",
@@ -141,6 +143,7 @@ class SkillPackageTest(unittest.TestCase):
         self.assertIn("scripts/filter_comments_by_keywords.py", skill)
         self.assertIn("scripts/audit_standardized_comments.py", skill)
         self.assertIn("scripts/clean_excel_comments.py", skill)
+        self.assertIn("scripts/inventory_comment_inputs.py", skill)
         self.assertIn("in a confirmed single-file run, use the original input as the source", skill)
         self.assertIn("Automatic creation of a new protected hash-ID project requires Windows DPAPI", skill)
         self.assertNotIn("tools/clean_excel_comments.py", skill)
@@ -201,6 +204,56 @@ class SkillPackageTest(unittest.TestCase):
 
         for filename in (*SCRIPT_FILES, *CONFIG_FILES):
             self.assertIn(f'"{filename}"', sync_tool, f"Sync tool omits: {filename}")
+
+    def test_required_skill_scripts_are_git_tracked(self) -> None:
+        if not (PROJECT_ROOT / ".git").exists():
+            self.skipTest("Git metadata is unavailable in this source distribution.")
+
+        required_paths = [
+            *(Path("tools") / filename for filename in SCRIPT_FILES),
+            *(Path("skills") / SKILL_NAME / "scripts" / filename for filename in SCRIPT_FILES),
+        ]
+        command = ["git", "ls-files", "--", *(path.as_posix() for path in required_paths)]
+        completed = subprocess.run(
+            command,
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        tracked_paths = {Path(line).as_posix() for line in completed.stdout.splitlines()}
+        expected_paths = {path.as_posix() for path in required_paths}
+        self.assertSetEqual(
+            expected_paths,
+            tracked_paths,
+            "Every source and bundled Skill script must be Git-tracked before release.",
+        )
+
+    def test_long_references_have_contents_navigation(self) -> None:
+        for reference_name in REFERENCE_FILES:
+            reference = (SKILL_ROOT / "references" / reference_name).read_text(
+                encoding="utf-8"
+            )
+            if len(reference.splitlines()) <= 100:
+                continue
+
+            headings = [line for line in reference.splitlines()[1:] if line.startswith("## ")]
+            self.assertTrue(headings, f"Missing level-two headings: {reference_name}")
+            self.assertEqual(
+                "## Contents",
+                headings[0],
+                f"Long reference must start with a contents section: {reference_name}",
+            )
+
+    def test_cleaner_entrypoint_matches_current_global_platform_rules(self) -> None:
+        cleaner_config = json.loads(
+            (SKILL_ROOT / "config" / "comment-cleaner.json").read_text(encoding="utf-8")
+        )
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("platform_profiles", cleaner_config)
+        self.assertIn("there is no active platform-specific cleaner exception", skill)
+
     def test_project_instructions_enforce_standard_skill_packaging(self) -> None:
         agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
@@ -329,6 +382,8 @@ class SkillPackageTest(unittest.TestCase):
                 "--project-name",
                 "portable-test-project",
                 "--initialize-project",
+                "--confirm-project-key-creation",
+                "portable-test-project",
                 "--project-store",
                 str(run_root / "project-store"),
             ],
@@ -345,6 +400,8 @@ class SkillPackageTest(unittest.TestCase):
                 str(standardized_path),
                 "--target-header",
                 "评论内容",
+                "--platform",
+                "YouTube",
                 "--output",
                 str(cleaned_path),
             ],

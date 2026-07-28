@@ -1,5 +1,19 @@
 # Data Contract And Safety Boundaries
 
+## Contents
+
+- [Deterministic Processing Boundary](#deterministic-processing-boundary)
+- [Input Contract](#input-contract)
+- [Platform Preprocessing Contract](#platform-preprocessing-contract)
+- [Standard Output Data Contract](#standard-output-data-contract)
+- [Merge Contract](#merge-contract)
+- [Cleaning Contract](#cleaning-contract)
+- [Non-Destructive Guarantees](#non-destructive-guarantees)
+- [Execution Guard Contract](#execution-guard-contract)
+- [Standardized Output Audit Contract](#standardized-output-audit-contract)
+- [Twitter/X Keep-Keyword Filter Contract](#twitterx-keep-keyword-filter-contract)
+- [Hash ID Pseudonymization Contract](#hash-id-pseudonymization-contract)
+
 ## Deterministic Processing Boundary
 
 - Do not use AI or semantic judgment to map headers, split values, choose columns, reorder rows, delete comments, classify text, or infer dates/products.
@@ -68,8 +82,7 @@ The standardized workbook contains exactly these columns in this order:
 
 ## Cleaning Contract
 
-- Legacy direct cleaning targets column 3 only.
-- Standardized cleaning targets the column whose header is `评论内容`.
+- The public cleaner CLI and internal cleaner require the exact `--target-header 评论内容` and a confirmed nonblank `--platform`; numeric column 3 / `target_column` fallback is disabled.
 - Main-comment rules may delete an entire row only when a deterministic configured rule matches.
 - Subcomment duplicate and short-text rules clear only the affected subcomment cell; they must not delete the row or modify `评论内容`.
 - Deduplicate only within the same worksheet.
@@ -82,8 +95,18 @@ The standardized workbook contains exactly these columns in this order:
 - Do not delete final cleaned `.xlsx` or `.csv` files.
 - Cleanup may delete only explicitly passed current-run intermediate paths.
 - Never scan a directory to decide what to delete.
-- Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation.
+- Existing outputs are rejected by every writer invocation unless `--overwrite` is supplied after explicit confirmation.
 - Output workbooks, CSV files, logs, and summaries are staged beside their destination and atomically replaced only after a successful write.
+
+## Execution Guard Contract
+
+- The common cleaner executable accepts only the canonical bundled `config/comment-cleaner.json` resolved relative to the Skill folder. An external, copied, or temporary cleaner configuration is a hard error, even when its content appears identical.
+- The canonical configuration currently has no platform-specific fixed-rule exception. URL/link marker terms remain active for every platform, including Twitter/X; a per-run configuration cannot alter that rule.
+- A new research project requires an explicit user privacy confirmation before standardization may invoke `--initialize-project`. The CLI then requires `--confirm-project-key-creation` to exactly equal `--project-name`; this records the confirmed command intent but does not replace the conversation-level confirmation gate.
+- Replacing an existing output through any writer CLI or direct Python call requires both `--overwrite` and one exact `--confirm-overwrite` path for every existing output being replaced. A confirmation path must itself be one of that command's existing outputs; unconfirmed, missing, or unrelated paths are rejected.
+- Default retention removes `.deletions.csv` and cleaner `.summary.json` after final output verification. Once the final `.xlsx` remains but its deletion log is absent, the same output path is final and cannot be used to regenerate that log. Cleanup also rejects a `.deletions.csv` path as its optional summary target.
+- Intermediate cleanup requires exactly one declared final `.xlsx` and one declared final `.csv`. It verifies that both files exist and are protected before it deletes any intermediate path.
+- These guards apply to script execution only and do not alter any configured comment-selection, header, mapping, or deletion rule.
 
 ## Standardized Output Audit Contract
 
@@ -107,6 +130,7 @@ The standardized workbook contains exactly these columns in this order:
 - `哈希ID` is deterministic pseudonymization, not legal anonymization.
 - Stable account ID is selected first for the whole worksheet when a registered account-ID column contains at least one nonblank value.
 - Display-name fallback is allowed only when no registered account-ID column contains any nonblank value.
+- The literal exporter null marker `None`, case-insensitive after outer-whitespace trimming, is treated as blank only for stable account-ID selection. If this makes every registered account-ID column blank, the configured display-name fallback may be selected. A literal display name `None` remains a display name and is not silently discarded.
 - Display-name normalization trims outer whitespace only.
 - It preserves case, internal whitespace, punctuation, and Unicode code points.
 - Do not apply Unicode normalization, full-width/half-width conversion, traditional/simplified Chinese conversion, or fuzzy matching.

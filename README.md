@@ -20,13 +20,14 @@
 - 清洗后的 `.xlsx` 和 `.csv` 生成并核对成功后立即删除合并总表、回复前缀清理表、标准化总表、清洗日志和摘要等过程产物，默认最终只保留这两个清洗结果文件。
 
 CSV 输入会先通过确定性兼容层读取，支持 UTF-8、带 BOM 的 UTF-16 和 GB18030；单元格值按文本保留，不自动推断数字、日期、ID 或时间戳类型。整个处理过程是纯工具规则处理，不接入 AI 判断评论内容。AI 只负责帮你调用工具、核对输出文件是否生成，不参与“是否删除某条数据”的判断。
+当需要报告一个或多个输入文件的评论总量时，使用 `tools/inventory_comment_inputs.py` 传入这些明确文件路径。它按 CSV 解析器的逻辑记录计数，含换行的评论仍只算一条；不会扫描文件夹，也不能用物理行数或旧摘要替代。
 Excel 输入中的公式会按公式文本保留；合并、B站回复前缀处理和标准化不会因为缺少缓存计算值而把公式单元格变成空白。
 
 ## 快速运行
 
 ```powershell
-python tools/standardize_excel_headers.py "D:\path\input.xlsx-or.csv" --output "D:\path\20260727_产品名_数据来源_标准化总表.xlsx"
-python tools/clean_excel_comments.py "D:\path\20260727_产品名_数据来源_标准化总表.xlsx" --target-header "评论内容" --clean-word "KOL清理词1" --clean-word "KOL清理词2" --output "D:\path\20260727_产品名_数据来源_清洗后总表.xlsx"
+python tools/standardize_excel_headers.py "D:\path\input.xlsx-or.csv" --output "D:\path\20260727_产品名_数据来源_标准化总表.xlsx" --platform "B站" --project-name "研究项目名" --product-name "产品名"
+python tools/clean_excel_comments.py "D:\path\20260727_产品名_数据来源_标准化总表.xlsx" --target-header "评论内容" --platform "B站" --clean-word "KOL清理词1" --clean-word "KOL清理词2" --output "D:\path\20260727_产品名_数据来源_清洗后总表.xlsx"
 ```
 
 如果本机没有全局 `python`，让 Codex 运行即可。Codex 会使用内置 Python 环境。
@@ -47,7 +48,7 @@ python tools/standardize_excel_headers.py "D:\path\合并总表_回复前缀已�
 ```powershell
 python tools/preprocess_platform_comments.py "D:\path\平台原始表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter" --output "D:\path\平台预处理表.xlsx"
 python tools/preprocess_platform_comments.py "D:\path\乐天表1.xlsx" "D:\path\乐天表2.xlsx" --platform "rakuten" --merge-registered-variants --output "D:\path\乐天平台预处理合并总表.xlsx"
-python tools/standardize_excel_headers.py "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter" --project-name "研究项目"
+python tools/standardize_excel_headers.py "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter" --project-name "研究项目" --product-name "产品名"
 python tools/audit_standardized_comments.py "D:\path\标准化总表.xlsx" --source "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.audit.json"
 ```
 
@@ -56,8 +57,8 @@ python tools/audit_standardized_comments.py "D:\path\标准化总表.xlsx" --sou
 清理词是可选项；不填写时，不执行 KOL 清理词包含判断：
 
 ```powershell
-python tools/standardize_excel_headers.py "D:\path\input.xlsx-or.csv" --output "D:\path\20260727_产品名_数据来源_标准化总表.xlsx"
-python tools/clean_excel_comments.py "D:\path\20260727_产品名_数据来源_标准化总表.xlsx" --target-header "评论内容" --output "D:\path\20260727_产品名_数据来源_清洗后总表.xlsx"
+python tools/standardize_excel_headers.py "D:\path\input.xlsx-or.csv" --output "D:\path\20260727_产品名_数据来源_标准化总表.xlsx" --platform "B站" --project-name "研究项目名" --product-name "产品名"
+python tools/clean_excel_comments.py "D:\path\20260727_产品名_数据来源_标准化总表.xlsx" --target-header "评论内容" --platform "B站" --output "D:\path\20260727_产品名_数据来源_清洗后总表.xlsx"
 ```
 
 ## 配置
@@ -70,12 +71,13 @@ config/comment-cleaner.json
 
 常用可改项：
 
-- `target_column`: 评论所在列，默认 `3`。
-- `target_header`: 评论所在表头。标准化后使用 `评论内容`。
+- `target_header`: 清洗锁定按标准化后的 `评论内容` 表头定位。旧的 `target_column`/第三列位置兜底已禁用。
 - `first_data_row`: 数据起始行，默认 `2`。
 - `min_trimmed_length`: 清理首尾空白后的最短保留长度，默认小于 `8` 删除，也就是长度小于等于 `7` 删除。
 - `delete_exact_texts`: 完全等于这些文案时删除。
 - `delete_contains_texts`: 包含这些固定文案时删除。当前清单保留原有“链接”，并追加“凑字数”“为了金币”“暂无评价”“蹲一个”“交朋友”等固定词。
+- 为避免中文子串误删，`无`、`第一`、`略`、`测试`、`来了`、`路过`不属于固定删除词；实际执行清单以 `config/comment-cleaner.json` 为准，不能通过临时配置私自覆盖。
+- 为避免英文语境误删，`first`、`test`、`how much`、`price?`也不属于固定删除词；长评论只能继续接受既有长度和高精度固定词规则，不得以临时配置重新加入这些词。
 - `delete_contains_case_insensitive_texts`: 大小写不敏感的固定词；当前用于“加v”，所以“加v”和“加V”都会删除。
 - `delete_random_alnum_without_chinese`: 完全不含中文字符且命中随机英文/数字堆砌阈值时删除；该判断只用确定性正则和阈值，不接入 AI。
 - `subcomment_deduplicate_headers`: 需要做子评论精确去重的列，默认是 `一级评论`、`二级评论`、`三级评论`。
@@ -147,6 +149,12 @@ Codex 只会把这些名称加入对应标准列的 `aliases`，不会改标准�
 - `YYYYMMDD_产品名_数据来源_清洗后总表.csv`
 
 不会删除原始输入文件，也不会扫描文件夹批量删除。如果你明确要求核对日志，Codex 才会保留清洗日志和摘要。
+
+## 执行防护
+
+- 清洗器只接受项目与 Skill 内置的正式 `config/comment-cleaner.json`；不接受外部、复制或临时清洗配置。
+- 已存在的输出必须先向用户展示确切路径并获得确认；工具调用时还必须同时传入 `--overwrite` 与每个既有目标对应的 `--confirm-overwrite <确切路径>`，仅传 `--overwrite` 会被拒绝。
+- 默认留存清理删除 `.deletions.csv` 和清洗摘要后，不会在同一最终输出路径重新生成或恢复这些日志；重新处理必须使用新的确认输出路径。
 
 ## 适合 Codex 的用法
 

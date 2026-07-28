@@ -15,6 +15,7 @@ try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
     from tools.output_path_safety import (
         OutputPathConflictError,
+        add_confirmed_overwrite_arguments,
         atomic_output_path,
         beijing_date_text,
         ensure_output_paths_safe,
@@ -23,6 +24,7 @@ except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
     from output_path_safety import (
         OutputPathConflictError,
+        add_confirmed_overwrite_arguments,
         atomic_output_path,
         beijing_date_text,
         ensure_output_paths_safe,
@@ -163,6 +165,7 @@ def strip_bilibili_reply_prefixes(
     output_dir: Path | None = None,
     target_aliases: tuple[str, ...] = TARGET_HEADER_ALIASES,
     overwrite: bool = True,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> StripBilibiliReplyPrefixesResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -180,6 +183,7 @@ def strip_bilibili_reply_prefixes(
         [input_path],
         [output_xlsx, summary_json],
         overwrite=overwrite,
+        overwrite_confirmations=overwrite_confirmations,
     )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
@@ -255,10 +259,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Legacy programmatic fallback directory; CLI still requires --output.",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace confirmed existing outputs.",
+    add_confirmed_overwrite_arguments(
+        parser,
+        overwrite_help="Replace existing temporary outputs only after exact user confirmation.",
     )
     return parser.parse_args(argv)
 
@@ -270,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         output_path=args.output,
         output_dir=args.output_dir,
         overwrite=args.overwrite,
+        overwrite_confirmations=tuple(args.confirm_overwrite),
     )
     print(f"Reply-prefix-stripped xlsx: {result.output_xlsx}")
     print(f"Summary: {result.summary_json}")

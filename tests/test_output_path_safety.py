@@ -36,7 +36,37 @@ class OutputPathSafetyTest(unittest.TestCase):
         with self.assertRaisesRegex(OutputPathConflictError, "already exists"):
             ensure_output_paths_safe([], [output_path], overwrite=False)
 
-        ensure_output_paths_safe([], [output_path], overwrite=True)
+        with self.assertRaisesRegex(OutputPathConflictError, "confirm-overwrite"):
+            ensure_output_paths_safe([], [output_path], overwrite=True)
+
+        with self.assertRaisesRegex(OutputPathConflictError, "confirm-overwrite"):
+            ensure_output_paths_safe(
+                [],
+                [output_path],
+                overwrite=True,
+                overwrite_confirmations=(),
+            )
+
+        ensure_output_paths_safe(
+            [],
+            [output_path],
+            overwrite=True,
+            overwrite_confirmations=(output_path,),
+        )
+
+    def test_rejects_confirmation_without_an_overwrite_request(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-output-safety-confirm-without-overwrite"
+        tmp.mkdir(parents=True, exist_ok=True)
+        output_path = tmp / "result.xlsx"
+        output_path.write_text("existing", encoding="utf-8")
+
+        with self.assertRaisesRegex(OutputPathConflictError, "requires --overwrite"):
+            ensure_output_paths_safe(
+                [],
+                [output_path],
+                overwrite=False,
+                overwrite_confirmations=(output_path,),
+            )
 
     def test_atomic_output_keeps_existing_file_when_write_fails(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-output-safety-atomic-failure"

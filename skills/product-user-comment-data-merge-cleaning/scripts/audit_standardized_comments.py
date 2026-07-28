@@ -9,11 +9,21 @@ from typing import Any
 
 try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from tools.output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
     from tools.standardize_excel_headers import HeaderStandardizerConfig, load_config
 except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
-    from output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
+    from output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
     from standardize_excel_headers import HeaderStandardizerConfig, load_config
 
 
@@ -188,6 +198,7 @@ def audit_standardized_workbook(
     source_path: Path | None = None,
     output_path: Path | None = None,
     overwrite: bool = True,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> StandardizedAuditResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -205,7 +216,12 @@ def audit_standardized_workbook(
     protected_inputs = [input_path]
     if source_path is not None:
         protected_inputs.append(source_path)
-    ensure_output_paths_safe(protected_inputs, [resolved_output_path], overwrite=overwrite)
+    ensure_output_paths_safe(
+        protected_inputs,
+        [resolved_output_path],
+        overwrite=overwrite,
+        overwrite_confirmations=overwrite_confirmations,
+    )
 
     standardized_workbook = load_workbook_for_processing(
         input_path,
@@ -307,10 +323,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Explicit current-run audit JSON output path.",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace a confirmed existing audit output.",
+    add_confirmed_overwrite_arguments(
+        parser,
+        overwrite_help="Replace an existing audit output only after exact user confirmation.",
     )
     return parser.parse_args(argv)
 
@@ -323,6 +338,7 @@ def main(argv: list[str] | None = None) -> int:
         source_path=args.source,
         output_path=args.output,
         overwrite=args.overwrite,
+        overwrite_confirmations=tuple(args.confirm_overwrite),
     )
     print(f"Standardized audit: {result.output_json}")
     print(f"Audit passed: {result.passed}")

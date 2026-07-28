@@ -14,14 +14,24 @@ try:
         load_workbook_for_processing,
         unsupported_input_message,
     )
-    from tools.output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 except ModuleNotFoundError:
     from csv_excel_compat import (
         is_supported_input_path,
         load_workbook_for_processing,
         unsupported_input_message,
     )
-    from output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
+    from output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 
 
 DEFAULT_TARGET_HEADER = "评论内容"
@@ -152,6 +162,7 @@ def filter_workbook(
     *,
     target_header: str = DEFAULT_TARGET_HEADER,
     overwrite: bool = False,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> KeywordFilterResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -166,6 +177,7 @@ def filter_workbook(
         [input_path],
         [output_xlsx, summary_json],
         overwrite=overwrite,
+        overwrite_confirmations=overwrite_confirmations,
     )
 
     workbook = load_workbook_for_processing(
@@ -249,10 +261,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Explicit current-run temporary output .xlsx path.",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Use only after explicit confirmation of the exact existing output path.",
+    add_confirmed_overwrite_arguments(
+        parser,
+        overwrite_help="Replace existing temporary outputs only after exact user confirmation.",
     )
     return parser.parse_args(argv)
 
@@ -266,6 +277,7 @@ def main(argv: list[str] | None = None) -> int:
         output_path=args.output,
         target_header=args.target_header,
         overwrite=args.overwrite,
+        overwrite_confirmations=tuple(args.confirm_overwrite),
     )
     print(f"Keyword-filtered rows kept: {result.kept_rows}")
     print(f"Keyword-filtered rows deleted: {result.deleted_rows}")

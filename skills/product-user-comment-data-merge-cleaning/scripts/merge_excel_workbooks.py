@@ -13,6 +13,7 @@ try:
     from tools.csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
     from tools.output_path_safety import (
         OutputPathConflictError,
+        add_confirmed_overwrite_arguments,
         atomic_output_path,
         beijing_date_text,
         ensure_output_paths_safe,
@@ -21,6 +22,7 @@ except ModuleNotFoundError:
     from csv_excel_compat import is_supported_input_path, load_workbook_for_processing, unsupported_input_message
     from output_path_safety import (
         OutputPathConflictError,
+        add_confirmed_overwrite_arguments,
         atomic_output_path,
         beijing_date_text,
         ensure_output_paths_safe,
@@ -95,11 +97,17 @@ def merge_workbooks(
     *,
     add_source_columns: bool = False,
     overwrite: bool = True,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> MergeResult:
     paths = validate_input_paths(input_paths)
     output_path = output_path.resolve()
     summary_path = output_path.with_suffix(".summary.json")
-    ensure_output_paths_safe(paths, [output_path, summary_path], overwrite=overwrite)
+    ensure_output_paths_safe(
+        paths,
+        [output_path, summary_path],
+        overwrite=overwrite,
+        overwrite_confirmations=overwrite_confirmations,
+    )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -223,10 +231,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Confirmed output .xlsx path from the naming plan.",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace confirmed existing outputs. Omit by default to prevent accidental overwrite.",
+    add_confirmed_overwrite_arguments(
+        parser,
+        overwrite_help="Replace existing outputs only after exact user confirmation.",
     )
     parser.add_argument(
         "--add-source-columns",
@@ -243,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output,
         add_source_columns=args.add_source_columns,
         overwrite=args.overwrite,
+        overwrite_confirmations=tuple(args.confirm_overwrite),
     )
     print(f"Merged xlsx: {result.output_path}")
     print(f"Summary: {result.summary_path}")

@@ -14,9 +14,17 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
 try:
-    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        ensure_output_paths_safe,
+    )
 except ModuleNotFoundError:
-    from output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        ensure_output_paths_safe,
+    )
 
 
 def normalize_cell(value: Any) -> str:
@@ -111,6 +119,7 @@ def compare_workbooks(
     comment_column: int,
     *,
     overwrite: bool = True,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> dict[str, Any]:
     summary_path = output_dir / "comparison-summary.json"
     only_left_path = output_dir / "only-in-left.csv"
@@ -120,6 +129,7 @@ def compare_workbooks(
         [left_path, right_path],
         [summary_path, only_left_path, only_right_path, report_path],
         overwrite=overwrite,
+        overwrite_confirmations=overwrite_confirmations,
     )
     left = read_sheet(left_path)
     right = read_sheet(right_path)
@@ -304,10 +314,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--left-label", default="left")
     parser.add_argument("--right-label", default="right")
     parser.add_argument("--comment-column", type=int, default=3)
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace confirmed existing outputs. Omit by default to prevent accidental overwrite.",
+    add_confirmed_overwrite_arguments(
+        parser,
+        overwrite_help="Replace existing comparison outputs only after exact user confirmation.",
     )
     return parser.parse_args()
 
@@ -322,6 +331,7 @@ def main() -> int:
         right_label=args.right_label,
         comment_column=args.comment_column,
         overwrite=args.overwrite,
+        overwrite_confirmations=tuple(args.confirm_overwrite),
     )
     print(f"Report: {report['report_xlsx']}")
     print(f"Rows: {report['left_label']}={report['left_data_rows']}, {report['right_label']}={report['right_data_rows']}")

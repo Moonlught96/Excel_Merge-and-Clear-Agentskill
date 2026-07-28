@@ -27,6 +27,7 @@ try:
         hash_selected_identity,
         load_hash_id_config,
         normalize_platform,
+        normalize_raw_user_id,
         select_identity_header,
         select_user_id_header,
     )
@@ -40,6 +41,7 @@ except ModuleNotFoundError:
         hash_selected_identity,
         load_hash_id_config,
         normalize_platform,
+        normalize_raw_user_id,
         select_identity_header,
         select_user_id_header,
     )
@@ -52,6 +54,7 @@ except ModuleNotFoundError:
 try:
     from tools.output_path_safety import (
         OutputPathConflictError,
+        add_confirmed_overwrite_arguments,
         atomic_output_path,
         beijing_date_text,
         ensure_output_paths_safe,
@@ -59,6 +62,7 @@ try:
 except ModuleNotFoundError:
     from output_path_safety import (
         OutputPathConflictError,
+        add_confirmed_overwrite_arguments,
         atomic_output_path,
         beijing_date_text,
         ensure_output_paths_safe,
@@ -96,6 +100,7 @@ CHINESE_HELPFUL_COUNT_PATTERN = re.compile(
     r"^\s*(?P<count>\d+)\s*个人发现此评论有用\s*$"
 )
 RELATIVE_COUNT_PATTERN = r"\d+|[一二两三四五六七八九十]+"
+EDITED_PLATFORM_DATE_SUFFIX_PATTERN = re.compile(r"\s+\(edited\)\s*$", re.IGNORECASE)
 PLATFORM_DATETIME_HEADERS = (
     "评论日期",
     "评论时间",
@@ -379,6 +384,7 @@ def convert_platform_datetime_to_beijing_date(value: Any, today: date | None = N
         return value.strftime(BEIJING_TIMESTAMP_FORMAT)
 
     text = str(value).strip()
+    normalized_date_text = EDITED_PLATFORM_DATE_SUFFIX_PATTERN.sub("", text)
     if re.fullmatch(r"\d{8}", text):
         try:
             return datetime.strptime(text, "%Y%m%d").strftime(BEIJING_TIMESTAMP_FORMAT)
@@ -392,11 +398,14 @@ def convert_platform_datetime_to_beijing_date(value: Any, today: date | None = N
     if not text:
         return None
 
-    converted_relative_time = convert_relative_platform_time_to_beijing(text, today=today)
-    if converted_relative_time != text:
+    converted_relative_time = convert_relative_platform_time_to_beijing(
+        normalized_date_text,
+        today=today,
+    )
+    if converted_relative_time != normalized_date_text:
         return converted_relative_time
 
-    iso_text = text.replace("Z", "+00:00")
+    iso_text = normalized_date_text.replace("Z", "+00:00")
     try:
         parsed = datetime.fromisoformat(iso_text)
         if parsed.tzinfo:
@@ -413,7 +422,7 @@ def convert_platform_datetime_to_beijing_date(value: Any, today: date | None = N
         "%Y年%m月%d日",
     ):
         try:
-            return datetime.strptime(text, pattern).strftime(BEIJING_TIMESTAMP_FORMAT)
+            return datetime.strptime(normalized_date_text, pattern).strftime(BEIJING_TIMESTAMP_FORMAT)
         except ValueError:
             continue
 
@@ -689,11 +698,13 @@ def _identity_column_has_nonblank_value(
         max_col=source_column,
         values_only=True,
     ):
-        if value is None:
-            continue
-        if isinstance(value, str) and not value.strip():
-            continue
-        return True
+        try:
+            if normalize_raw_user_id(value) is not None:
+                return True
+        except InvalidUserIdError:
+            # An unsafe nonblank account-ID value must remain selected and fail
+            # validation later; it must never trigger a display-name fallback.
+            return True
     return False
 
 
@@ -979,6 +990,7 @@ def standardize_workbook(
     hash_config: HashIdConfig | None = None,
     product_name: str | None = None,
     overwrite: bool = True,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> StandardizeResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -996,6 +1008,7 @@ def standardize_workbook(
         [input_path],
         [output_xlsx, summary_json],
         overwrite=overwrite,
+        overwrite_confirmations=overwrite_confirmations,
     )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
@@ -1147,10 +1160,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="命名确认后传入的输出 .xlsx 文件路径",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="仅在已明确确认覆盖已有输出时使用",
+    add_confirmed_overwrite_arguments(
+        parser,
+        overwrite_help="仅在用户明确确认每个既有输出路径后才允许覆盖。",
     )
     parser.add_argument(
         "--platform",
@@ -1171,6 +1183,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="首次使用项目名时创建受保护项目密钥",
     )
     parser.add_argument(
+        "--confirm-project-key-creation",
+        default=None,
+        help="首次创建项目密钥时，传入与 --project-name 完全一致的已确认项目名",
+    )
+    parser.add_argument(
         "--project-store",
         type=Path,
         default=None,
@@ -1187,6 +1204,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     has_project_selector = bool(args.project_name or args.project_id)
     if args.initialize_project and not args.project_name:
         parser.error("--initialize-project requires --project-name")
+    if args.initialize_project:
+        if args.confirm_project_key_creation != args.project_name:
+            parser.error(
+                "--initialize-project requires --confirm-project-key-creation "
+                "with the exact confirmed --project-name"
+            )
+    elif args.confirm_project_key_creation is not None:
+        parser.error("--confirm-project-key-creation is only valid with --initialize-project")
     if has_project_selector and not args.platform:
         parser.error("a project selector requires --platform")
     if args.platform and not has_project_selector:
@@ -1221,6 +1246,7 @@ def main(argv: list[str] | None = None) -> int:
         hash_config=load_hash_id_config(args.hash_config),
         product_name=args.product_name,
         overwrite=args.overwrite,
+        overwrite_confirmations=tuple(args.confirm_overwrite),
     )
     print(f"Standardized xlsx: {result.output_xlsx}")
     print(f"Summary: {result.summary_json}")

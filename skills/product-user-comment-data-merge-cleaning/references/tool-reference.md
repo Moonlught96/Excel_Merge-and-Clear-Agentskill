@@ -1,10 +1,20 @@
 # Script And Configuration Reference
 
+## Contents
+
+- [Script Inventory](#script-inventory)
+- [Configuration Inventory](#configuration-inventory)
+- [Hash Identity Tool Contract](#hash-identity-tool-contract)
+- [Command Reference](#command-reference)
+- [Runtime Requirements](#runtime-requirements)
+- [Validation](#validation)
+
 Run commands from the Skill root directory. The Agent runs these tools for the user; do not ask the user to open a terminal or type commands.
 
 ## Script Inventory
 
 - `scripts/output_file_naming.py`: deterministically discover product/source candidates, identify any planned registered preprocessing profile, state its required full ordered-header-signature validation, and plan the four output filenames.
+- `scripts/inventory_comment_inputs.py`: count logical data rows for only the explicit supplied Excel/CSV files. CSV records containing quoted newlines count as one row; it never scans a folder.
 - `scripts/merge_excel_workbooks.py`: merge explicit `.xlsx`, `.xlsm`, and `.csv` inputs into a new raw merged `.xlsx`.
 - `scripts/strip_bilibili_reply_prefixes.py`: remove only fixed B站 `回复@xxx：`/`回复 @xxx:` prefixes in a separate workbook.
 - `scripts/preprocess_platform_comments.py`: route an exact registered platform header signature through its deterministic preprocessing profile before common standardization; with `--merge-registered-variants`, transform a validated mixed-variant batch into one platform-preprocessed merged workbook.
@@ -13,7 +23,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - `scripts/hash_id_project_store.py`: create/load protected project keys; Windows uses current-user DPAPI.
 - `scripts/standardize_excel_headers.py`: map fixed aliases, use a confirmed literal `--product-name` fallback only when a source product value is absent or blank, derive `哈希ID`, reorder complete columns, convert configured dates, apply fixed cross-platform rating/likes numeric normalization, and omit non-standard columns.
 - `scripts/audit_standardized_comments.py`: verify the fixed standardized schema, source/output consistency, hash-ID format, and nonblank standardized `点赞数` values before cleaning; it never rewrites the workbook.
-- `scripts/clean_excel_comments.py`: apply deterministic main-comment, KOL, fixed-word, random-heap, duplicate, and subcomment rules.
+- `scripts/clean_excel_comments.py`: apply deterministic main-comment, KOL, fixed-word, random-heap, duplicate, and subcomment rules using only the bundled canonical cleaner configuration.
 - `scripts/cleanup_intermediate_outputs.py`: delete only explicitly supplied current-run intermediates while protecting inputs and final outputs.
 - `scripts/compare_cleaned_workbooks.py`: optional audit-only workbook comparison; it is not part of the default workflow.
 - `scripts/csv_excel_compat.py`: text-preserving CSV compatibility shared by the other scripts.
@@ -21,7 +31,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 
 ## Configuration Inventory
 
-- `config/comment-cleaner.json`: active cleaning thresholds, exact text, fixed contains terms, random-heap thresholds, duplicate policy, subcomment rules, and CSV encoding.
+- `config/comment-cleaner.json`: active cleaning thresholds, exact text, fixed contains terms, embedded platform profiles, random-heap thresholds, duplicate policy, subcomment rules, and CSV encoding.
 - `config/header-standardizer.json`: exact standard output order, fixed aliases, required/optional columns, and known dropped headers.
 - `config/hash-id.json`: platform aliases plus ordered `user_id_headers` and `display_name_headers`; do not add ambiguous identity fields.
 - `config/platform-preprocessing.json`: exact platform header signatures and deterministic pre-standardization field operations. Current registered profiles: `amazon-japan`, `amazon-us`, `rakuten`, and `twitter`; `rakuten` has five named exact header variants.
@@ -33,6 +43,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 
 - Stable account ID is selected first for the whole worksheet when a registered account-ID column contains at least one nonblank value.
 - Display-name fallback is allowed only when no registered account-ID column contains any nonblank value.
+- The observed literal exporter null marker `None` is treated as blank only while evaluating a stable account-ID column. It does not erase a display name literally equal to `None`.
 - The selected header applies to all rows in that worksheet; blank account-ID cells do not fall back row-by-row.
 - Display-name hashes include a separate identity domain, so they cannot equal account-ID hashes for the same normalized text.
 - The exact registered mappings and priority order are defined in `config/hash-id.json` and documented in `header-standardization.md`.
@@ -48,6 +59,14 @@ Plan output names:
 ```powershell
 python scripts\output_file_naming.py "<file1.xlsx-or-csv>" "<file2.xlsx-or-csv>"
 ```
+
+Count explicit input records before reporting a total:
+
+```powershell
+python scripts\inventory_comment_inputs.py "<file1.xlsx-or-csv>" "<file2.xlsx-or-csv>"
+```
+
+Use the returned `data_rows` value, not a physical text-line count, a folder scan, or a remembered number from an earlier batch.
 
 Merge explicit inputs:
 
@@ -83,7 +102,7 @@ Standardize:
 python scripts\standardize_excel_headers.py "<input.xlsx-or-csv>" --output "<confirmed-standardized.xlsx>" --platform "<platform>" --project-name "<research-project>" --product-name "<confirmed-product-name>"
 
 # Only when the user confirms this is a new research project:
-python scripts\standardize_excel_headers.py "<input.xlsx-or-csv>" --output "<confirmed-standardized.xlsx>" --platform "<platform>" --project-name "<research-project>" --initialize-project --product-name "<confirmed-product-name>"
+python scripts\standardize_excel_headers.py "<input.xlsx-or-csv>" --output "<confirmed-standardized.xlsx>" --platform "<platform>" --project-name "<research-project>" --initialize-project --confirm-project-key-creation "<research-project>" --product-name "<confirmed-product-name>"
 ```
 
 Audit immediately after standardization and before user confirmation or cleaning:
@@ -105,24 +124,26 @@ The command deletes rows whose `评论内容` lacks every confirmed keyword. It 
 Clean without KOL words:
 
 ```powershell
-python scripts\clean_excel_comments.py "<standardized.xlsx>" --target-header "评论内容" --output "<confirmed-cleaned.xlsx>"
+python scripts\clean_excel_comments.py "<standardized.xlsx>" --target-header "评论内容" --platform "<confirmed-platform>" --output "<confirmed-cleaned.xlsx>"
 ```
+
+The cleaner rejects any target header other than `评论内容`; `target_column` is not a supported fallback, even for internal calls.
 
 Clean with confirmed KOL words:
 
 ```powershell
-python scripts\clean_excel_comments.py "<standardized.xlsx>" --target-header "评论内容" --clean-word "<word1>" --clean-word "<word2>" --output "<confirmed-cleaned.xlsx>"
+python scripts\clean_excel_comments.py "<standardized.xlsx>" --target-header "评论内容" --platform "<confirmed-platform>" --clean-word "<word1>" --clean-word "<word2>" --output "<confirmed-cleaned.xlsx>"
 ```
 
 Clean up explicit intermediates:
 
 ```powershell
-python scripts\cleanup_intermediate_outputs.py --intermediate "<raw-merged.xlsx>" --intermediate "<raw-merged.summary.json>" --intermediate "<reply-prefix-stripped-merged.xlsx>" --intermediate "<reply-prefix-stripped-merged.summary.json>" --intermediate "<platform-preprocessed.xlsx>" --intermediate "<platform-preprocessed.summary.json>" --intermediate "<standardized.xlsx>" --intermediate "<standardized.standardized.summary.json>" --intermediate "<standardized.audit.json>" --intermediate "<cleaned.deletions.csv>" --intermediate "<cleaned.summary.json>" --protect "<original-input.xlsx-or-csv>" --protect "<cleaned.xlsx>" --protect "<cleaned.csv>"
+python scripts\cleanup_intermediate_outputs.py --intermediate "<raw-merged.xlsx>" --intermediate "<raw-merged.summary.json>" --intermediate "<reply-prefix-stripped-merged.xlsx>" --intermediate "<reply-prefix-stripped-merged.summary.json>" --intermediate "<platform-preprocessed.xlsx>" --intermediate "<platform-preprocessed.summary.json>" --intermediate "<standardized.xlsx>" --intermediate "<standardized.standardized.summary.json>" --intermediate "<standardized.audit.json>" --intermediate "<cleaned.deletions.csv>" --intermediate "<cleaned.summary.json>" --protect "<original-input.xlsx-or-csv>" --protect "<cleaned.xlsx>" --protect "<cleaned.csv>" --final-output "<cleaned.xlsx>" --final-output "<cleaned.csv>"
 ```
 
 Do not include `--summary` in cleanup unless the user requested a cleanup audit summary before cleaning.
 
-At least one `--protect` path is mandatory. Pass every original input and both final cleaned outputs as protected paths.
+At least one `--protect` path is mandatory. Pass every original input and both final cleaned outputs as protected paths. The cleanup CLI also requires exactly one existing final `.xlsx` and one existing final `.csv` through `--final-output`; it verifies both paths are protected before it deletes any intermediate.
 
 Compare two cleaned workbooks only for an explicit audit request:
 
@@ -132,7 +153,9 @@ python scripts\compare_cleaned_workbooks.py --left "<left.xlsx>" --right "<right
 
 Comparison preserves formula text and counts duplicate-row multiplicity. Comparison outputs use the same no-clobber rule as workflow outputs.
 
-Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation. All examples intentionally omit `--overwrite`.
+Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation. For every output that already exists, the CLI also requires one exact `--confirm-overwrite <exact-existing-path>` argument. All examples intentionally omit both flags.
+
+The cleaner refuses `--config` paths other than its canonical bundled `config/comment-cleaner.json`; do not create temporary per-run cleaner JSON files. The public cleaner CLI requires the exact `--target-header "评论内容"` and a nonblank confirmed `--platform`; it never falls back to column 3. The canonical URL/link marker terms apply to every platform, including Twitter/X. After default cleanup deletes a final `.deletions.csv`, the cleaner also refuses to regenerate that deletion log at the same final output path. `cleanup_intermediate_outputs.py` refuses a `.deletions.csv` value for `--summary`.
 
 ## Runtime Requirements
 

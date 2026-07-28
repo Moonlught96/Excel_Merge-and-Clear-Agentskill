@@ -1,5 +1,21 @@
 # Header Standardization Standard
 
+## Contents
+
+- [Standard Output Schema](#standard-output-schema)
+- [Fixed Header Aliases](#fixed-header-aliases)
+- [Platform Preprocessing Profiles](#platform-preprocessing-profiles)
+  - [Amazon Japan And Amazon US Profiles](#amazon-japan-and-amazon-us-profiles)
+  - [Twitter/X Profile](#twitterx-profile)
+  - [Rakuten Market Profile](#rakuten-market-profile)
+  - [Mixed Rakuten Variant Batch Merge](#mixed-rakuten-variant-batch-merge)
+- [Required And Blank Columns](#required-and-blank-columns)
+- [Taobao Date And Product Split](#taobao-date-and-product-split)
+- [Date And Time Conversion](#date-and-time-conversion)
+- [Sensitive And Omitted Columns](#sensitive-and-omitted-columns)
+- [Output And Summary](#output-and-summary)
+- [Hash ID Derivation](#hash-id-derivation)
+
 ## Standard Output Schema
 
 Standardization outputs only these columns, in this exact order:
@@ -139,6 +155,7 @@ Do not use AI or semantic judgment to split product names.
 - Keep only year, month, and day; do not output hours, minutes, or seconds.
 - For Chinese `评论时间` or `评论日期`, convert only numeric timestamps or date-time text that includes a time component. Preserve plain date-only text as provided.
 - Relative platform time values such as `1年前`, `9个月前`, `1 year ago`, and `9 months ago` are converted deterministically from the current Beijing date.
+- Before a configured relative, ISO, or fixed date parser runs, the one known literal trailing suffix `(edited)` is removed only for parsing. Unknown suffixes and unmatched nonblank values remain unchanged.
 - Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.
 - Relative day and week values output `YYYY-MM-DD`.
 - Do not infer missing month or day beyond the fixed relative-time granularity.
@@ -169,6 +186,7 @@ Unknown columns that are not configured standard aliases are omitted. They are n
 - Platform and research-project context are required whenever a registered account-ID or display-name column is selected.
 - Stable account ID is selected first for the whole worksheet when a registered account-ID column contains at least one nonblank value.
 - Display-name fallback is allowed only when no registered account-ID column contains any nonblank value.
+- The literal exporter null marker `None` is blank only for stable account-ID selection, after trimming outer whitespace and case-folding. It never blanks a literal display name; an all-`None` account-ID column therefore permits the configured worksheet-wide display-name fallback.
 - Header selection is worksheet-wide and follows configuration order. It never falls back per row.
 - Exact account-ID mappings:
   - YouTube: `author_channel_id`, then `authorChannelId`, then `Author Channel ID`.

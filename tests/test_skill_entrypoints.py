@@ -22,6 +22,19 @@ CLI_SCRIPTS = (
     "standardize_excel_headers.py",
     "strip_bilibili_reply_prefixes.py",
 )
+OVERWRITE_GUARDED_SCRIPTS = frozenset(
+    {
+        "audit_standardized_comments.py",
+        "cleanup_intermediate_outputs.py",
+        "clean_excel_comments.py",
+        "compare_cleaned_workbooks.py",
+        "filter_comments_by_keywords.py",
+        "merge_excel_workbooks.py",
+        "preprocess_platform_comments.py",
+        "standardize_excel_headers.py",
+        "strip_bilibili_reply_prefixes.py",
+    }
+)
 
 
 class SkillEntrypointsTest(unittest.TestCase):
@@ -44,6 +57,19 @@ class SkillEntrypointsTest(unittest.TestCase):
                 result.returncode,
                 f"Standalone entrypoint failed: {script_name}\n{result.stderr!r}",
             )
+            if script_name in OVERWRITE_GUARDED_SCRIPTS:
+                self.assertIn(
+                    b"--confirm-overwrite",
+                    result.stdout,
+                    f"Standalone entrypoint is missing exact overwrite confirmation: {script_name}",
+                )
+            if script_name == "clean_excel_comments.py":
+                self.assertIn(b"--target-header", result.stdout)
+                self.assertIn(b"--platform", result.stdout)
+            if script_name == "cleanup_intermediate_outputs.py":
+                self.assertIn(b"--final-output", result.stdout)
+            if script_name == "standardize_excel_headers.py":
+                self.assertIn(b"--confirm-project-key-creation", result.stdout)
 
         shutil.rmtree(temp_root)
 

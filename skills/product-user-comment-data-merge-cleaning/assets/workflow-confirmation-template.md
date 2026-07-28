@@ -1,5 +1,9 @@
 # Workflow Confirmation Template
 
+## Confirmation Integrity
+
+The confirmation text below must be sent in the current conversation and answered explicitly by the user. Do not replace a response with a CLI flag, a JSON/state file, an old log, a historical confirmation, or a request to process quickly.
+
 ## Naming And Merge Entry
 
 ### Amazon Routing Constraint
@@ -23,6 +27,18 @@ keyword and must never be displayed as a preprocessing profile or passed to
 
 请确认以上产品名、数据来源、平台预处理分流和文件命名是否正确，并确认是否可以进入合并流程。
 ```
+
+## New Research Project Hash-Key Privacy Confirmation
+
+Use this only before the first standardization run for a newly confirmed research project. Do not show it when the project already has a protected key.
+
+```text
+本轮将首次为研究项目「{{RESEARCH_PROJECT_NAME}}」创建当前 Windows 用户受 DPAPI 保护的项目密钥，并将已登记的账号 ID 或昵称转换为同项目、同平台可关联的哈希 ID。原始身份字段不会进入输出、日志或摘要；哈希 ID 属于伪名化，不是法律意义上的匿名化。
+
+请确认是否同意创建此项目密钥并进入标准化。
+```
+
+After the user confirms, the standardizer command must use `--initialize-project --confirm-project-key-creation "{{RESEARCH_PROJECT_NAME}}"`. This command argument records the confirmed project name and does not replace the required user confirmation.
 
 ## Single Input
 
@@ -63,3 +79,16 @@ Only for a confirmed `twitter` preprocessing profile, after standardized-workboo
 ```text
 是否已经提供完成所有 Twitter/X 保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。
 ```
+
+## Existing Output Replacement
+
+Use this only when one or more exact output files already exist. Show every path that would be replaced; do not infer approval from an earlier workflow confirmation.
+
+```text
+以下输出文件已存在，覆盖会替换现有内容：
+{{EXISTING_OUTPUT_PATHS}}
+
+请确认是否覆盖以上每一个确切路径？确认后才可使用 --overwrite，并为每个已存在输出传入一次 --confirm-overwrite <确切路径>。
+```
+
+Do not ask the user to approve an external or temporary cleaner configuration: it is prohibited. After default cleanup removes a cleaner deletion log or summary, do not offer to restore it; a fresh run requires a new confirmed final output path.

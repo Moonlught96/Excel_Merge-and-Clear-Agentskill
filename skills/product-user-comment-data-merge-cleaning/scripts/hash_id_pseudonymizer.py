@@ -175,7 +175,17 @@ def normalize_platform(value: str, config: HashIdConfig) -> str:
     raise UnknownPlatformError(f"Platform is not registered: {platform_name!r}")
 
 
-def normalize_raw_user_id(value: Any) -> str | None:
+# Only the literal exporter marker observed in confirmed YouTube input is blanked.
+# Other nonempty account IDs must remain untouched unless the user explicitly adds
+# a platform-specific rule with evidence.
+MISSING_ACCOUNT_ID_SENTINELS = frozenset({"none"})
+
+
+def _normalize_raw_identity_value(
+    value: Any,
+    *,
+    treat_export_sentinels_as_missing: bool,
+) -> str | None:
     if value is None:
         return None
     if isinstance(value, bool):
@@ -186,6 +196,11 @@ def normalize_raw_user_id(value: Any) -> str | None:
             return None
         if normalized.startswith("=") or normalized in EXCEL_ERROR_STRINGS:
             raise InvalidUserIdError("Invalid user ID value")
+        if (
+            treat_export_sentinels_as_missing
+            and normalized.casefold() in MISSING_ACCOUNT_ID_SENTINELS
+        ):
+            return None
         return normalized
     if isinstance(value, int):
         return str(value)
@@ -194,6 +209,22 @@ def normalize_raw_user_id(value: Any) -> str | None:
             raise InvalidUserIdError("Invalid user ID value")
         return str(int(value))
     raise InvalidUserIdError("Invalid user ID value")
+
+
+def normalize_raw_user_id(value: Any) -> str | None:
+    """Normalize a stable account ID and treat known exporter null markers as blank."""
+    return _normalize_raw_identity_value(
+        value,
+        treat_export_sentinels_as_missing=True,
+    )
+
+
+def normalize_raw_display_name(value: Any) -> str | None:
+    """Normalize a display name without treating literal names such as 'None' as blank."""
+    return _normalize_raw_identity_value(
+        value,
+        treat_export_sentinels_as_missing=False,
+    )
 
 
 def _select_configured_identity_header(
@@ -305,7 +336,7 @@ def hash_display_name(
 ) -> str | None:
     _validate_project_context(context)
     namespace = normalize_platform(platform, config)
-    normalized_display_name = normalize_raw_user_id(value)
+    normalized_display_name = normalize_raw_display_name(value)
     if normalized_display_name is None:
         return None
 

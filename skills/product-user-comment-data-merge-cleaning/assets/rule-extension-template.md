@@ -1,24 +1,35 @@
 # Rule Extension Template
 
 ```text
-变更类型：表头别名 / 平台预处理配置 / 稳定账号ID映射 / 显示名兜底映射 / 固定清理词 / 标准列 / 清洗阈值 / 文件命名 / 自动审查 / 其它
-用户明确修改的规则：
-保持不变的基础规则：
-涉及语言或平台：
-用户确认记录：
-平台专属证据：
-完整表头签名（每项必须精确匹配）：
-预处理字段、固定操作和保留/省略策略：
-标准化审查新增或变更的结构检查：
-身份类型与整表优先级：
-配置文件：
-脚本文件：
-reference 文件：
-新增或更新测试：
-独立 Skill 验证结果：
+Change type: header alias / platform preprocessing config / stable account-ID mapping /
+display-name fallback / fixed cleaner term / standardized column / cleaning threshold /
+filename / audit / execution guard / other
+
+Exact user-confirmed rule change:
+Locked base rules that remain unchanged:
+Affected language or platform:
+User confirmation record:
+Platform-specific schema evidence (headers/schema only; no raw identity values):
+Complete ordered header signature (each item must match literally):
+Preprocessing fields, fixed operations, and retain/omit policy:
+Standardized-audit structural checks added or changed:
+Identity type and worksheet-wide priority:
+Canonical configuration files changed:
+Scripts changed:
+Reference files changed:
+Assets/templates changed:
+New or updated deterministic tests:
+Standalone Skill verification result:
 ```
 
-## 身份映射扩展约束
+## Execution Guard Checklist
+
+- A cleaner rule change updates the canonical root `config/comment-cleaner.json` and bundled Skill copy; no external or temporary cleaner JSON is created.
+- Each output overwrite test proves `--overwrite` alone fails and `--confirm-overwrite` names every exact existing output.
+- A retention test proves a deleted `.deletions.csv` cannot be regenerated at the same final output path or recreated by cleanup `--summary`.
+- The change preserves original inputs, final cleaned `.xlsx`/`.csv`, deterministic processing, and no-AI data judgment.
+
+## Identity Mapping Constraints
 
 - 未经确认的身份别名不得添加。
 - 新增平台或表头别名必须获得用户明确确认和平台专属证据。
@@ -30,4 +41,4 @@ reference 文件：
 - Raw identity values must never be committed.
 - 来源自带的 `哈希ID` 禁止作为身份来源。
 
-使用此模板记录规则扩展。未被用户明确点名修改的基础规则必须保持不变。
+Use this template to record every rule extension. Base rules not explicitly named by the user must remain unchanged.

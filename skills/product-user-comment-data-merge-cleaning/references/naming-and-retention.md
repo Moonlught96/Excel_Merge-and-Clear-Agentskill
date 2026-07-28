@@ -1,5 +1,15 @@
 # Naming, Output, And Retention
 
+## Contents
+
+- [Filename Standard](#filename-standard)
+- [Deterministic Name Discovery](#deterministic-name-discovery)
+- [Phase Outputs](#phase-outputs)
+- [Audit Outputs](#audit-outputs)
+- [Automatic Intermediate Cleanup](#automatic-intermediate-cleanup)
+- [Existing Output Policy](#existing-output-policy)
+- [Finalized Audit Artifacts](#finalized-audit-artifacts)
+
 ## Filename Standard
 
 Use Beijing date (`Asia/Shanghai`) and this exact pattern:
@@ -117,4 +127,10 @@ Do not delete the final cleaned `.xlsx` or `.csv`. Do not scan a folder for dele
 
 ## Existing Output Policy
 
-Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation. Never add `--overwrite` merely to make a failed command succeed. First show the exact destination that would be replaced and obtain explicit user approval.
+Existing outputs are rejected by CLI unless `--overwrite` and one `--confirm-overwrite <exact-existing-path>` argument are supplied for every output file that already exists. Never add either argument merely to make a failed command succeed. First show every exact destination that would be replaced and obtain explicit user approval.
+
+The confirmation list must include generated sidecars when they already exist, such as a phase summary, cleaner `.deletions.csv`, or cleaned `.csv`. It must not name a non-existing or unrelated path.
+
+## Finalized Audit Artifacts
+
+Default cleanup deletes the cleaner `.deletions.csv` and `.summary.json`. Once those artifacts have been removed while the final cleaned `.xlsx` remains, do not recreate, restore, copy, or replace either artifact at the same output path. A later fresh cleaning run must use a new confirmed final output path. The cleanup CLI must not use a deleted `.deletions.csv` path as a replacement `--summary` destination.

@@ -18,7 +18,9 @@ from tools.standardize_excel_headers import (
     UnsafeIdentityValueError,
     UnsafeUserIdValueError,
     OutputPathConflictError,
+    convert_platform_datetime_to_beijing_date,
     load_config,
+    parse_args,
     standardize_workbook,
 )
 
@@ -106,6 +108,59 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             return list(sheet.iter_rows(values_only=True))
         finally:
             workbook.close()
+
+    def test_youtube_none_account_id_column_falls_back_to_author_hashes(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-youtube-none-account-id-fallback"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["timestamp", "content", "author_channel_id", "author"])
+        sheet.append([1678870952, "A complete ScreenBar review from Alice", "None", "alice"])
+        sheet.append([1678957352, "A complete ScreenBar review from Bob", "None", "bob"])
+        workbook.save(input_path)
+        workbook.close()
+
+        result = self.standardize_with_hash(input_path, tmp / "out", "YouTube")
+        rows = self.read_standardized_rows(result.output_xlsx)
+        hash_ids = [rows[1][HASH_ID_INDEX], rows[2][HASH_ID_INDEX]]
+
+        self.assertTrue(all(isinstance(value, str) and value for value in hash_ids))
+        self.assertNotEqual(hash_ids[0], hash_ids[1])
+
+    def test_relative_platform_date_strips_known_edited_suffix(self) -> None:
+        self.assertEqual(
+            "2025",
+            convert_platform_datetime_to_beijing_date(
+                "1 year ago (edited)",
+                today=date(2026, 7, 28),
+            ),
+        )
+
+    def test_initialize_project_requires_explicit_project_key_confirmation(self) -> None:
+        base_args = [
+            "source.xlsx",
+            "--output",
+            "standardized.xlsx",
+            "--platform",
+            "YouTube",
+            "--project-name",
+            "ScreenBar",
+            "--initialize-project",
+        ]
+
+        with self.assertRaises(SystemExit):
+            parse_args(base_args)
+
+        args = parse_args(
+            [
+                *base_args,
+                "--confirm-project-key-creation",
+                "ScreenBar",
+            ]
+        )
+        self.assertEqual("ScreenBar", args.confirm_project_key_creation)
 
     def test_csv_formula_like_values_remain_text_after_standardization(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-standardize-csv-formula-text"

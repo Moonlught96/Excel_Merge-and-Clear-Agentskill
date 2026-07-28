@@ -5,13 +5,58 @@ import unittest
 from pathlib import Path
 
 from tools.cleanup_intermediate_outputs import (
+    FinalOutputVerificationError,
     ProtectedOutputError,
     cleanup_intermediate_outputs,
+    parse_args,
 )
 from tools.output_path_safety import OutputPathConflictError
 
 
 class CleanupIntermediateOutputsTest(unittest.TestCase):
+    def test_cli_requires_exactly_one_final_xlsx_and_csv(self) -> None:
+        base_args = [
+            "--intermediate",
+            "standardized.xlsx",
+            "--protect",
+            "cleaned.xlsx",
+        ]
+
+        with self.assertRaises(SystemExit):
+            parse_args(base_args)
+
+        args = parse_args(
+            [
+                *base_args,
+                "--protect",
+                "cleaned.csv",
+                "--final-output",
+                "cleaned.xlsx",
+                "--final-output",
+                "cleaned.csv",
+            ]
+        )
+        self.assertEqual([Path("cleaned.xlsx"), Path("cleaned.csv")], args.final_output)
+
+    def test_refuses_cleanup_when_a_declared_final_output_is_missing(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-missing-final-output"
+        tmp.mkdir(parents=True, exist_ok=True)
+        intermediate = tmp / "standardized.xlsx"
+        cleaned_xlsx = tmp / "cleaned.xlsx"
+        missing_csv = tmp / "cleaned.csv"
+        intermediate.write_text("intermediate", encoding="utf-8")
+        cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+
+        with self.assertRaisesRegex(FinalOutputVerificationError, "does not exist"):
+            cleanup_intermediate_outputs(
+                intermediate_paths=[intermediate],
+                protected_paths=[cleaned_xlsx, missing_csv],
+                final_output_paths=[cleaned_xlsx, missing_csv],
+            )
+
+        self.assertTrue(intermediate.exists())
+        self.assertTrue(cleaned_xlsx.exists())
+
     def test_existing_cleanup_summary_requires_explicit_overwrite(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-summary-no-clobber"
         tmp.mkdir(parents=True, exist_ok=True)
@@ -168,6 +213,25 @@ class CleanupIntermediateOutputsTest(unittest.TestCase):
             )
 
         self.assertEqual("cleaned", cleaned_xlsx.read_text(encoding="utf-8"))
+
+    def test_refuses_to_recreate_a_cleaning_deletion_log_as_a_summary(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-no-log-restoration"
+        tmp.mkdir(parents=True, exist_ok=True)
+        intermediate = tmp / "standardized.xlsx"
+        cleaned_xlsx = tmp / "cleaned.xlsx"
+        deleted_log = tmp / "cleaned.deletions.csv"
+        intermediate.write_text("intermediate", encoding="utf-8")
+        cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+
+        with self.assertRaisesRegex(ProtectedOutputError, "deletion log"):
+            cleanup_intermediate_outputs(
+                intermediate_paths=[intermediate],
+                protected_paths=[cleaned_xlsx],
+                summary_path=deleted_log,
+            )
+
+        self.assertTrue(intermediate.exists())
+        self.assertFalse(deleted_log.exists())
 
 
 if __name__ == "__main__":

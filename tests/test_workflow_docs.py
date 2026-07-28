@@ -74,6 +74,15 @@ class WorkflowDocsTest(unittest.TestCase):
             "Duplicate input paths are rejected",
             "At least one `--protect` path is mandatory",
             "Existing outputs are rejected by CLI unless `--overwrite` is supplied after explicit confirmation.",
+            "`--confirm-overwrite <exact-existing-path>`",
+            "external, copied, or temporary cleaner configuration is a hard error",
+            "--confirm-project-key-creation \"<research-project>\"",
+            "The public workflow CLI must explicitly pass `--target-header 评论内容`",
+            "Canonical URL/link marker terms apply to every platform, including Twitter/X",
+            "--final-output \"<cleaned.xlsx>\" --final-output \"<cleaned.csv>\"",
+            "literal exporter null marker `None`",
+            "trailing suffix `(edited)` is removed only for parsing",
+            "cannot be used to regenerate that log",
             "Every transformation CLI requires an explicit `--output` path.",
             "Literal header characters, including whitespace, must exactly match the registered signature.",
             "Comparison preserves formula text and counts duplicate-row multiplicity.",
@@ -109,6 +118,8 @@ class WorkflowDocsTest(unittest.TestCase):
         )
         self.assertIn("`amazon-japan`", confirmation_template)
         self.assertIn("`amazon-us`", confirmation_template)
+        self.assertIn("New Research Project Hash-Key Privacy Confirmation", confirmation_template)
+        self.assertIn("--confirm-project-key-creation", confirmation_template)
 
         gitignore = Path(".gitignore").read_text(encoding="utf-8")
         self.assertIn("outputs/", gitignore)
@@ -163,6 +174,9 @@ class WorkflowDocsTest(unittest.TestCase):
             "账号 ID 与显示名哈希必须不同",
             "原始账号 ID、用户名、昵称不得进入标准化或清洗输出、日志或摘要",
             "新增账号 ID 或显示名别名必须先获得用户确认和平台专属证据",
+            "禁止创建、复制、传入或恢复外部/临时清洗配置",
+            "`--confirm-overwrite <路径>`",
+            "不得在同一最终输出路径重新生成、复制恢复或借 `cleanup_intermediate_outputs.py --summary` 重建该日志",
         )
         for instruction in required_instructions:
             self.assertIn(instruction, agents)

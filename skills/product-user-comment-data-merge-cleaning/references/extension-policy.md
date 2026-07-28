@@ -1,5 +1,19 @@
 # Safe Extension Policy
 
+## Contents
+
+- [Locked Base Rules](#locked-base-rules)
+- [Adding A Header Alias](#adding-a-header-alias)
+- [Adding A Platform Preprocessing Profile](#adding-a-platform-preprocessing-profile)
+- [Changing The Standardized Output Audit](#changing-the-standardized-output-audit)
+- [Adding A Fixed Delete Word](#adding-a-fixed-delete-word)
+- [Changing Cleaner Configuration](#changing-cleaner-configuration)
+- [Adding Automation](#adding-automation)
+- [Required Change Record](#required-change-record)
+- [Validation For Every Extension](#validation-for-every-extension)
+- [Adding An Identity Header](#adding-an-identity-header)
+- [Adding A Platform-Specific Post-Standardization Filter](#adding-a-platform-specific-post-standardization-filter)
+
 ## Locked Base Rules
 
 All confirmed merge, standardization, cleaning, naming, confirmation, output, and retention rules are locked. Do not change a base rule while adding another feature. A base rule may change only when the user explicitly identifies the exact rule to modify.
@@ -17,6 +31,12 @@ Examples of locked behavior include:
 - confirmation gates between merge, standardization, and cleaning;
 - default retention of only cleaned `.xlsx` and `.csv`.
 - rejection of duplicate input paths and unconfirmed output replacement;
+- canonical bundled cleaner configuration only; no external or per-run cleaner JSON;
+- platform-specific cleaner exceptions only through a tested `platform_profiles` entry in that canonical configuration;
+- exact `--confirm-overwrite` confirmation for every existing output replacement;
+- mandatory explicit standardized `评论内容` header and confirmed platform for public cleaner CLI calls;
+- mandatory explicit final `.xlsx` and `.csv` verification before intermediate cleanup;
+- no recreation of default-retention-deleted cleaner logs at a finalized output path;
 - mandatory protected paths for intermediate cleanup;
 - formula-aware, duplicate-multiplicity-aware audit comparison.
 
@@ -56,6 +76,15 @@ Examples of locked behavior include:
 4. Do not use AI-generated translations as live cleaning decisions.
 5. Add tests for matching and a nearby negative case.
 6. Update `references/cleaning-rules.md` and synchronize the bundled configuration.
+
+## Changing Cleaner Configuration
+
+1. Require the user to identify the exact rule change; never create an external or temporary cleaner JSON for one run.
+2. Update the canonical root `config/comment-cleaner.json` and its bundled Skill copy together.
+3. A platform exception must be an explicit, narrowly scoped `platform_profiles` entry in that canonical configuration. It may remove only listed base terms for that named platform; it must not create a new per-run configuration or alter another platform's active rules.
+4. Update deterministic positive and negative tests, including adjacent values that must not be deleted and a cross-platform assertion proving the exception is isolated.
+5. Update `references/cleaning-rules.md`, `references/data-contract.md`, and this policy when the execution contract changes.
+6. Verify the cleaner CLI still rejects every non-canonical `--config` path and requires its standardized header/platform arguments.
 
 ## Adding Automation
 

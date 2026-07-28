@@ -8,12 +8,24 @@ from pathlib import Path
 from typing import Callable
 
 try:
-    from tools.output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        ensure_output_paths_safe,
+    )
 except ModuleNotFoundError:
-    from output_path_safety import atomic_output_path, ensure_output_paths_safe
+    from output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        ensure_output_paths_safe,
+    )
 
 
 class ProtectedOutputError(ValueError):
+    pass
+
+
+class FinalOutputVerificationError(ValueError):
     pass
 
 
@@ -32,9 +44,11 @@ def cleanup_intermediate_outputs(
     *,
     intermediate_paths: list[Path] | tuple[Path, ...],
     protected_paths: list[Path] | tuple[Path, ...],
+    final_output_paths: list[Path] | tuple[Path, ...] | None = None,
     summary_path: Path | None = None,
     delete_file: Callable[[Path], None] | None = None,
     overwrite: bool = True,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> CleanupIntermediateOutputsResult:
     delete = delete_file if delete_file else lambda path: path.unlink()
     intermediates = resolve_paths(intermediate_paths)
@@ -46,6 +60,29 @@ def cleanup_intermediate_outputs(
     protected_set = set(protected)
     resolved_summary_path = summary_path.resolve() if summary_path is not None else None
 
+    verified_final_outputs: list[Path] = []
+    if final_output_paths is not None:
+        verified_final_outputs = resolve_paths(final_output_paths)
+        if not verified_final_outputs:
+            raise FinalOutputVerificationError(
+                "At least one final output must be declared before intermediate cleanup."
+            )
+        missing_final_outputs = [
+            path for path in verified_final_outputs if not path.is_file()
+        ]
+        if missing_final_outputs:
+            raise FinalOutputVerificationError(
+                f"Declared final output does not exist: {missing_final_outputs[0]}"
+            )
+        unprotected_final_outputs = [
+            path for path in verified_final_outputs if path not in protected_set
+        ]
+        if unprotected_final_outputs:
+            raise FinalOutputVerificationError(
+                "Declared final output must also be protected from cleanup: "
+                f"{unprotected_final_outputs[0]}"
+            )
+
     conflicts = [path for path in intermediates if path in protected_set]
     if conflicts:
         raise ProtectedOutputError(f"Refusing to delete protected output: {conflicts[0]}")
@@ -55,8 +92,21 @@ def cleanup_intermediate_outputs(
         raise ProtectedOutputError(
             f"Refusing to recreate an intermediate file as cleanup summary: {resolved_summary_path}"
         )
+    if (
+        resolved_summary_path is not None
+        and resolved_summary_path.name.casefold().endswith(".deletions.csv")
+    ):
+        raise ProtectedOutputError(
+            "Refusing to recreate a finalized cleaning deletion log as a cleanup summary: "
+            f"{resolved_summary_path}"
+        )
     if resolved_summary_path is not None:
-        ensure_output_paths_safe([], [resolved_summary_path], overwrite=overwrite)
+        ensure_output_paths_safe(
+            [],
+            [resolved_summary_path],
+            overwrite=overwrite,
+            overwrite_confirmations=overwrite_confirmations,
+        )
 
     deleted_files: list[str] = []
     missing_files: list[str] = []
@@ -76,6 +126,7 @@ def cleanup_intermediate_outputs(
             "deleted_files": deleted_files,
             "missing_files": missing_files,
             "protected_files": [str(path) for path in protected],
+            "verified_final_outputs": [str(path) for path in verified_final_outputs],
             "files_deleted": len(deleted_files),
             "files_missing": len(missing_files),
         }
@@ -92,7 +143,7 @@ def cleanup_intermediate_outputs(
     )
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Delete current-run intermediate files after cleaned outputs are generated and verified.")
     parser.add_argument(
         "--intermediate",
@@ -108,13 +159,23 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Original input or final output file to protect. Pass once per file.",
     )
-    parser.add_argument("--summary", type=Path, default=None, help="Optional cleanup summary JSON path.")
     parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace a confirmed existing cleanup summary.",
+        "--final-output",
+        type=Path,
+        action="append",
+        required=True,
+        help="Verified final cleaned output. Pass the final .xlsx and .csv once each.",
     )
-    return parser.parse_args()
+    parser.add_argument("--summary", type=Path, default=None, help="Optional cleanup summary JSON path.")
+    add_confirmed_overwrite_arguments(
+        parser,
+        overwrite_help="Replace an existing cleanup summary only after exact user confirmation.",
+    )
+    args = parser.parse_args(argv)
+    final_suffixes = {path.suffix.casefold() for path in args.final_output}
+    if len(args.final_output) != 2 or final_suffixes != {".xlsx", ".csv"}:
+        parser.error("--final-output must declare exactly one final .xlsx and one final .csv")
+    return args
 
 
 def main() -> int:
@@ -122,8 +183,10 @@ def main() -> int:
     result = cleanup_intermediate_outputs(
         intermediate_paths=args.intermediate,
         protected_paths=args.protect,
+        final_output_paths=args.final_output,
         summary_path=args.summary,
         overwrite=args.overwrite,
+        overwrite_confirmations=tuple(args.confirm_overwrite),
     )
     if result.summary_json is not None:
         print(f"Cleanup summary: {result.summary_json}")

@@ -17,14 +17,24 @@ try:
         load_workbook_for_processing,
         unsupported_input_message,
     )
-    from tools.output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
+    from tools.output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 except ModuleNotFoundError:
     from csv_excel_compat import (
         is_supported_input_path,
         load_workbook_for_processing,
         unsupported_input_message,
     )
-    from output_path_safety import atomic_output_path, beijing_date_text, ensure_output_paths_safe
+    from output_path_safety import (
+        add_confirmed_overwrite_arguments,
+        atomic_output_path,
+        beijing_date_text,
+        ensure_output_paths_safe,
+    )
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "platform-preprocessing.json"
@@ -694,6 +704,7 @@ def preprocess_and_merge_workbooks(
     *,
     platform: str,
     overwrite: bool = False,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> PlatformPreprocessMergeResult:
     """Deterministically preprocess exact registered variants, then merge their common output rows."""
     paths = _validate_batch_input_paths(input_paths)
@@ -702,7 +713,12 @@ def preprocess_and_merge_workbooks(
     output_headers = _output_headers_for_definitions(definitions)
     output_path = output_path.resolve()
     summary_path = output_path.with_suffix(".summary.json")
-    ensure_output_paths_safe(paths, [output_path, summary_path], overwrite=overwrite)
+    ensure_output_paths_safe(
+        paths,
+        [output_path, summary_path],
+        overwrite=overwrite,
+        overwrite_confirmations=overwrite_confirmations,
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     output_workbook = Workbook()
@@ -837,6 +853,7 @@ def preprocess_workbook(
     *,
     platform: str | None = None,
     overwrite: bool = True,
+    overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> PlatformPreprocessResult:
     input_path = input_path.resolve()
     if not is_supported_input_path(input_path):
@@ -853,6 +870,7 @@ def preprocess_workbook(
         [input_path],
         [output_xlsx, summary_json],
         overwrite=overwrite,
+        overwrite_confirmations=overwrite_confirmations,
     )
 
     input_workbook = load_workbook_for_processing(
@@ -957,10 +975,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional registered platform name; signature validation remains mandatory.",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace confirmed existing outputs.",
+    add_confirmed_overwrite_arguments(
+        parser,
+        overwrite_help="Replace existing preprocessing outputs only after exact user confirmation.",
     )
     parser.add_argument(
         "--merge-registered-variants",
@@ -982,6 +999,7 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             platform=args.platform,
             overwrite=args.overwrite,
+            overwrite_confirmations=tuple(args.confirm_overwrite),
         )
         print(f"Platform-preprocessed merged xlsx: {result.output_xlsx}")
         print(f"Summary: {result.summary_json}")
@@ -1000,6 +1018,7 @@ def main(argv: list[str] | None = None) -> int:
         output_path=args.output,
         platform=args.platform,
         overwrite=args.overwrite,
+        overwrite_confirmations=tuple(args.confirm_overwrite),
     )
     print(f"Platform-preprocessed xlsx: {result.output_xlsx}")
     print(f"Summary: {result.summary_json}")
