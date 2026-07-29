@@ -131,6 +131,26 @@ TWITTER_PREPROCESSED_HEADERS = (
     "Twitter用户ID",
     "Twitter昵称",
 )
+REDDIT_HEADERS = [
+    "记录类型",
+    "标题",
+    "作者",
+    "时间",
+    "内容",
+    "点赞数",
+    "评论/回复数",
+    "层级",
+    "是否回复",
+    "评论ID",
+    "父ID",
+]
+REDDIT_PREPROCESSED_HEADERS = (
+    "评论日期",
+    "评论内容",
+    "点赞数",
+    "子评论数/追评数",
+    "Reddit作者",
+)
 STANDARDIZED_HEADERS = (
     "评论日期",
     "评论内容",
@@ -233,6 +253,14 @@ def write_twitter_source(path: Path, rows: list[dict[str, object]]) -> None:
             writer.writerow([row.get(header) for header in TWITTER_HEADERS])
 
 
+def write_reddit_source(path: Path, rows: list[dict[str, object]]) -> None:
+    with path.open("w", newline="", encoding="utf-8-sig") as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(REDDIT_HEADERS)
+        for row in rows:
+            writer.writerow([row.get(header) for header in REDDIT_HEADERS])
+
+
 class PreprocessPlatformCommentsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.hash_context = HashProjectContext(
@@ -332,6 +360,128 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
         self.assertNotIn("Twitter用户ID", standardized_rows[0])
         self.assertNotIn("Twitter昵称", standardized_rows[0])
         self.assertNotIn("screenbar-user-one", str(standardized_rows))
+
+    def test_preprocesses_reddit_csv_as_independent_rows_and_hashes_author_display_names(self) -> None:
+        tmp = Path.cwd() / ".tmp-tests" / "case-reddit-preprocess"
+        tmp.mkdir(parents=True, exist_ok=True)
+        source_path = tmp / "reddit-thread-json-primary.csv"
+        write_reddit_source(
+            source_path,
+            [
+                {
+                    "记录类型": "主帖",
+                    "标题": "ScreenBar discussion title",
+                    "作者": "thread-author",
+                    "时间": "2026-07-22T17:40:47+00:00",
+                    "内容": "Thread body stays with the title.",
+                    "点赞数": "56",
+                    "评论/回复数": "153",
+                    "层级": "0",
+                    "是否回复": "否",
+                    "评论ID": "post-1",
+                    "父ID": "",
+                },
+                {
+                    "记录类型": "评论",
+                    "标题": "",
+                    "作者": "same-reddit-author",
+                    "时间": "2026-07-23T17:40:47+00:00",
+                    "内容": "Top-level Reddit comment.",
+                    "点赞数": "",
+                    "评论/回复数": "9",
+                    "层级": "0",
+                    "是否回复": "否",
+                    "评论ID": "comment-1",
+                    "父ID": "post-1",
+                },
+                {
+                    "记录类型": "评论",
+                    "标题": "",
+                    "作者": "same-reddit-author",
+                    "时间": "2026-07-23T18:40:47+00:00",
+                    "内容": "Nested Reddit reply remains an independent row.",
+                    "点赞数": "4",
+                    "评论/回复数": "0",
+                    "层级": "1",
+                    "是否回复": "是",
+                    "评论ID": "comment-2",
+                    "父ID": "comment-1",
+                },
+            ],
+        )
+
+        preprocessed = preprocess_workbook(
+            source_path,
+            load_config(),
+            output_dir=tmp / "preprocessed",
+            platform="Reddit",
+        )
+        preprocessed_book = load_workbook(preprocessed.output_xlsx, read_only=True, data_only=True)
+        try:
+            preprocessed_rows = list(preprocessed_book.worksheets[0].iter_rows(values_only=True))
+        finally:
+            preprocessed_book.close()
+
+        self.assertEqual("reddit", preprocessed.platform)
+        self.assertEqual(REDDIT_PREPROCESSED_HEADERS, preprocessed_rows[0])
+        self.assertEqual(
+            (
+                "2026-07-22T17:40:47+00:00",
+                "ScreenBar discussion title\n\nThread body stays with the title.",
+                "56",
+                "153",
+                "thread-author",
+            ),
+            preprocessed_rows[1],
+        )
+        self.assertEqual(
+            (
+                "2026-07-23T18:40:47+00:00",
+                "Nested Reddit reply remains an independent row.",
+                "4",
+                "0",
+                "same-reddit-author",
+            ),
+            preprocessed_rows[3],
+        )
+        self.assertNotIn("评论ID", preprocessed_rows[0])
+        self.assertNotIn("父ID", preprocessed_rows[0])
+        self.assertNotIn("层级", preprocessed_rows[0])
+        self.assertNotIn("same-reddit-author", preprocessed.summary_json.read_text(encoding="utf-8"))
+
+        standardized = standardize_workbook(
+            preprocessed.output_xlsx,
+            load_header_config(),
+            output_dir=tmp / "standardized",
+            platform=preprocessed.platform,
+            hash_context=self.hash_context,
+            hash_config=self.hash_config,
+            product_name="ScreenBar",
+        )
+        standardized_book = load_workbook(standardized.output_xlsx, read_only=True, data_only=True)
+        try:
+            standardized_rows = list(standardized_book.worksheets[0].iter_rows(values_only=True))
+        finally:
+            standardized_book.close()
+
+        expected_author_hash = hash_display_name(
+            "same-reddit-author", "reddit", self.hash_context, self.hash_config
+        )
+        self.assertEqual(STANDARDIZED_HEADERS, standardized_rows[0])
+        self.assertEqual("2026-07-23", standardized_rows[1][0])
+        self.assertEqual("ScreenBar", standardized_rows[1][2])
+        self.assertEqual(0, standardized_rows[2][STANDARDIZED_LIKES_INDEX])
+        self.assertEqual(expected_author_hash, standardized_rows[2][STANDARDIZED_HASH_ID_INDEX])
+        self.assertEqual(expected_author_hash, standardized_rows[3][STANDARDIZED_HASH_ID_INDEX])
+        self.assertNotIn("Reddit作者", standardized_rows[0])
+        self.assertNotIn("same-reddit-author", str(standardized_rows))
+
+    def test_reddit_profile_rejects_reordered_headers_without_guessing(self) -> None:
+        headers = list(REDDIT_HEADERS)
+        headers[7], headers[8] = headers[8], headers[7]
+
+        with self.assertRaisesRegex(PlatformHeaderSignatureError, "does not match"):
+            detect_platform(headers, load_config(), platform="reddit")
 
     def test_detects_amazon_signature_and_preprocesses_only_registered_fields(self) -> None:
         tmp = Path.cwd() / ".tmp-tests" / "case-amazon-preprocess"

@@ -45,6 +45,8 @@ SOURCE_RULES = (
     ("TTCommentExporter", "TikTok评论数据"),
     ("Twitter", "Twitter评论数据"),
     ("twitter", "Twitter评论数据"),
+    ("Reddit", "Reddit评论数据"),
+    ("reddit", "Reddit评论数据"),
     ("YouTube", "YouTube评论数据"),
     ("youtube", "YouTube评论数据"),
     ("Youtube", "YouTube评论数据"),
@@ -77,6 +79,8 @@ GENERIC_PARTS = {
     "TikTok",
     "Twitter",
     "twitter",
+    "Reddit",
+    "reddit",
     "youtube数据",
     "长视频评论",
     "Shorts",
@@ -102,6 +106,10 @@ GENERIC_FILENAME_PATTERNS = (
     r"清洗后总表",
 )
 WINDOWS_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+REDDIT_EXPORT_STEM = re.compile(
+    r"^reddit-.+-[0-9A-Za-z]+-json-(?:primary|fallback)$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -166,31 +174,54 @@ def normalize_parent_for_product(part: str) -> str:
     return sanitize_filename_component(value)
 
 
+def amazon_region_candidates_from_component(component: str) -> list[str]:
+    normalized_component = component.casefold()
+    return unique_sorted(
+        [
+            source_name
+            for keyword, source_name in AMAZON_REGION_SOURCE_RULES
+            if keyword.casefold() in normalized_component
+        ]
+    )
+
+
+def source_candidates_from_component(component: str) -> list[str]:
+    region_candidates = amazon_region_candidates_from_component(component)
+    if region_candidates:
+        return region_candidates
+    return unique_sorted(
+        [source_name for keyword, source_name in SOURCE_RULES if keyword in component]
+    )
+
+
 def source_candidates_from_paths(paths: list[Path]) -> list[str]:
     candidates: list[str] = []
     for path in paths:
-        text = " ".join([path.stem, *path.parts])
-        normalized_text = text.casefold()
-        is_youtube = "youtube" in normalized_text or "yt-comments" in normalized_text
-        is_shorts = any(part.casefold() == "shorts" for part in path.parts)
-        if is_youtube and is_shorts:
-            candidates.append("YouTube Shorts评论数据")
-            continue
+        # Source labels belong to the supplied filename or its nearest directories.
+        # Do not combine unrelated outer workspace/worktree labels with a closer
+        # file-level platform marker and turn one source into an ambiguity.
+        components = [path.stem, *reversed(path.parent.parts)]
+        is_youtube_shorts = any(
+            component.casefold() == "shorts" for component in components[:3]
+        )
 
-        amazon_region_sources = [
-            source_name
-            for keyword, source_name in AMAZON_REGION_SOURCE_RULES
-            if keyword.casefold() in normalized_text
-        ]
-        if amazon_region_sources:
-            # Region selects the explicit deterministic platform contract. Generic
-            # Amazon paths deliberately remain un-routed until confirmed.
-            candidates.extend(amazon_region_sources)
-            continue
+        for component_index, component in enumerate(components):
+            component_candidates = source_candidates_from_component(component)
+            if not component_candidates:
+                continue
 
-        for keyword, source_name in SOURCE_RULES:
-            if keyword in text:
-                candidates.append(source_name)
+            if component_candidates == ["亚马逊评论数据"]:
+                for ancestor_component in components[component_index + 1 :]:
+                    region_candidates = amazon_region_candidates_from_component(ancestor_component)
+                    if region_candidates:
+                        component_candidates = region_candidates
+                        break
+
+            if component_candidates == ["YouTube评论数据"] and is_youtube_shorts:
+                component_candidates = ["YouTube Shorts评论数据"]
+
+            candidates.extend(component_candidates)
+            break
     return unique_sorted(candidates)
 
 
@@ -221,6 +252,11 @@ def rakuten_filename_product_candidate(path: Path) -> str | None:
 def product_candidates_from_names(paths: list[Path]) -> list[str]:
     candidates: list[str] = []
     for path in paths:
+        # The exporter stem encodes subreddit/post metadata, not a product name.
+        # Keep product naming user-confirmed rather than treating it as product data.
+        if REDDIT_EXPORT_STEM.fullmatch(path.stem):
+            continue
+
         amazon_parent_candidate = amazon_region_parent_product_candidate(path)
         if amazon_parent_candidate:
             candidates.append(amazon_parent_candidate)
@@ -321,6 +357,8 @@ def preprocessing_profile_for_data_source(data_source: str | None) -> str | None
         return "rakuten"
     if data_source == "Twitter评论数据":
         return "twitter"
+    if data_source == "Reddit评论数据":
+        return "reddit"
     return None
 
 

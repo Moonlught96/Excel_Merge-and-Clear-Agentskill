@@ -7,6 +7,7 @@
 - [Platform Preprocessing Profiles](#platform-preprocessing-profiles)
   - [Amazon Japan And Amazon US Profiles](#amazon-japan-and-amazon-us-profiles)
   - [Twitter/X Profile](#twitterx-profile)
+  - [Reddit Profile](#reddit-profile)
   - [Rakuten Market Profile](#rakuten-market-profile)
   - [Mixed Rakuten Variant Batch Merge](#mixed-rakuten-variant-batch-merge)
 - [Required And Blank Columns](#required-and-blank-columns)
@@ -94,6 +95,20 @@ The profile is selected only when the entire source header row has exactly that 
 
 `id`, `media`, `name`, `profile_image_url`, `in_reply_to`, `retweeted_status`, `quoted_status`, `media_tags`, `retweet_count`, `bookmark_count`, `quote_count`, `views_count`, `favorited`, `retweeted`, `bookmarked`, `url`, and `metadata` are intentionally omitted from the preprocessing output. The temporary Twitter identity fields are omitted from standardized and cleaned outputs, logs, and summaries after deterministic hash derivation. This profile never uses AI, source-value semantics, or partial-header matching.
 
+### Reddit Profile
+
+The registered `reddit` profile has one exact ordered signature: `记录类型`, `标题`, `作者`, `时间`, `内容`, `点赞数`, `评论/回复数`, `层级`, `是否回复`, `评论ID`, and `父ID`. `Reddit` and `reddit` are fixed aliases for the one `reddit` profile. The profile is selected only when the complete source header row has exactly that order and column count; a familiar field such as `作者`, `内容`, `评论ID`, or `父ID` alone never selects it.
+
+| Source field(s) | Configured operation | Preprocessing output |
+| --- | --- | --- |
+| `时间` | `copy` | Temporary `评论日期`, then common standardization applies its existing fixed Beijing-date conversion. |
+| `标题` + `内容` | `join_trimmed` | `评论内容`: trimmed nonblank parts are joined in fixed order with one blank line (`\n\n`); ordinary comment rows with a blank `标题` retain only `内容`. |
+| `点赞数` | `copy` | Temporary `点赞数`; a blank value remains blank at this temporary stage, then common standardization writes numeric `0`. |
+| `评论/回复数` | `copy` | Temporary `子评论数/追评数`. |
+| `作者` | `copy` | Temporary `Reddit作者`, used only as the approved weak display-name fallback for `哈希ID`. |
+
+`记录类型`, `层级`, `是否回复`, `评论ID`, and `父ID` are intentionally omitted from the preprocessing output. Every source row, including the one main post and all comments/replies, remains one independent output row in the original order. The profile does not move reply text into `一级评论`/`二级评论`/`三级评论`, copy a parent comment, infer a hierarchy, or associate a child with its parent. `Reddit作者` is omitted from standardized and cleaned outputs, logs, and summaries after deterministic hash derivation. This profile uses only fixed header equality, fixed column copies, and fixed joining; it never uses AI, semantic inference, or fuzzy matching.
+
 ### Rakuten Market Profile
 
 The registered `rakuten` profile has 5 named exact variants. A match is valid only for one whole listed header row; a familiar field such as `レビュー本文`, `投稿日`, or `レビュー投稿者` alone never selects this profile.
@@ -164,7 +179,7 @@ Do not use AI or semantic judgment to split product names.
 
 The standardized workbook omits every column outside the standard schema. Confirmed sensitive, identity, and metadata headers include:
 
-`IP地址`, `IP属地`, `用户名称`, `用户昵称`, `昵称`, `乐天市场昵称`, `rpid`, `parent_rpid`, `username`, `ip_location`, `id`, `comment_id`, `commentId`, `cid`, `uid`, `user_id`, `userId`, `uniqueId`, `author`, `authorName`, `author_name`, `authorDisplayName`, `authorChannelId`, `authorChannelUrl`, `channelId`, `channel_id`, `channelUrl`, `profileUrl`, `profile_url`, `avatar`, `videoId`, `video_id`, `videoUrl`, `url`, and `permalink`.
+`IP地址`, `IP属地`, `用户名称`, `用户昵称`, `昵称`, `乐天市场昵称`, `Reddit作者`, `rpid`, `parent_rpid`, `username`, `ip_location`, `id`, `comment_id`, `commentId`, `评论ID`, `父ID`, `cid`, `uid`, `user_id`, `userId`, `uniqueId`, `author`, `作者`, `authorName`, `author_name`, `authorDisplayName`, `authorChannelId`, `authorChannelUrl`, `channelId`, `channel_id`, `channelUrl`, `profileUrl`, `profile_url`, `avatar`, `videoId`, `video_id`, `videoUrl`, `url`, and `permalink`.
 
 These raw columns remain omitted from standardized and cleaned outputs even when `config/hash-id.json` registers one of them as an in-memory identity source. Registration permits only deterministic hashing; it never preserves the raw column.
 
@@ -195,6 +210,7 @@ Unknown columns that are not configured standard aliases are omitted. They are n
   - 亚马逊美国: none.
   - 乐天市场: none.
   - Twitter/X: `Twitter用户ID`.
+  - Reddit: none.
 - Exact display-name fallback mappings:
   - YouTube: `author`, then `author_name`.
   - 小红书: `用户名称`.
@@ -206,6 +222,7 @@ Unknown columns that are not configured standard aliases are omitted. They are n
   - 亚马逊美国: `名称`.
   - 乐天市场: `乐天市场昵称`.
   - Twitter/X: `Twitter昵称`.
+  - Reddit: `Reddit作者`.
 - The same normalized display name in the same research project and platform produces the same hash regardless of which registered display-name header supplied it.
 - Account-ID and display-name hashes use separate identity domains. Cross-project, cross-platform, and account-ID/display-name hashes differ.
 - Display-name linkage is weak pseudonymization, not legal anonymization: nickname changes can split the same user, and different users with the same normalized name can merge.

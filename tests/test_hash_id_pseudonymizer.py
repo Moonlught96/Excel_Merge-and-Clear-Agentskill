@@ -390,6 +390,8 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             "Twitter": "twitter",
             "twitter": "twitter",
             "X": "twitter",
+            "Reddit": "reddit",
+            "reddit": "reddit",
             "淘宝": "taobao",
             "京东": "jd",
             "亚马逊日本": "amazon-japan",
@@ -465,6 +467,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             "amazon-us": ("名称",),
             "rakuten": ("乐天市场昵称",),
             "twitter": ("Twitter昵称",),
+            "reddit": ("Reddit作者",),
         }
 
         self.assertEqual(

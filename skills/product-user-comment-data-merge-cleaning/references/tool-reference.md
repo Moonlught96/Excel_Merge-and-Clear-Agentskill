@@ -34,7 +34,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - `config/comment-cleaner.json`: active cleaning thresholds, exact text, fixed contains terms, embedded platform profiles, random-heap thresholds, duplicate policy, subcomment rules, and CSV encoding.
 - `config/header-standardizer.json`: exact standard output order, fixed aliases, required/optional columns, and known dropped headers.
 - `config/hash-id.json`: platform aliases plus ordered `user_id_headers` and `display_name_headers`; do not add ambiguous identity fields.
-- `config/platform-preprocessing.json`: exact platform header signatures and deterministic pre-standardization field operations. Current registered profiles: `amazon-japan`, `amazon-us`, `rakuten`, and `twitter`; `rakuten` has five named exact header variants.
+- `config/platform-preprocessing.json`: exact platform header signatures and deterministic pre-standardization field operations. Current registered profiles: `amazon-japan`, `amazon-us`, `rakuten`, `twitter`, and `reddit`; `rakuten` has five named exact header variants.
 - In `config/hash-id.json`, `schema_version` must be `2`; schema version `1` is rejected. `config/platform-preprocessing.json` independently requires `schema_version: 1`.
 - `algorithm_version` remains `bazhuayu-hash-id-v1`, and this schema migration does not change hash outputs.
 
@@ -83,7 +83,7 @@ python scripts\strip_bilibili_reply_prefixes.py "<raw-merged.xlsx>" --output "<r
 Preprocess a registered platform only when its exact configured signature applies:
 
 ```powershell
-python scripts\preprocess_platform_comments.py "<raw-or-prefix-stripped.xlsx>" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter" --output "<platform-preprocessed.xlsx>"
+python scripts\preprocess_platform_comments.py "<raw-or-prefix-stripped.xlsx>" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-reddit" --output "<platform-preprocessed.xlsx>"
 ```
 
 The command stops rather than guessing when the headers do not match the selected profile. It does not replace the common standardizer or apply a profile to unregistered platforms.

@@ -151,6 +151,47 @@ class OutputFileNamingTest(unittest.TestCase):
             plan.filenames["merge"],
         )
 
+    def test_detects_reddit_source_and_requires_explicit_product_for_exporter_stem(self) -> None:
+        source_path = Path(
+            "D:/专案/ScreenBar十周年专案/产品数据/Reddit/"
+            "reddit-indotech-1p4k2dy-json-primary.csv"
+        )
+
+        unresolved = build_naming_plan([source_path], today=datetime(2026, 7, 24, 9, 30))
+        resolved = build_naming_plan(
+            [source_path],
+            product_name="ScreenBar",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+
+        self.assertEqual("Reddit评论数据", unresolved.data_source)
+        self.assertEqual("reddit", unresolved.preprocessing_profile)
+        self.assertIn("product_name", unresolved.missing_fields)
+        self.assertEqual([], unresolved.product_candidates)
+        self.assertEqual("ScreenBar", resolved.product_name)
+        self.assertEqual("Reddit评论数据", resolved.data_source)
+        self.assertEqual("reddit", resolved.preprocessing_profile)
+        self.assertEqual(
+            "20260724_ScreenBar_Reddit评论数据_合并总表.xlsx",
+            resolved.filenames["merge"],
+        )
+
+    def test_nearest_source_marker_beats_an_unrelated_outer_worktree_name(self) -> None:
+        plan = build_naming_plan(
+            [
+                Path(
+                    "D:/workspace/reddit-data-reconstruction/.tmp-tests/"
+                    "case/淘宝评论数据.xlsx"
+                )
+            ],
+            product_name="ScreenBar",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+
+        self.assertEqual("淘宝评论数据", plan.data_source)
+        self.assertEqual(["淘宝评论数据"], plan.data_source_candidates)
+        self.assertEqual([], plan.missing_fields)
+
     def test_detects_amazon_source_from_registered_path_keywords(self) -> None:
         plan = build_naming_plan(
             [

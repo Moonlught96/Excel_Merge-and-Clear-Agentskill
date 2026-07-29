@@ -41,14 +41,14 @@ python tools/standardize_excel_headers.py "D:\path\合并总表_回复前缀已�
 
 这个步骤只处理 `content` 或 `评论内容` 列中开头匹配 `回复@xxx：`、`回复 @xxx：`、`回复@xxx:`、`回复 @xxx:` 的固定文本前缀；不移动回复行，不推断父子层级，不新增列，也不删除行。
 
-已登记的平台会在通用标准化前进入独立的确定性预处理配置。每个平台或具名表头变体都必须完整、有序且按字面命中已登记的 `header_signature`，包括空白字符；配置不匹配时工具会停止，不会猜测平台或字段。当前包含 `amazon-japan`、`amazon-us`、`rakuten` 和 `twitter`：亚马逊日本和美国使用独立的表头与哈希命名空间，前者按已登记字段解析日期，后者没有日期源而固定留空。乐天市场的五个已登记变体会把标题与正文固定合并、转换日期和点赞数、保留评分、从`レビュアー属性`中只保留性别/年龄字段，并将精确匿名标记`購入者さん`置空，不参与`哈希ID`。Twitter/X 的固定导出格式会保留评论日期、评论内容、点赞数、回复数，并使用 `user_id` 优先、`screen_name` 整表兜底生成哈希 ID；标准化确认后才会按本轮确认的保留关键词筛选评论行。
+已登记的平台会在通用标准化前进入独立的确定性预处理配置。每个平台或具名表头变体都必须完整、有序且按字面命中已登记的 `header_signature`，包括空白字符；配置不匹配时工具会停止，不会猜测平台或字段。当前包含 `amazon-japan`、`amazon-us`、`rakuten`、`twitter` 和 `reddit`：亚马逊日本和美国使用独立的表头与哈希命名空间，前者按已登记字段解析日期，后者没有日期源而固定留空。乐天市场的五个已登记变体会把标题与正文固定合并、转换日期和点赞数、保留评分、从`レビュアー属性`中只保留性别/年龄字段，并将精确匿名标记`購入者さん`置空，不参与`哈希ID`。Twitter/X 的固定导出格式会保留评论日期、评论内容、点赞数、回复数，并使用 `user_id` 优先、`screen_name` 整表兜底生成哈希 ID；标准化确认后才会按本轮确认的保留关键词筛选评论行。Reddit 的固定导出格式会固定拼接 `标题` 和 `内容`，映射时间、点赞数、评论/回复数，并把 `作者` 仅作为临时弱伪名化来源；主帖和各层回复均作为独立行保留，绝不重建层级或复制父评论。
 
 同一乐天市场批次若包含多个已登记但彼此不同的表头变体，普通原始合并会安全停止，不会产生半成品。此时仅在每张表都完整匹配已登记乐天变体的前提下，工具会按各自固定规则预处理后合并为一个平台预处理合并总表，再进入通用标准化；原始文件不会被改写，也不会使用 AI、模糊匹配或语义判断。
 
 ```powershell
-python tools/preprocess_platform_comments.py "D:\path\平台原始表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter" --output "D:\path\平台预处理表.xlsx"
+python tools/preprocess_platform_comments.py "D:\path\平台原始表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-reddit" --output "D:\path\平台预处理表.xlsx"
 python tools/preprocess_platform_comments.py "D:\path\乐天表1.xlsx" "D:\path\乐天表2.xlsx" --platform "rakuten" --merge-registered-variants --output "D:\path\乐天平台预处理合并总表.xlsx"
-python tools/standardize_excel_headers.py "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter" --project-name "研究项目" --product-name "产品名"
+python tools/standardize_excel_headers.py "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-reddit" --project-name "研究项目" --product-name "产品名"
 python tools/audit_standardized_comments.py "D:\path\标准化总表.xlsx" --source "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.audit.json"
 ```
 

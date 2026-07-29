@@ -46,9 +46,11 @@ Product name may be discovered only from:
 - configured workbook headers `产品名`, `购买产品`, `商品名称`, or `商品`;
 - the fixed `评论日期与产品` parser.
 
+For data-source discovery, the nearest supplied filename or parent-directory component with a registered source keyword wins. Do not accumulate a second candidate from an unrelated outer workspace, temporary-folder, worktree, or repository-directory name. A generic Amazon marker may still be overridden only by a registered Amazon region marker in the same input path, because the region determines the exact `amazon-japan` or `amazon-us` contract.
+
 Data source may be discovered only from fixed keywords including:
 
-`淘宝`, `天猫`, `京东`, `乐天市场`, `Rakuten`, `rakuten`, `亚马逊`, `Amazon`, `amazon`, `小红书`, `抖音`, `微博`, `B站`, `哔哩哔哩`, `TikTok`, `TTCommentExporter`, `Twitter`, `twitter`, `YouTube`, `youtube`, and `yt-comments`.
+`淘宝`, `天猫`, `京东`, `乐天市场`, `Rakuten`, `rakuten`, `亚马逊`, `Amazon`, `amazon`, `小红书`, `抖音`, `微博`, `B站`, `哔哩哔哩`, `TikTok`, `TTCommentExporter`, `Twitter`, `twitter`, `Reddit`, `reddit`, `YouTube`, `youtube`, and `yt-comments`.
 
 Amazon display naming is determined only from registered path/file keywords:
 
@@ -63,6 +65,8 @@ Rakuten display naming is determined only from the registered `乐天市场`, `R
 When a YouTube input path contains an exact `Shorts` directory segment, classify its display data source as `YouTube Shorts评论数据` before applying the generic YouTube rule. This display-name distinction does not change the shared `youtube` hash namespace.
 
 Twitter file/path keywords `Twitter` or `twitter` deterministically produce `Twitter评论数据` and the planned `twitter` preprocessing route. The display source label does not select the profile by itself: execution still requires the complete registered Twitter/X ordered header signature.
+
+Reddit file/path keywords `Reddit` or `reddit` deterministically produce `Reddit评论数据` and the planned `reddit` preprocessing route. A fixed exporter stem in the form `reddit-<subreddit>-<post-id>-json-primary` or `reddit-<subreddit>-<post-id>-json-fallback` contains subreddit/post metadata, not a product name: it must not produce a product candidate, and the workflow must ask the user for the product name unless another allowed deterministic source supplies exactly one. The display source label does not select the profile by itself: execution still requires the complete registered Reddit ordered header signature.
 
 The naming CLI must emit JSON as UTF-8 and remain usable when input filenames contain characters unsupported by the active Windows console code page, including emoji. Console encoding must not change filename parsing or output naming.
 

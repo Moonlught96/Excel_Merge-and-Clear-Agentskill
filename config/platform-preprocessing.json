@@ -392,6 +392,51 @@
           "source_headers": ["screen_name"]
         }
       ]
+    },
+    {
+      "namespace": "reddit",
+      "aliases": ["Reddit", "reddit"],
+      "header_signature": [
+        "记录类型",
+        "标题",
+        "作者",
+        "时间",
+        "内容",
+        "点赞数",
+        "评论/回复数",
+        "层级",
+        "是否回复",
+        "评论ID",
+        "父ID"
+      ],
+      "output_columns": [
+        {
+          "header": "评论日期",
+          "operation": "copy",
+          "source_headers": ["时间"]
+        },
+        {
+          "header": "评论内容",
+          "operation": "join_trimmed",
+          "source_headers": ["标题", "内容"],
+          "separator": "\n\n"
+        },
+        {
+          "header": "点赞数",
+          "operation": "copy",
+          "source_headers": ["点赞数"]
+        },
+        {
+          "header": "子评论数/追评数",
+          "operation": "copy",
+          "source_headers": ["评论/回复数"]
+        },
+        {
+          "header": "Reddit作者",
+          "operation": "copy",
+          "source_headers": ["作者"]
+        }
+      ]
     }
   ]
 }

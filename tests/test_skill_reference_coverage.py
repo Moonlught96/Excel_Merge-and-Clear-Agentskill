@@ -55,6 +55,7 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "amazon-us": (),
             "rakuten": (),
             "twitter": ("Twitter用户ID",),
+            "reddit": (),
         }
 
         expected_display_name_headers = {
@@ -68,6 +69,7 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "amazon-us": ("名称",),
             "rakuten": ("乐天市场昵称",),
             "twitter": ("Twitter昵称",),
+            "reddit": ("Reddit作者",),
         }
         platforms = {platform["namespace"]: platform for platform in config["platforms"]}
 
@@ -92,7 +94,8 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "  - 亚马逊日本: none.\n"
             "  - 亚马逊美国: none.\n"
             "  - 乐天市场: none.\n"
-            "  - Twitter/X: `Twitter用户ID`."
+            "  - Twitter/X: `Twitter用户ID`.\n"
+            "  - Reddit: none."
         )
         display_mapping_block = (
             "- Exact display-name fallback mappings:\n"
@@ -105,7 +108,8 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "  - 亚马逊日本: `名称`.\n"
             "  - 亚马逊美国: `名称`.\n"
             "  - 乐天市场: `乐天市场昵称`.\n"
-            "  - Twitter/X: `Twitter昵称`."
+            "  - Twitter/X: `Twitter昵称`.\n"
+            "  - Reddit: `Reddit作者`."
         )
         self.assertIn(account_mapping_block, header_reference)
         self.assertIn(display_mapping_block, header_reference)

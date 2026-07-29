@@ -16,6 +16,7 @@
 - [Emoji Filenames Failed On Windows GBK Consoles](#emoji-filenames-failed-on-windows-gbk-consoles)
 - [Platform Profile Cannot Be Guessed From Partial Headers](#platform-profile-cannot-be-guessed-from-partial-headers)
 - [Twitter/X Relevance Is Not Semantic Classification](#twitterx-relevance-is-not-semantic-classification)
+- [Reddit Reply Hierarchy Must Not Be Reconstructed](#reddit-reply-hierarchy-must-not-be-reconstructed)
 - [Rakuten Anonymous Buyer Is Not A Stable Identity](#rakuten-anonymous-buyer-is-not-a-stable-identity)
 - [Mixed Registered Platform Variants Cannot Use Raw Merge](#mixed-registered-platform-variants-cannot-use-raw-merge)
 - [Standardized Output Audit Stops Unsafe Progression](#standardized-output-audit-stops-unsafe-progression)
@@ -134,6 +135,12 @@ If a profile invocation reports `No configured platform signature matched`, stop
 Twitter/X result exports can include posts outside the intended product context. The registered `twitter` profile therefore has a separate post-standardization keep-keyword stage. It retains a row only if `评论内容` contains at least one user-confirmed literal keyword using deterministic Unicode case folding; it does not infer that a synonym, related product, or similar phrase should match.
 
 Do not run this filter before the standardized workbook audit and user approval. Do not merge its user-provided keywords into fixed delete words or KOL delete words. Require the separate “all Twitter/X keep keywords provided” confirmation, then pass the filtered temporary workbook into the unchanged common KOL and cleaning workflow.
+
+## Reddit Reply Hierarchy Must Not Be Reconstructed
+
+The Reddit exporter records a main post and comments/replies in one flat table with `层级`, `评论ID`, and `父ID`. These fields are useful exporter metadata but are not part of the locked standardized schema and do not establish a safe one-to-one projection into `一级评论`, `二级评论`, or `三级评论`; a thread can exceed three levels and one parent can have many replies.
+
+The registered `reddit` profile therefore keeps every source record as one independent row, preserves original order, and only applies the fixed `标题` plus `内容` join for its own row. It omits `记录类型`, `层级`, `是否回复`, `评论ID`, and `父ID` after preprocessing. It does not copy parent text, move children to subcomment columns, delete deep replies, or infer relations. `作者` is copied only to temporary `Reddit作者` for deterministic weak display-name hashing, then omitted from all standardized and cleaned artifacts.
 
 ## Rakuten Anonymous Buyer Is Not A Stable Identity
 
