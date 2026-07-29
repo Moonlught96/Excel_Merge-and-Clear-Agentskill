@@ -278,13 +278,28 @@ class RedditJsonExportTest(unittest.TestCase):
             with self.subTest(field=field):
                 self.assert_invalid(payload)
 
-    def test_rejects_blank_or_non_string_post_text(self) -> None:
-        for field in ("subreddit", "title", "content", "author"):
+    def test_rejects_blank_or_non_string_required_post_text(self) -> None:
+        for field in ("subreddit", "title", "author"):
             for value in ("", " \t\r\n", None, 3):
                 payload = valid_payload()
                 payload["post"][field] = value
                 with self.subTest(field=field, value=value):
                     self.assert_invalid(payload)
+
+    def test_accepts_empty_post_content_for_media_post(self) -> None:
+        payload = valid_payload()
+        payload["post"]["content"] = ""
+
+        result = parse_reddit_json(self.write_payload(payload))
+
+        self.assertEqual("", result.post.content)
+
+    def test_rejects_non_string_post_content(self) -> None:
+        for value in (None, 3):
+            payload = valid_payload()
+            payload["post"]["content"] = value
+            with self.subTest(value=value):
+                self.assert_invalid(payload)
 
     def test_post_num_comments_is_exact_nonnegative_integer_and_matches_meta(self) -> None:
         for value in (True, -1, 2.0, "2", 1):
@@ -384,6 +399,16 @@ class RedditJsonExportTest(unittest.TestCase):
         payload = valid_payload()
         payload["comments"][1]["id"] = "t1_rOoT1"
         self.assert_invalid(payload)
+
+    def test_rejects_comment_id_matching_post_after_normalization(self) -> None:
+        payload = valid_payload()
+        payload["comments"][0]["id"] = "T1_aBc123"
+
+        with self.assertRaisesRegex(
+            RedditJsonError,
+            r"^comment item 1 ID matches post ID$",
+        ):
+            parse_reddit_json(self.write_payload(payload))
 
     def test_rejects_missing_parent(self) -> None:
         payload = valid_payload()

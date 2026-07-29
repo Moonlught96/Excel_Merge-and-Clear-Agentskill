@@ -487,6 +487,110 @@ class RedditOutputTests(unittest.TestCase):
         self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), csv_rows[0])
         self.assertEqual("12", csv_rows[1][like_count_column])
 
+    def test_json_text_xlsx_applies_readable_layout_only_for_json_headers(
+        self,
+    ) -> None:
+        json_path = self.directory / "export.json"
+        page_text_path = self.directory / "page.txt"
+        json_path.write_text("{}", encoding="utf-8")
+        page_text_path.write_text("page", encoding="utf-8")
+        rows = [
+            self.json_text_row(
+                **{
+                    "\u8bb0\u5f55\u7c7b\u578b": "\u4e3b\u5e16",
+                    "\u6807\u9898": "Readable JSON title",
+                    "\u5185\u5bb9": "Readable JSON content",
+                }
+            )
+        ]
+
+        write_outputs(
+            rows,
+            headers=JSON_TEXT_OUTPUT_HEADERS,
+            input_paths=(json_path, page_text_path),
+            output_xlsx=self.output_xlsx,
+            output_csv=self.output_csv,
+            overwrite=False,
+        )
+
+        sheet = load_workbook(self.output_xlsx, data_only=False).active
+        title_column = JSON_TEXT_OUTPUT_HEADERS.index("\u6807\u9898") + 1
+        content_column = JSON_TEXT_OUTPUT_HEADERS.index("\u5185\u5bb9") + 1
+        self.assertEqual("A2", sheet.freeze_panes)
+        self.assertEqual(
+            [11, 34, 18, 16, 64, 10, 14, 8, 10, 16, 16],
+            [
+                sheet.column_dimensions[
+                    sheet.cell(1, column_number).column_letter
+                ].width
+                for column_number in range(1, len(JSON_TEXT_OUTPUT_HEADERS) + 1)
+            ],
+        )
+        for column in (title_column, content_column):
+            cell = sheet.cell(2, column)
+            self.assertTrue(cell.alignment.wrap_text)
+            self.assertEqual("top", cell.alignment.vertical)
+        header = sheet.cell(1, 1)
+        self.assertTrue(header.font.bold)
+        self.assertIsNotNone(header.fill.fill_type)
+        self.assertEqual("center", header.alignment.horizontal)
+        self.assertEqual("center", header.alignment.vertical)
+        self.assertTrue(header.alignment.wrap_text)
+        self.assertEqual("thin", header.border.bottom.style)
+        self.assertEqual(24, sheet.row_dimensions[2].height)
+
+        free_xlsx = self.directory / "free-output.xlsx"
+        free_csv = self.directory / "free-output.csv"
+        write_outputs(
+            [self.row()],
+            headers=OUTPUT_HEADERS,
+            input_paths=(self.input_csv, self.input_html),
+            output_xlsx=free_xlsx,
+            output_csv=free_csv,
+            overwrite=False,
+        )
+
+        self.assertIsNone(load_workbook(free_xlsx, data_only=False).active.freeze_panes)
+
+    def test_json_text_xlsx_sizes_multiline_wide_content_for_every_paragraph(
+        self,
+    ) -> None:
+        json_path = self.directory / "export.json"
+        page_text_path = self.directory / "page.txt"
+        json_path.write_text("{}", encoding="utf-8")
+        page_text_path.write_text("page", encoding="utf-8")
+        content = "\n\n".join("甲" * 64 for _ in range(8))
+
+        write_outputs(
+            [self.json_text_row(**{"\u5185\u5bb9": content})],
+            headers=JSON_TEXT_OUTPUT_HEADERS,
+            input_paths=(json_path, page_text_path),
+            output_xlsx=self.output_xlsx,
+            output_csv=self.output_csv,
+            overwrite=False,
+        )
+
+        sheet = load_workbook(self.output_xlsx, data_only=False).active
+        self.assertEqual(345, sheet.row_dimensions[2].height)
+
+    def test_json_text_xlsx_caps_row_height_for_very_long_content(self) -> None:
+        json_path = self.directory / "export.json"
+        page_text_path = self.directory / "page.txt"
+        json_path.write_text("{}", encoding="utf-8")
+        page_text_path.write_text("page", encoding="utf-8")
+
+        write_outputs(
+            [self.json_text_row(**{"\u5185\u5bb9": "\n".join("甲" * 64 for _ in range(40))})],
+            headers=JSON_TEXT_OUTPUT_HEADERS,
+            input_paths=(json_path, page_text_path),
+            output_xlsx=self.output_xlsx,
+            output_csv=self.output_csv,
+            overwrite=False,
+        )
+
+        sheet = load_workbook(self.output_xlsx, data_only=False).active
+        self.assertEqual(409.5, sheet.row_dimensions[2].height)
+
     def test_exact_xlsx_integer_boundaries_round_trip_in_both_outputs(self) -> None:
         maximum = 2**53 - 1
         minimum = -maximum
@@ -1097,10 +1201,46 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
             "post": {"id": "p1", "subreddit": "python", "title": "SECRET-TITLE",
                      "content": "SECRET-BODY", "author": "SECRET-AUTHOR", "num_comments": 3},
             "comments": [
-                {"id": "c1", "parent_id": "p1", "content": content, "depth": 0,
+                {"id": "privacyrootq7w9", "parent_id": "p1", "content": content, "depth": 0,
                  "username": "alpha", "date": "exact-time-1", "created_utc": 1},
-                {"id": "c2", "parent_id": "c1", "content": "SECRET-COMMENT-2", "depth": 1,
+                {"id": "privacyreplyk4m8", "parent_id": "privacyrootq7w9",
+                 "content": "SECRET-COMMENT-2", "depth": 1,
                  "username": "beta", "date": "exact-time-2", "created_utc": 2},
+            ],
+        }
+        self.json_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def write_normalized_post_comment_id_collision_json(self) -> None:
+        collision_id = "collisionpostq9w7"
+        payload = {
+            "meta": {
+                "completeness": "complete",
+                "collectedCommentCount": 1,
+                "reportedByApi": 1,
+                "discrepancy": 0,
+                "failedMore": 0,
+                "failedNodes": [],
+                "failedReasons": [],
+                "failedDetails": [],
+            },
+            "post": {
+                "id": collision_id,
+                "subreddit": "python",
+                "title": "COLLISION-SECRET-TITLE",
+                "content": "COLLISION-SECRET-BODY",
+                "author": "COLLISION-SECRET-AUTHOR",
+                "num_comments": 1,
+            },
+            "comments": [
+                {
+                    "id": "T1_CollisionPostQ9W7",
+                    "parent_id": "T3_collisionpostq9w7",
+                    "content": "COLLISION-SECRET-COMMENT",
+                    "depth": 0,
+                    "username": "COLLISION-SECRET-COMMENTER",
+                    "date": "collision-secret-time",
+                    "created_utc": 1,
+                },
             ],
         }
         self.json_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -1235,6 +1375,120 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
             "\u8f6c\u5230\u8bc4\u8bba", "\u8bc4\u8bba\u533a\u57df", *comments,
         )), encoding="utf-8")
 
+    def write_json_primary_fixture(self) -> None:
+        payload = {
+            "meta": {
+                "completeness": "complete",
+                "collectedCommentCount": 3,
+                "reportedByApi": 3,
+                "discrepancy": 0,
+                "failedMore": 0,
+                "failedNodes": [],
+                "failedReasons": [],
+                "failedDetails": [],
+            },
+            "post": {
+                "id": "jsonprimarypost",
+                "subreddit": "python",
+                "title": "CLI-SECRET-TITLE",
+                "content": "CLI-SECRET-BODY",
+                "author": "cli-secret-author",
+                "num_comments": 3,
+            },
+            "comments": [
+                {
+                    "id": "jsonprimaryid1",
+                    "parent_id": "jsonprimarypost",
+                    "content": "CLI-SECRET-COMMENT-1",
+                    "depth": 0,
+                    "username": "cli-secret-commenter-1",
+                    "date": "cli-secret-time-1",
+                    "created_utc": 1,
+                },
+                {
+                    "id": "jsonprimaryid2",
+                    "parent_id": "jsonprimarypost",
+                    "content": "CLI-SECRET-COMMENT-2",
+                    "depth": 0,
+                    "username": "cli-secret-commenter-2",
+                    "date": "cli-secret-time-2",
+                    "created_utc": 2,
+                },
+                {
+                    "id": "jsonprimaryid3",
+                    "parent_id": "jsonprimarypost",
+                    "content": "CLI-SECRET-COMMENT-3",
+                    "depth": 0,
+                    "username": "cli-secret-commenter-3",
+                    "date": "cli-secret-time-3",
+                    "created_utc": 3,
+                },
+            ],
+        }
+        self.json_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        def block(content: str, score_lines: tuple[str, ...]) -> str:
+            return "\n".join((
+                "page-author", "\u20228\u5c0f\u65f6\u524d", content, "", *score_lines,
+                "\u53cd\u5bf9", "\u56de\u590d", "\u5956\u52b1", "\u5206\u4eab",
+            ))
+
+        self.page_text_path.write_text("\n".join((
+            "Reddit", "r/python", "cli-secret-author", "8\u5c0f\u65f6\u524d", "CLI-SECRET-TITLE",
+            "\u6b63\u6587", "\u8d5e\u540c", "999", "\u53cd\u5bf9", "3", "\u8f6c\u5230\u8bc4\u8bba", "\u8bc4\u8bba\u533a\u57df",
+            block("CLI-SECRET-COMMENT-1", ("\u8d5e\u540c", "12")),
+            block("CLI-SECRET-COMMENT-2", ("\u8d5e\u540c\u6295\u7968",)),
+        )), encoding="utf-8")
+
+    def write_json_primary_high_count_fixture(self) -> None:
+        comments = [
+            {
+                "id": f"highid{i:03d}",
+                "parent_id": "highpostid",
+                "content": f"HIGH-COMMENT-{i:03d}",
+                "depth": 0,
+                "username": f"high-author-{i:03d}",
+                "date": f"high-time-{i:03d}",
+                "created_utc": i,
+            }
+            for i in range(150)
+        ]
+        payload = {
+            "meta": {
+                "completeness": "complete",
+                "collectedCommentCount": 150,
+                "reportedByApi": 150,
+                "discrepancy": 0,
+                "failedMore": 0,
+                "failedNodes": [],
+                "failedReasons": [],
+                "failedDetails": [],
+            },
+            "post": {
+                "id": "highpostid",
+                "subreddit": "python",
+                "title": "HIGH-POST-TITLE",
+                "content": "HIGH-POST-BODY",
+                "author": "high-poster",
+                "num_comments": 150,
+            },
+            "comments": comments,
+        }
+        self.json_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        def block(content: str, score_lines: tuple[str, ...]) -> str:
+            return "\n".join((
+                "page-author", "\u20228\u5c0f\u65f6\u524d", content, "", *score_lines,
+                "\u53cd\u5bf9", "\u56de\u590d", "\u5956\u52b1", "\u5206\u4eab",
+            ))
+
+        self.page_text_path.write_text("\n".join((
+            "Reddit", "r/python", "high-poster", "8\u5c0f\u65f6\u524d", "HIGH-POST-TITLE",
+            "\u6b63\u6587", "\u8d5e\u540c", "999", "\u53cd\u5bf9", "150", "\u8f6c\u5230\u8bc4\u8bba", "\u8bc4\u8bba\u533a\u57df",
+            block("HIGH-COMMENT-000", ("\u8d5e\u540c", "12")),
+            block("HIGH-COMMENT-001", ("\u8d5e\u540c\u6295\u7968",)),
+        )), encoding="utf-8")
+
     def write_nested_json(self) -> None:
         payload = {
             "meta": {"completeness": "complete", "collectedCommentCount": 3,
@@ -1300,8 +1554,8 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
             "SECRET-BODY",
             "SECRET-AUTHOR",
             "SECRET-COMMENT",
-            "c1",
-            "c2",
+            "privacyrootq7w9",
+            "privacyreplyk4m8",
             *page_only_secrets,
         ):
             self.assertNotIn(secret, completed.stdout + completed.stderr)
@@ -1345,8 +1599,8 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
             "SECRET-BODY",
             "SECRET-AUTHOR",
             "SECRET-COMMENT",
-            "c1",
-            "c2",
+            "privacyrootq7w9",
+            "privacyreplyk4m8",
         ):
             self.assertNotIn(secret, completed.stdout + completed.stderr)
         sheet = load_workbook(self.output_xlsx, data_only=False).active
@@ -1356,8 +1610,89 @@ class RedditJsonPageTextCliTests(unittest.TestCase):
         comment_id_column = JSON_TEXT_OUTPUT_HEADERS.index("\u8bc4\u8bbaID") + 1
         self.assertEqual(99, sheet.cell(2, like_count_column).value)
         self.assertEqual(2, sheet.cell(2, reply_count_column).value)
-        self.assertEqual("c2", sheet.cell(4, comment_id_column).value)
+        self.assertEqual("privacyreplyk4m8", sheet.cell(4, comment_id_column).value)
         self.assertIsNone(sheet.cell(4, like_count_column).value)
+
+    def test_json_primary_page_metrics_writes_all_json_comments_and_aggregate_diagnostics(
+        self,
+    ) -> None:
+        self.write_json_primary_fixture()
+
+        completed = self.run_cli("--json-primary-page-metrics")
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        for diagnostic in (
+            "JSON-primary page metrics mode: enabled",
+            "JSON comment count: 3",
+            "Page operation block count: 2",
+            "Page parseable metric block count: 2",
+            "Unique body score mapping count: 1",
+            "Unmatched JSON comment count: 1",
+            "Ambiguous body match count: 0",
+            "Unavailable page score count: 1",
+            "Unavailable reported comment gap: 0",
+        ):
+            self.assertIn(diagnostic, completed.stdout)
+        for protected in (
+            "CLI-SECRET-TITLE",
+            "CLI-SECRET-BODY",
+            "cli-secret-author",
+            "CLI-SECRET-COMMENT",
+            "jsonprimaryid",
+        ):
+            self.assertNotIn(protected, completed.stdout + completed.stderr)
+        sheet = load_workbook(self.output_xlsx, data_only=False).active
+        self.assertEqual(list(JSON_TEXT_OUTPUT_HEADERS), list(next(sheet.values)))
+        score_column = JSON_TEXT_OUTPUT_HEADERS.index("\u70b9\u8d5e\u6570") + 1
+        comment_id_column = JSON_TEXT_OUTPUT_HEADERS.index("\u8bc4\u8bbaID") + 1
+        self.assertEqual(
+            ["jsonprimaryid1", "jsonprimaryid2", "jsonprimaryid3"],
+            [sheet.cell(row, comment_id_column).value for row in range(3, 6)],
+        )
+        self.assertEqual(12, sheet.cell(3, score_column).value)
+        self.assertIsNone(sheet.cell(4, score_column).value)
+        self.assertIsNone(sheet.cell(5, score_column).value)
+        sheet.parent.close()
+
+    def test_json_primary_page_metrics_keeps_all_json_comments_and_preserves_conflicts(
+        self,
+    ) -> None:
+        self.write_json_primary_high_count_fixture()
+
+        completed = self.run_cli("--json-primary-page-metrics")
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        workbook = load_workbook(self.output_xlsx, data_only=False)
+        sheet = workbook.active
+        score_column = JSON_TEXT_OUTPUT_HEADERS.index("\u70b9\u8d5e\u6570") + 1
+        self.assertEqual(152, sheet.max_row)
+        self.assertEqual(12, sheet.cell(3, score_column).value)
+        self.assertIsNone(sheet.cell(4, score_column).value)
+        self.assertIsNone(sheet.cell(152, score_column).value)
+        workbook.close()
+
+        self.output_xlsx.write_text("occupied", encoding="utf-8")
+        self.output_csv.unlink()
+        conflict = self.run_cli("--json-primary-page-metrics")
+
+        self.assertNotEqual(0, conflict.returncode)
+        self.assertEqual(b"occupied", self.output_xlsx.read_bytes())
+        self.assertFalse(self.output_csv.exists())
+
+    def test_normalized_post_comment_id_collision_fails_without_artifacts(
+        self,
+    ) -> None:
+        self.write_normalized_post_comment_id_collision_json()
+        self.write_page()
+
+        completed = self.run_cli()
+
+        self.assert_safe_failure(
+            completed,
+            "COLLISION-SECRET",
+            "collisionpostq9w7",
+        )
+        self.assertIn("comment item 1 ID matches post ID", completed.stderr)
 
     def test_json_page_text_nested_thread_writes_matching_post_first_files(self) -> None:
         self.write_nested_json()

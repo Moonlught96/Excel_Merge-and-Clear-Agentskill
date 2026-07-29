@@ -13,10 +13,13 @@ from tools.reddit_json_export import (
 )
 from tools.reddit_page_text import (
     PageCommentMetric,
+    PageMetricCandidate,
+    RedditPageMetricSnapshot,
     RedditPageText,
     RedditPageTextError,
     normalize_author,
     normalize_content,
+    parse_reddit_page_metrics,
     parse_reddit_page_text,
 )
 
@@ -278,6 +281,149 @@ class RedditPageTextTest(unittest.TestCase):
         )
         self.assertEqual([3, None], [item.score for item in result.comments])
         self.assertEqual((), result.excluded_comment_ids)
+
+    def test_metrics_mode_keeps_a_valid_body_when_score_is_unavailable(self) -> None:
+        export = self.export_for_comments()
+        page = PAGE_PREFIX + FIRST_COMMENT + SECOND_COMMENT
+
+        snapshot = parse_reddit_page_metrics(self.write_text(page), export)
+
+        self.assertEqual(2, snapshot.operation_block_count)
+        self.assertEqual(2, snapshot.parseable_block_count)
+        self.assertEqual(
+            (
+                PageMetricCandidate(
+                    normalize_content(
+                        "Wallpaper from **[Basic Apple Guy](https://example.com)** &amp; friends"
+                    ),
+                    3,
+                ),
+                PageMetricCandidate(normalize_content("What monitor? 🤔"), None),
+            ),
+            snapshot.candidates,
+        )
+
+    def test_metrics_mode_keeps_body_with_duplicate_score_as_unavailable(self) -> None:
+        page = PAGE_PREFIX + FIRST_COMMENT.replace(
+            "\u8d5e\u540c\n3\n\u53cd\u5bf9",
+            "\u8d5e\u540c\n3\n\u8d5e\u540c\n4\n\u53cd\u5bf9",
+        )
+
+        snapshot = parse_reddit_page_metrics(self.write_text(page), self.export_for_comments())
+
+        self.assertEqual(1, snapshot.parseable_block_count)
+        self.assertEqual(
+            PageMetricCandidate(
+                normalize_content(
+                    "Wallpaper from **[Basic Apple Guy](https://example.com)** &amp; friends"
+                ),
+                None,
+            ),
+            snapshot.candidates[0],
+        )
+
+    def test_metrics_mode_keeps_body_with_unsupported_score_as_unavailable(self) -> None:
+        page = PAGE_PREFIX + FIRST_COMMENT.replace("\u8d5e\u540c\n3", "\u8d5e\u540c\n1.2K")
+
+        snapshot = parse_reddit_page_metrics(self.write_text(page), self.export_for_comments())
+
+        self.assertEqual(1, snapshot.parseable_block_count)
+        self.assertEqual(
+            PageMetricCandidate(
+                normalize_content(
+                    "Wallpaper from **[Basic Apple Guy](https://example.com)** &amp; friends"
+                ),
+                None,
+            ),
+            snapshot.candidates[0],
+        )
+
+    def test_metrics_mode_keeps_standalone_vote_label_in_body(self) -> None:
+        page = PAGE_PREFIX + FIRST_COMMENT.replace(
+            "&amp; friends\n\n\u8d5e\u540c\n3",
+            "&amp; friends\n\u8d5e\u540c\n\n\u8d5e\u540c\n3",
+        )
+
+        snapshot = parse_reddit_page_metrics(self.write_text(page), self.export_for_comments())
+
+        self.assertEqual(
+            PageMetricCandidate(
+                normalize_content(
+                    "Wallpaper from **[Basic Apple Guy](https://example.com)** &amp; friends\n赞同"
+                ),
+                3,
+            ),
+            snapshot.candidates[0],
+        )
+
+    def test_metrics_mode_keeps_body_with_earlier_score_before_no_score_display(
+        self,
+    ) -> None:
+        page = PAGE_PREFIX + FIRST_COMMENT.replace(
+            "\u8d5e\u540c\n3\n\u53cd\u5bf9",
+            "\u8d5e\u540c\n3\n\u8d5e\u540c\u6295\u7968\n\u53cd\u5bf9",
+        )
+
+        snapshot = parse_reddit_page_metrics(self.write_text(page), self.export_for_comments())
+
+        self.assertEqual(
+            PageMetricCandidate(
+                normalize_content(
+                    "Wallpaper from **[Basic Apple Guy](https://example.com)** &amp; friends"
+                ),
+                None,
+            ),
+            snapshot.candidates[0],
+        )
+
+    def test_metrics_mode_keeps_comment_after_collapsed_automoderator_banner(self) -> None:
+        page = PAGE_PREFIX + COLLAPSED_AUTOMODERATOR_BANNER + FIRST_COMMENT + SECOND_COMMENT
+
+        snapshot = parse_reddit_page_metrics(
+            self.write_text(page), self.export_for_collapsed_automoderator_banner()
+        )
+
+        self.assertEqual(2, snapshot.parseable_block_count)
+        self.assertEqual([3, None], [candidate.score for candidate in snapshot.candidates])
+
+    def test_metrics_mode_does_not_use_comment_author_or_json_order(self) -> None:
+        export = replace(
+            self.export_for_comments(),
+            comments=tuple(reversed(self.export_for_comments().comments)),
+        )
+        page = (PAGE_PREFIX + FIRST_COMMENT + SECOND_COMMENT).replace(
+            "AutoModerator", "wrong-page-author", 1
+        )
+
+        snapshot = parse_reddit_page_metrics(self.write_text(page), export)
+
+        self.assertEqual(2, snapshot.parseable_block_count)
+        self.assertEqual([3, None], [candidate.score for candidate in snapshot.candidates])
+
+    def test_metrics_mode_ignores_malformed_closed_block_but_strict_mode_rejects(
+        self,
+    ) -> None:
+        export = self.export_for_comments()
+        malformed = "\n".join(
+            (
+                "broken-user",
+                "•8小时前",
+                "Broken body",
+                "",
+                "赞同",
+                "7",
+                "回复",
+                "分享",
+            )
+        ) + "\n"
+        page = PAGE_PREFIX + FIRST_COMMENT + malformed + SECOND_COMMENT
+
+        with self.assertRaisesRegex(RedditPageTextError, "comment"):
+            parse_reddit_page_text(self.write_text(page), export)
+
+        snapshot = parse_reddit_page_metrics(self.write_text(page), export)
+        self.assertEqual(3, snapshot.operation_block_count)
+        self.assertEqual(2, snapshot.parseable_block_count)
 
     def test_excludes_exact_collapsed_automoderator_banner_at_comment_area_start(
         self,

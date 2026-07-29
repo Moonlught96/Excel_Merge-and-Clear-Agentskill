@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+import subprocess
+import sys
+import textwrap
 import unittest
 from dataclasses import replace
 
@@ -11,12 +15,97 @@ from tools.reddit_json_export import (
 )
 from tools.reddit_json_text_merge import (
     JSON_TEXT_OUTPUT_HEADERS,
+    match_json_primary_page_scores,
+    reconstruct_json_primary_page_rows,
     reconstruct_json_text_rows,
 )
-from tools.reddit_page_text import PageCommentMetric, RedditPageText
+from tools.reddit_page_text import (
+    PageCommentMetric,
+    PageMetricCandidate,
+    RedditPageMetricSnapshot,
+    RedditPageText,
+    normalize_content,
+)
 
 
 class RedditJsonTextMergeTests(unittest.TestCase):
+    def test_json_primary_maps_only_one_to_one_numeric_bodies(self) -> None:
+        export = RedditJsonExport(
+            RedditMeta(4, 6, 2),
+            RedditPost("p1", "desksetup", "Title", "Body", "poster", 6),
+            (
+                RedditJsonComment("c1", "p1", "Unique", 0, "a", "t1", 1),
+                RedditJsonComment("c2", "c1", "Unavailable", 1, "b", "t2", 2),
+                RedditJsonComment("c3", "p1", "Duplicate", 0, "c", "t3", 3),
+                RedditJsonComment("c4", "p1", "Duplicate", 0, "d", "t4", 4),
+            ),
+        )
+        page = RedditPageMetricSnapshot(
+            "8 hours ago",
+            99,
+            6,
+            4,
+            4,
+            (
+                PageMetricCandidate(normalize_content("Unique"), 7),
+                PageMetricCandidate(normalize_content("Unavailable"), None),
+                PageMetricCandidate(normalize_content("Duplicate"), 2),
+                PageMetricCandidate(normalize_content("Duplicate"), 3),
+            ),
+        )
+
+        match = match_json_primary_page_scores(export, page)
+        rows = reconstruct_json_primary_page_rows(export, page, match)
+
+        self.assertEqual({"c1": 7}, match.scores_by_comment_id)
+        self.assertEqual(1, match.unique_score_mapping_count)
+        self.assertEqual(0, match.unmatched_json_comment_count)
+        self.assertEqual(2, match.ambiguous_body_match_count)
+        self.assertEqual(1, match.unavailable_page_score_count)
+        self.assertEqual(
+            ["p1", "c1", "c2", "c3", "c4"],
+            [row[JSON_TEXT_OUTPUT_HEADERS[9]] for row in rows],
+        )
+        self.assertEqual(
+            [7, "", "", ""],
+            [row[JSON_TEXT_OUTPUT_HEADERS[5]] for row in rows[1:]],
+        )
+        self.assertEqual(
+            [1, 0, 0, 0],
+            [row[JSON_TEXT_OUTPUT_HEADERS[6]] for row in rows[1:]],
+        )
+        self.assertEqual(6, rows[0][JSON_TEXT_OUTPUT_HEADERS[6]])
+
+    def test_json_primary_classifies_no_page_candidates_as_unmatched(self) -> None:
+        export = RedditJsonExport(
+            RedditMeta(2, 3, 0),
+            RedditPost("p1", "desksetup", "Title", "Body", "poster", 3),
+            (
+                RedditJsonComment("c1", "p1", "First", 0, "a", "t1", 1),
+                RedditJsonComment("c2", "p1", "Second", 0, "b", "t2", 2),
+            ),
+        )
+        page = RedditPageMetricSnapshot("8 hours ago", 99, 3, 0, 0, ())
+
+        match = match_json_primary_page_scores(export, page)
+        rows = reconstruct_json_primary_page_rows(export, page, match)
+
+        self.assertEqual({}, match.scores_by_comment_id)
+        self.assertEqual(0, match.unique_score_mapping_count)
+        self.assertEqual(2, match.unmatched_json_comment_count)
+        self.assertEqual(0, match.ambiguous_body_match_count)
+        self.assertEqual(0, match.unavailable_page_score_count)
+        self.assertEqual(
+            len(export.comments),
+            match.unique_score_mapping_count
+            + match.unmatched_json_comment_count
+            + match.ambiguous_body_match_count
+            + match.unavailable_page_score_count,
+        )
+        self.assertEqual(
+            ["", ""],
+            [row[JSON_TEXT_OUTPUT_HEADERS[5]] for row in rows[1:]],
+        )
     def fixture(self) -> tuple[RedditJsonExport, RedditPageText]:
         export = RedditJsonExport(
             meta=RedditMeta(2, 2, 0),
@@ -86,6 +175,42 @@ class RedditJsonTextMergeTests(unittest.TestCase):
 
         comments = rows[1:]
         self.assertEqual([2, 1, 0, 0], [row["评论/回复数"] for row in comments])
+
+    def test_descendant_counting_rejects_cyclic_in_memory_graph(self) -> None:
+        script = textwrap.dedent(
+            """
+            from tools.reddit_json_export import RedditJsonComment
+            from tools.reddit_json_text_merge import _all_descendant_counts
+
+            comments = (
+                RedditJsonComment(
+                    "cycleidq7w9",
+                    "cycleidq7w9",
+                    "body",
+                    0,
+                    "author",
+                    "time",
+                    1,
+                ),
+            )
+            try:
+                _all_descendant_counts(comments)
+            except ValueError:
+                raise SystemExit(0)
+            raise SystemExit(1)
+            """
+        )
+
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path.cwd(),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=2,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
 
     def test_emits_post_row_when_json_has_no_comments(self) -> None:
         export = RedditJsonExport(

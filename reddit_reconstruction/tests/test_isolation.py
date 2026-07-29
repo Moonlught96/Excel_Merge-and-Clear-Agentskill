@@ -21,6 +21,16 @@ class RedditPackageIsolationTests(unittest.TestCase):
         self.assertNotIn("from skills.", source)
         self.assertNotIn("import skills.", source)
 
+    def test_primary_package_does_not_reference_generic_cleaning_workflow(
+        self,
+    ) -> None:
+        for source_path in Path(reddit_reconstruction.__file__).parent.glob("*.py"):
+            with self.subTest(source_path=source_path.name):
+                source = source_path.read_text(encoding="utf-8")
+                self.assertNotIn("product-user-comment-data-merge-cleaning", source)
+                self.assertNotIn("clean_excel_comments", source)
+                self.assertNotIn("standardize_excel_headers", source)
+
 
 class LegacyWrapperCompatibilityTests(unittest.TestCase):
     legacy_tools_directory = Path(__file__).resolve().parents[2] / "tools"
