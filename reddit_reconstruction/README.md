@@ -18,7 +18,7 @@ Both output files use these 11 columns, in this order:
 10. `评论ID`
 11. `父ID`
 
-JSON is the source of truth for post and comment identity, comment order, hierarchy, comment text, and reported comment total. In JSON-primary page-metrics mode, copied page text supplements the first post row with its displayed post time, post score, and reported comment count, while JSON continues to control identity and structure. Copied page text can supply a comment score only when a normalized comment body occurs exactly once in JSON and exactly once on the page. A missing, ambiguous, or unavailable score is written as blank, never as zero.
+JSON controls post and comment identity, comment order, hierarchy, and comment text. In JSON-primary page-metrics mode, copied page text supplies the first post row's displayed post time, post score, and displayed comment count. JSON metadata `reportedByApi` is used only to calculate the reported-versus-collected gap; it does not supply the post-row comment count in this mode. Copied page text can supply a comment score only when a normalized comment body occurs exactly once in JSON and exactly once on the page. A missing, ambiguous, or unavailable score is written as blank, never as zero.
 
 The reported-versus-collected count gap is retained as `reportedByApi - collectedCommentCount`; it represents comments reported by Reddit but not collected in the JSON export. The module uses deterministic parsing and mapping rules only: it does not use AI to infer, alter, match, or remove content.
 
