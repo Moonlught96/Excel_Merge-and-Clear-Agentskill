@@ -50,6 +50,43 @@ class RedditMergeTests(unittest.TestCase):
 
         self.assertEqual("", row_for_unmatched_comment[JSON_TEXT_OUTPUT_HEADERS[5]])
 
+    def test_json_primary_leaves_duplicate_bodies_ambiguous_and_unmatched_bodies_blank(
+        self,
+    ) -> None:
+        export = RedditJsonExport(
+            RedditMeta(3, 3, 0),
+            RedditPost("postone", "python", "Title", "", "poster", 3),
+            (
+                RedditJsonComment("firstdup", "postone", "duplicate", 0, "a", "t1", 1),
+                RedditJsonComment("seconddup", "postone", "duplicate", 0, "b", "t2", 2),
+                RedditJsonComment("missing", "postone", "missing", 0, "c", "t3", 3),
+            ),
+        )
+        page = RedditPageMetricSnapshot(
+            "8 hours ago",
+            11,
+            3,
+            2,
+            2,
+            (
+                PageMetricCandidate(normalize_content("duplicate"), 7),
+                PageMetricCandidate(normalize_content("duplicate"), 8),
+            ),
+        )
+
+        match = match_json_primary_page_scores(export, page)
+        rows = reconstruct_json_primary_page_rows(export, page, match)
+
+        self.assertEqual({}, match.scores_by_comment_id)
+        self.assertEqual(0, match.unique_score_mapping_count)
+        self.assertEqual(2, match.ambiguous_body_match_count)
+        self.assertEqual(1, match.unmatched_json_comment_count)
+        self.assertEqual(0, match.unavailable_page_score_count)
+        self.assertEqual(
+            ["", "", ""],
+            [row[JSON_TEXT_OUTPUT_HEADERS[5]] for row in rows[1:]],
+        )
+
     def test_json_primary_preserves_comment_order_and_descendant_counts(self) -> None:
         export = self.export()
         page = RedditPageMetricSnapshot("8 hours ago", 11, 3, 0, 0, ())
@@ -69,3 +106,8 @@ class RedditMergeTests(unittest.TestCase):
             expected_comment_ids,
             [row[JSON_TEXT_OUTPUT_HEADERS[9]] for row in comment_rows],
         )
+        self.assertEqual("8 hours ago", rows[0][JSON_TEXT_OUTPUT_HEADERS[3]])
+        self.assertEqual(11, rows[0][JSON_TEXT_OUTPUT_HEADERS[5]])
+        self.assertEqual(3, rows[0][JSON_TEXT_OUTPUT_HEADERS[6]])
+        self.assertEqual("Title", rows[0][JSON_TEXT_OUTPUT_HEADERS[1]])
+        self.assertEqual("postone", rows[0][JSON_TEXT_OUTPUT_HEADERS[9]])

@@ -136,6 +136,7 @@ class RedditPackageCliTests(unittest.TestCase):
             ["postone", "rootone", "childone"],
             [row[9] for row in xlsx_rows[1:]],
         )
+        self.assertIsNone(xlsx_rows[3][5])
         self.assertEqual("", csv_rows[2][score_header])
         self.assertEqual(
             ["postone", "rootone", "childone"],
