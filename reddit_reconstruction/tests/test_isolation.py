@@ -7,8 +7,6 @@ import tempfile
 import unittest
 
 import reddit_reconstruction
-from tools.output_path_safety import OutputPathConflictError
-from tools import reconstruct_reddit_comments
 
 
 class RedditPackageIsolationTests(unittest.TestCase):
@@ -25,9 +23,18 @@ class RedditPackageIsolationTests(unittest.TestCase):
 
 
 class LegacyWrapperCompatibilityTests(unittest.TestCase):
+    legacy_tools_directory = Path(__file__).resolve().parents[2] / "tools"
+
+    @unittest.skipUnless(
+        legacy_tools_directory.is_dir(),
+        "legacy wrapper tests require the optional repository tools directory",
+    )
     def test_reconstruct_wrapper_translates_exposed_output_path_conflict(
         self,
     ) -> None:
+        from tools import reconstruct_reddit_comments
+        from tools.output_path_safety import OutputPathConflictError
+
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)
             input_path = directory / "input.json"
@@ -40,6 +47,10 @@ class LegacyWrapperCompatibilityTests(unittest.TestCase):
                     overwrite=False,
                 )
 
+    @unittest.skipUnless(
+        legacy_tools_directory.is_dir(),
+        "legacy wrapper tests require the optional repository tools directory",
+    )
     def test_reddit_reexport_wrappers_import_from_tools_directory(self) -> None:
         repo_root = Path(reddit_reconstruction.__file__).parent.parent
         tools_directory = repo_root / "tools"

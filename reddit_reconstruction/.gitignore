@@ -1,0 +1,5 @@
+__pycache__/
+.tmp-tests/
+outputs/
+*.xlsx
+*.csv
