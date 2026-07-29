@@ -11,7 +11,7 @@ import sys
 import unicodedata
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Iterable, Mapping, Protocol
 from uuid import uuid4
 
 from openpyxl import Workbook
@@ -247,7 +247,37 @@ def _required_post_value(html_value: str, fallback: str | None, field_name: str,
     raise ValueError(f"Missing required post field {field_name}; explicit CLI value {cli_name} is needed")
 
 
-def reconstruct_rows(free: FreeRedditExport, html: SavedRedditHtml, *, post_author: str | None = None, post_score: str | None = None, post_comment_count: str | None = None) -> list[dict[str, str | int]]:
+class _LegacyFreeComment(Protocol):
+    author: str
+    comment: str
+    comment_id: str
+    comment_url: str
+    time: str
+
+
+class _LegacyHtmlComment(Protocol):
+    parent_id: str
+    score: str | int
+    thread_level: int | None
+
+
+class _LegacyFreeExport(Protocol):
+    body: str
+    comments: Iterable[_LegacyFreeComment]
+    post_id: str
+    title: str
+    url: str
+
+
+class _LegacySavedHtml(Protocol):
+    comments: Mapping[str, _LegacyHtmlComment]
+    post_author: str
+    post_comment_count: str
+    post_id: str
+    post_score: str
+
+
+def reconstruct_rows(free: _LegacyFreeExport, html: _LegacySavedHtml, *, post_author: str | None = None, post_score: str | None = None, post_comment_count: str | None = None) -> list[dict[str, str | int]]:
     if free.post_id != html.post_id:
         raise ValueError(f"Reddit post ID mismatch: free CSV {free.post_id!r}, saved HTML {html.post_id!r}")
     resolved_post_author = _required_post_value(html.post_author, post_author, "Post Author", "post_author")

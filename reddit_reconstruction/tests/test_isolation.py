@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 import subprocess
 import sys
@@ -9,27 +10,64 @@ import unittest
 import reddit_reconstruction
 
 
+def _production_module_paths(source_root: Path) -> tuple[Path, ...]:
+    return tuple(
+        source_path
+        for source_path in source_root.rglob("*.py")
+        if "tests" not in source_path.relative_to(source_root).parts
+    )
+
+
+def _imported_modules(source_path: Path) -> tuple[str, ...]:
+    parsed = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+    imported_modules: list[str] = []
+    for node in ast.walk(parsed):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.append(node.module)
+        elif isinstance(node, ast.Import):
+            imported_modules.extend(alias.name for alias in node.names)
+    return tuple(imported_modules)
+
+
 class RedditPackageIsolationTests(unittest.TestCase):
     def test_primary_package_has_no_tools_or_skills_imports(self) -> None:
         source_root = Path(reddit_reconstruction.__file__).parent
-        source = "\n".join(
-            item.read_text(encoding="utf-8")
-            for item in source_root.glob("*.py")
-        )
-        self.assertNotIn("from tools.", source)
-        self.assertNotIn("import tools.", source)
-        self.assertNotIn("from skills.", source)
-        self.assertNotIn("import skills.", source)
+        for source_path in _production_module_paths(source_root):
+            with self.subTest(source_path=source_path.relative_to(source_root)):
+                imported_modules = _imported_modules(source_path)
+                self.assertFalse(
+                    any(module == "tools" or module.startswith("tools.") for module in imported_modules),
+                )
+                self.assertFalse(
+                    any(module == "skills" or module.startswith("skills.") for module in imported_modules),
+                )
 
     def test_primary_package_does_not_reference_generic_cleaning_workflow(
         self,
     ) -> None:
-        for source_path in Path(reddit_reconstruction.__file__).parent.glob("*.py"):
+        source_root = Path(reddit_reconstruction.__file__).parent
+        for source_path in _production_module_paths(source_root):
             with self.subTest(source_path=source_path.name):
                 source = source_path.read_text(encoding="utf-8")
                 self.assertNotIn("product-user-comment-data-merge-cleaning", source)
                 self.assertNotIn("clean_excel_comments", source)
                 self.assertNotIn("standardize_excel_headers", source)
+
+    def test_production_module_paths_recurse_and_exclude_tests(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            source_root = Path(temporary_directory)
+            (source_root / "nested").mkdir()
+            (source_root / "tests").mkdir()
+            (source_root / "root.py").write_text("", encoding="utf-8")
+            (source_root / "nested" / "module.py").write_text("", encoding="utf-8")
+            (source_root / "tests" / "test_module.py").write_text("", encoding="utf-8")
+
+            modules = _production_module_paths(source_root)
+
+        self.assertEqual(
+            {Path("root.py"), Path("nested/module.py")},
+            {module.relative_to(source_root) for module in modules},
+        )
 
 
 class LegacyWrapperCompatibilityTests(unittest.TestCase):

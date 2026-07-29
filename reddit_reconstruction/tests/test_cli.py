@@ -6,14 +6,22 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import typing
 import unittest
 
 from openpyxl import load_workbook
 
 from reddit_reconstruction.merge import JSON_TEXT_OUTPUT_HEADERS
+from reddit_reconstruction import cli
 
 
 class RedditPackageCliTests(unittest.TestCase):
+    def test_reconstruct_rows_type_hints_are_resolvable(self) -> None:
+        hints = typing.get_type_hints(cli.reconstruct_rows)
+
+        self.assertIn("free", hints)
+        self.assertIn("html", hints)
+
     def test_json_primary_cli_writes_post_before_all_json_comments(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as temporary_directory:
