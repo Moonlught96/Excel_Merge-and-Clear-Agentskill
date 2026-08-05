@@ -100,7 +100,10 @@ CHINESE_HELPFUL_COUNT_PATTERN = re.compile(
     r"^\s*(?P<count>\d+)\s*个人发现此评论有用\s*$"
 )
 RELATIVE_COUNT_PATTERN = r"\d+|[一二两三四五六七八九十]+"
-EDITED_PLATFORM_DATE_SUFFIX_PATTERN = re.compile(r"\s+\(edited\)\s*$", re.IGNORECASE)
+EDITED_PLATFORM_DATE_SUFFIX_PATTERN = re.compile(
+    r"(?:\s+\(edited\)|\s*（修改过）)\s*$",
+    re.IGNORECASE,
+)
 PLATFORM_DATETIME_HEADERS = (
     "评论日期",
     "评论时间",
@@ -148,6 +151,34 @@ class UnsafeIdentityValueError(ValueError):
 
 
 UnsafeUserIdValueError = UnsafeIdentityValueError
+
+
+class ExternalStandardizerConfigError(ValueError):
+    pass
+
+
+def require_canonical_standardizer_config_path(config_path: Path) -> Path:
+    """Keep the public CLI on the reviewed standardizer configuration."""
+    configured_path = config_path.resolve()
+    canonical_path = DEFAULT_CONFIG_PATH.resolve()
+    if configured_path != canonical_path:
+        raise ExternalStandardizerConfigError(
+            "External or temporary standardizer configs are forbidden. "
+            f"Use the bundled canonical config only: {canonical_path}"
+        )
+    return canonical_path
+
+
+def require_canonical_hash_id_config_path(config_path: Path) -> Path:
+    """Keep the public CLI on the reviewed hash identity mapping configuration."""
+    configured_path = config_path.resolve()
+    canonical_path = DEFAULT_HASH_ID_CONFIG_PATH.resolve()
+    if configured_path != canonical_path:
+        raise ExternalStandardizerConfigError(
+            "External or temporary hash ID configs are forbidden. "
+            f"Use the bundled canonical config only: {canonical_path}"
+        )
+    return canonical_path
 
 
 @dataclass(frozen=True)
@@ -1012,6 +1043,7 @@ def standardize_workbook(
     )
 
     output_xlsx.parent.mkdir(parents=True, exist_ok=True)
+    reference_date = today if today is not None else current_beijing_date()
     effective_hash_config = hash_config if hash_config else load_hash_id_config()
     canonical_platform = (
         normalize_platform(platform, effective_hash_config)
@@ -1039,7 +1071,7 @@ def standardize_workbook(
                     source_sheet,
                     output_sheet,
                     config,
-                    today=today,
+                    today=reference_date,
                     platform=canonical_platform,
                     hash_context=hash_context,
                     hash_config=effective_hash_config,
@@ -1055,6 +1087,7 @@ def standardize_workbook(
     summary = {
         "input_path": str(input_path),
         "output_xlsx": str(output_xlsx),
+        "reference_date": reference_date.isoformat(),
         "sheets_processed": len(sheet_summaries),
         "data_rows_written": sum(
             sheet.data_rows_written for sheet in sheet_summaries
@@ -1146,7 +1179,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--config",
         type=Path,
         default=DEFAULT_CONFIG_PATH,
-        help="表头标准化配置文件",
+        help="仅接受 Skill 内置的正式表头标准化配置；外部或临时配置会被拒绝。",
     )
     parser.add_argument(
         "--output-dir",
@@ -1197,7 +1230,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--hash-config",
         type=Path,
         default=DEFAULT_HASH_ID_CONFIG_PATH,
-        help="哈希ID平台配置文件",
+        help="仅接受 Skill 内置的正式哈希ID配置；外部或临时配置会被拒绝。",
     )
     args = parser.parse_args(argv)
 
@@ -1225,6 +1258,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    canonical_config_path = require_canonical_standardizer_config_path(args.config)
+    canonical_hash_config_path = require_canonical_hash_id_config_path(args.hash_config)
     hash_context = None
     if args.project_name or args.project_id:
         project_store = ProjectStore(registry_root=args.project_store)
@@ -1238,12 +1273,12 @@ def main(argv: list[str] | None = None) -> int:
 
     result = standardize_workbook(
         input_path=args.input_path,
-        config=load_config(args.config),
+        config=load_config(canonical_config_path),
         output_dir=args.output_dir,
         output_path=args.output,
         platform=args.platform,
         hash_context=hash_context,
-        hash_config=load_hash_id_config(args.hash_config),
+        hash_config=load_hash_id_config(canonical_hash_config_path),
         product_name=args.product_name,
         overwrite=args.overwrite,
         overwrite_confirmations=tuple(args.confirm_overwrite),

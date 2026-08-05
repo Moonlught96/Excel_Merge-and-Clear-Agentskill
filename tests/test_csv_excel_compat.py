@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 from tools.csv_excel_compat import read_csv_rows
 
 
 class CsvExcelCompatTest(unittest.TestCase):
     def test_reads_utf16_csv_with_bom_without_type_inference(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-csv-utf16"
+        tmp = TEST_TEMP_ROOT / "case-csv-utf16"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "comments.csv"
         input_path.write_text(

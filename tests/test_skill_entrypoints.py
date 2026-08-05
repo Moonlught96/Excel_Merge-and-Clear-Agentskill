@@ -5,6 +5,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +40,7 @@ OVERWRITE_GUARDED_SCRIPTS = frozenset(
 
 class SkillEntrypointsTest(unittest.TestCase):
     def test_all_cli_entrypoints_start_from_an_isolated_skill_copy(self) -> None:
-        temp_root = PROJECT_ROOT / ".tmp-tests" / "standalone-entrypoints"
+        temp_root = TEST_TEMP_ROOT / "standalone-entrypoints"
         if temp_root.exists():
             shutil.rmtree(temp_root)
         copied_skill = temp_root / SKILL_NAME
@@ -70,6 +71,8 @@ class SkillEntrypointsTest(unittest.TestCase):
                 self.assertIn(b"--final-output", result.stdout)
             if script_name == "standardize_excel_headers.py":
                 self.assertIn(b"--confirm-project-key-creation", result.stdout)
+            if script_name == "output_file_naming.py":
+                self.assertIn(b"--x-data-type", result.stdout)
 
         shutil.rmtree(temp_root)
 

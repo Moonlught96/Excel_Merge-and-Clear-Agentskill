@@ -16,7 +16,7 @@
 
 本项目的基础清洗规则以 `skills/product-user-comment-data-merge-cleaning/` 中的 `SKILL.md`、`references/` 和 `config/` 为准。后续新增功能时，不得修改其中的基础规则；只有用户明确指出要修改某一条规则时，才允许同步修改 Skill、配置、代码和测试。
 
-执行防护为固定规则：`tools/clean_excel_comments.py` 的 CLI 只能读取其相对 Skill 或仓库内置的正式 `config/comment-cleaner.json`，禁止创建、复制、传入或恢复外部/临时清洗配置；公共清洗 CLI 必须显式传入 `--target-header 评论内容` 与已确认的非空 `--platform`，不得退回按第 3 列清洗。所有平台均执行正式配置中的 URL、链接类和其它固定清理词；当前没有平台专用清洗豁免。用户确认规则变更时必须更新正式根配置、Skill 配置、文档和测试。所有会写入文件的 CLI 在目标已存在时必须同时收到 `--overwrite` 和针对每个确切既有目标的 `--confirm-overwrite <路径>`，仅 `--overwrite` 不得覆盖。默认留存清理已经删除最终清洗文件的 `.deletions.csv` 或 `.summary.json` 后，任何脚本入口均不得在同一最终输出路径重新生成、复制恢复或借 `cleanup_intermediate_outputs.py --summary` 重建该日志；需要重新处理时只能使用新的、经用户确认的输出路径。
+执行防护为固定规则：`tools/clean_excel_comments.py` 的 CLI 只能读取其相对 Skill 或仓库内置的正式 `config/comment-cleaner.json`，禁止创建、复制、传入或恢复外部/临时清洗配置；公共清洗 CLI 必须显式传入 `--target-header 评论内容` 与已确认的非空 `--platform`，不得退回按第 3 列清洗。所有平台均执行正式配置中的 URL、链接类和其它固定清理词；唯一已确认的固定例外是 `twitter-comments`：仅在标准列`评论内容`中，先由正式脚本删除字面 `https://` 起至下一个空白字符前的网址文本，再执行正式固定清理词和其它通用规则。该例外不触及任何其它列，不适用于 X 推文或其它平台，且 `http://` 和其它链接类固定词仍照常生效。用户确认规则变更时必须更新正式根配置、Skill 配置、文档和测试。所有会写入文件的 CLI 在目标已存在时必须同时收到 `--overwrite` 和针对每个确切既有目标的 `--confirm-overwrite <路径>`，仅 `--overwrite` 不得覆盖。默认留存清理已经删除最终清洗文件的 `.deletions.csv` 或 `.summary.json` 后，任何脚本入口均不得在同一最终输出路径重新生成、复制恢复或借 `cleanup_intermediate_outputs.py --summary` 重建该日志；需要重新处理时只能使用新的、经用户确认的输出路径。
 
 当用户提供抓取或导出的 Excel/CSV 用户评论文件进行合并或清洗时，必须执行表头标准化：新建一个独立的标准化 Excel 文档，只保留并排序为 `评论日期`、`评论内容`、`产品名`、`电商平台评分`、`用户属性`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`。昵称、IP 数据以及其它不在保留清单内的列不得进入后续文件。`电商平台评分`、`用户属性`均为可选保留列：评分源列只按完全一致的已登记表头读取，源表不存在时保留空列；映射后仅可按已确认的固定数值格式将数值、`N out of 5 stars` 或 `N 颗星，最多 5 颗星` 写为数值 N，其它非空值保持原样，绝不推断、翻译、四舍五入或语义判断。`用户属性`逐行按固定规则生成：优先保留已登记源表头 `用户属性` 的非空值；该值为空或不存在时，依次读取已登记的 `性别`、`年龄`，去除首尾空白后用一个空格拼接非空值；两者都没有时保留空列。不得推断、补全或语义改写用户属性；`性别`、`年龄`不再作为输出表头，且评分和用户属性均不得作为 `哈希ID` 身份来源。`点赞数`是必保留数值列：源列不存在或对应单元格为空/仅空白时，标准化输出固定写入数值 `0`；数值、纯数字和已确认固定有用数文本按规则写为整数，其它非空值保持原样，绝不推断、翻译、缩写解析或语义判断。该过程必须使用确定性工具，不接入 AI 判断。源表头名称不一致时，只能通过固定别名映射处理；缺少必需的`评论日期`或`评论内容`已登记别名时必须停止并让用户确认映射。未登记且不在保留清单内的额外列按删除规则省略，不得猜测为标准列。
 CSV 输入必须先通过确定性兼容层读取；CSV 单元格值按文本保留，不得自动推断数字、日期、ID 或时间戳类型。CSV 原文件不得修改，后续标准化、合并和清洗输出仍然生成新的 `.xlsx` 工作簿，并按既有规则导出清洗后的 `.csv`。
@@ -34,14 +34,28 @@ CSV 中以 `=` 开头的值在合并、B站回复前缀处理、标准化和直�
 原始账号 ID、用户名、昵称不得进入标准化或清洗输出、日志或摘要；已登记字段即使仅在内存中参与哈希，原始列仍必须省略。评论 ID、父评论 ID、URL、主页链接、IP、来源自带的 `哈希ID`、`用户身份` 和其它含义不明确的字段绝不得作为身份来源。
 新增账号 ID 或显示名别名必须先获得用户确认和平台专属证据，且只能加入对应平台和身份类型的固定配置；不得根据字段值或 AI 语义猜测。整个选择、标准化和哈希过程必须由确定性工具完成，不接入 AI。
 项目密钥必须由 Windows DPAPI 保护并保存在用户本地项目密钥仓库，不得进入仓库、输出文件、日志或摘要。新项目首次创建密钥前，必须向用户展示哈希伪名化与非匿名化风险并取得明确确认；实际命令必须同时传入 `--initialize-project --confirm-project-key-creation <与 --project-name 完全一致的项目名>`。该命令参数仅记录已确认的命令意图，不能替代对话中的用户确认。新增显示名兜底不得改变任何既有合并、清洗、命名、确认或留存规则。
-当前已确认的 TikTok/YouTube 平台表头映射包括：`createTime`、`publishedAt`、`published_at`、`publishedTime`、`createdAt`、`created_at`、`date`、`time` -> `评论日期`；`评论`、`text`、`comment`、`commentText`、`comment_text`、`Comment Text`、`message`、`body` -> `评论内容`；`Digg Count`、`likeCount`、`likes`、`diggCount` -> `点赞数`；`回复数`、`replyCount`、`replyCommentTotal`、`replies` -> `子评论数/追评数`；`replyText`、`reply_text` -> `一级评论`。这些平台时间字段必须按确定性规则转换为北京时间 `YYYY-MM-DD`，支持 Unix 秒/毫秒时间戳和 ISO 时间；不得使用 AI 判断。中文 `评论时间` 或 `评论日期` 源列只在值为数字时间戳或带时分秒的日期时间文本时转换为 `YYYY-MM-DD`；纯日期文本保持原值。Relative platform time values such as `1年前`, `9个月前`, `1 year ago`, and `9 months ago` are converted deterministically from the current Beijing date. 对已登记的相对/ISO/固定日期解析，仅在末尾精确存在 `(edited)` 时先移除该后缀再解析；未知后缀或不匹配的非空值不得猜测。Relative year values output only `YYYY`; relative month values output only `YYYY-MM`. Relative day/week values output `YYYY-MM-DD`, and missing month/day must not be inferred beyond that fixed granularity. `id`、`comment_id`、`commentId`、`cid`、`uid`、`user_id`、`userId`、`uniqueId`、`author`、`authorName`、`authorDisplayName`、`authorChannelId`、`channelId`、`profileUrl`、`avatar`、`videoId`、`videoUrl`、`url`、`permalink` 必须作为 ID、昵称、账号或链接相关列丢弃。
+当前已确认的 TikTok/YouTube 平台表头映射包括：`createTime`、`publishedAt`、`published_at`、`publishedTime`、`createdAt`、`created_at`、`date`、`time` -> `评论日期`；`评论`、`text`、`comment`、`commentText`、`comment_text`、`Comment Text`、`message`、`body` -> `评论内容`；`Digg Count`、`likeCount`、`likes`、`diggCount` -> `点赞数`；`回复数`、`replyCount`、`replyCommentTotal`、`replies` -> `子评论数/追评数`；`replyText`、`reply_text` -> `一级评论`。这些平台时间字段必须按确定性规则转换为北京时间 `YYYY-MM-DD`，支持 Unix 秒/毫秒时间戳和 ISO 时间；不得使用 AI 判断。中文 `评论时间` 或 `评论日期` 源列只在值为数字时间戳或带时分秒的日期时间文本时转换为 `YYYY-MM-DD`；纯日期文本保持原值。Relative platform time values such as `1年前`, `9个月前`, `1 year ago`, and `9 months ago` are converted deterministically from the current Beijing date. 对已登记的相对/ISO/固定日期解析，仅在末尾精确存在 `(edited)` 或 `（修改过）` 时先移除该后缀再解析；未知后缀或不匹配的非空值不得猜测。Relative year values output only `YYYY`; relative month values output only `YYYY-MM`. Relative day/week values output `YYYY-MM-DD`, and missing month/day must not be inferred beyond that fixed granularity. `id`、`comment_id`、`commentId`、`cid`、`uid`、`user_id`、`userId`、`uniqueId`、`author`、`authorName`、`authorDisplayName`、`authorChannelId`、`channelId`、`profileUrl`、`avatar`、`videoId`、`videoUrl`、`permalink` 必须作为 ID、昵称、账号或链接相关列丢弃。
 八位数字 `YYYYMMDD` 必须先按日历日期解析，再判断 Unix 时间戳，避免被转换成 1970 年日期。
 
 B站数据在标准化前必须按固定规则去掉 `回复@xxx：` 或 `回复 @xxx:` 前缀，只保留冒号后的真实评论内容。多文件流程在用户确认合并完成后处理原始合并总表；单文件流程在用户确认只有该文件后处理原始输入。该步骤只处理 `content` 或 `评论内容` 列的固定文本前缀，必须输出新的临时前缀清理表，不得覆盖原始输入或原始合并总表；不得在该步骤中移动回复行或推断父子层级，不得新增层级列，不得删除行。
 
+### X/Twitter 数据类型确认闸门
+
+本节优先于本文中任何未明确区分数据类型的 `Twitter/X` 或 `twitter` 描述。当用户明确说明提供的是 X/Twitter 数据时，必须在命名、计划分流、合并或预处理之前询问：
+
+```text
+检测到 X/Twitter 数据，请选择本轮数据类型：
+[1] 推文：使用既有 `twitter` 推文分流和推文保留关键词流程。
+[2] 评论：使用独立的 X 评论分流，不套用推文分流或推文保留关键词流程。
+
+请回复“推文”或“评论”。
+```
+
+只有用户选择`推文`时，才可使用既有 `twitter` 分流和 X 推文保留关键词筛选。选择`评论`时，X 评论使用独立的 `twitter-comments` 分流。两个分流器具有同一完整有序原始表头签名，未传入用户已确认的数据类型时自动识别必须报歧义，绝不得猜测。`twitter-comments` 与 `twitter` 共用 `twitter` 哈希命名空间，并共用 `Twitter用户ID` 优先、整列为空时 `Twitter昵称` 兜底的身份映射；相同研究项目和相同 `user_id` 必须得到相同哈希ID。X 评论不执行 X 推文保留关键词筛选，标准化审查及用户审批通过后直接进入 KOL 清理词闸门。不得从文件名、表头、内容、语言、用户 ID、行值或 AI 判断推测本轮是推文还是评论。
+
 标准化前的 `tools/preprocess_platform_comments.py` 是平台预处理分流器：平台规则必须保存在 `config/platform-preprocessing.json` 的独立固定配置中，不得把新的平台特有原始表头、拼接或解析规则混入通用 `config/header-standardizer.json`。分流器只根据完整、有序且字面完全一致的已登记 `header_signature` 选择一个平台配置或其中的具名变体，空白字符也必须一致；不得根据文件名、内容、语言、单个相似表头、AI、语义或模糊匹配猜测平台。已登记配置与源表头不完全相等时，包括多列、少列、重复列、顺序不同或空白字符不同，必须停止并报告 `No configured platform signature matched`，不得套用其它平台规则。未登记的既有平台继续使用已确认的通用固定别名规则，除非用户明确确认迁移。亚马逊使用两个独立精确分流器：`amazon-japan` 的 `default` 原始表头必须依次完整等于 `标题`、`标题链接`、`图片`、`aprofile_链接`、`名称`、`aiconalt`、`查看`、`状态`、`查看1`、`asizebase`、`crhelpfultext`、`asizebase_链接`、`asizebase2`；`amazon-us` 的原始表头必须依次完整等于前十列并止于 `asizebase`。两个分流器都固定将 `标题` 与 `查看1` 以 `\n\n` 合并为评论内容，`aiconalt` 映射为电商平台评分，`asizebase` 映射为点赞数，`名称` 只在临时文件内用于亚马逊显示名哈希；`amazon-japan` 才按固定 `YYYY年M月D日在…发布评论` 从 `查看` 解析 `评论日期`，`amazon-us` 则固定输出空的 `评论日期`，绝不得读取、推断或解析其 `查看` 值。链接、图片、状态、辅助列及其它原始字段不进入预处理输出。乐天市场使用同一个 `rakuten` 分流配置中的五个精确具名变体：`reviewer-title-body-review-date`、`reviewer-date-body-title`、`title-review-date-body-reviewer`、`poster-title-body-review-date`、`reviewer-name-title-content`；每个变体都必须完整命中其登记的有序表头。乐天的 `レビュータイトル` 与 `レビュー本文` 或 `レビュー内容` 按固定标题后正文及 `\n\n` 拼接；`投稿日` 或 `レビュー投稿日` 的固定日期格式转换为 `YYYY-MM-DD`；`評価`原样映射至`电商平台评分`；`参考になった数`的固定`N人`格式转换为点赞数；`レビュアー属性`只保留固定`男性/女性`和数字年龄标记（包括`70代以上`）；`レビュー投稿者`、`投稿者名`或`レビュアー名`只输出为临时`乐天市场昵称`以用于显示名哈希，其中精确的`購入者さん`必须置空且不生成`哈希ID`。`注文日`、`カラー`及其它乐天原始字段不得输出。解析不匹配的非空原值必须按各注册操作的固定规则原样保留或为空，绝不得猜测或丢失。预处理必须输出新的临时 `.xlsx` 和摘要，不得覆盖输入；其规则与执行过程必须纯工具完成，不接入 AI。
 
-Twitter/X 使用独立 `twitter` 分流器，且仅当完整有序原始表头精确等于 `id`、`created_at`、`full_text`、`media`、`screen_name`、`name`、`profile_image_url`、`user_id`、`in_reply_to`、`retweeted_status`、`quoted_status`、`media_tags`、`favorite_count`、`retweet_count`、`bookmark_count`、`quote_count`、`reply_count`、`views_count`、`favorited`、`retweeted`、`bookmarked`、`url`、`metadata` 时运行。它只能固定复制 `created_at` -> 临时`评论日期`、`full_text` -> 临时`评论内容`、`favorite_count` -> 临时`点赞数`、`reply_count` -> 临时`子评论数/追评数`、`user_id` -> 临时`Twitter用户ID`、`screen_name` -> 临时`Twitter昵称`；其它字段不得进入临时输出。Twitter/X 标准化审查通过并经用户确认后，必须先询问本轮保留关键词，用户提供后必须再询问“是否已经提供完成所有 Twitter/X 保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。”；确认后只允许由 `tools/filter_comments_by_keywords.py` 用 Unicode `casefold()` 的字面包含规则保留“评论内容”命中任一关键词的整行，不命中的整行删除。该筛选绝不翻译、扩词、模糊匹配、推断产品关联或接入 AI；筛选临时 `.xlsx` 与 `.keyword-filter.summary.json` 必须在最终清洗成功后作为显式中间产物清理，之后才进入既有 KOL 清理词和通用清洗流程。
+Twitter/X 使用两个独立、已登记的分流器：`twitter` 仅处理用户确认的 X 推文，`twitter-comments` 仅处理用户确认的 X 评论。两者都仅当完整有序原始表头精确等于 `id`、`created_at`、`full_text`、`media`、`screen_name`、`name`、`profile_image_url`、`user_id`、`in_reply_to`、`retweeted_status`、`quoted_status`、`media_tags`、`favorite_count`、`retweet_count`、`bookmark_count`、`quote_count`、`reply_count`、`views_count`、`favorited`、`retweeted`、`bookmarked`、`url`、`metadata` 时运行。两者都只能固定复制 `created_at` -> 临时`评论日期`、`full_text` -> 临时`评论内容`、`favorite_count` -> 临时`点赞数`、`reply_count` -> 临时`子评论数/追评数`、`user_id` -> 临时`Twitter用户ID`、`screen_name` -> 临时`Twitter昵称`；其它字段不得进入临时输出。两者都使用同一套已确认身份映射和 `twitter` 哈希命名空间，但只有 `twitter` X 推文分流在标准化审查和用户确认后必须询问、确认本轮 X 推文保留关键词，并由 `tools/filter_comments_by_keywords.py` 使用 Unicode `casefold()` 的字面包含规则筛选行。`twitter-comments` X 评论绝不执行这一步，直接进入既有 KOL 清理词和通用清洗流程。关键词筛选绝不翻译、扩词、模糊匹配、推断产品关联或接入 AI；仅推文筛选产生的临时 `.xlsx` 与 `.keyword-filter.summary.json` 必须在最终清洗成功后作为显式中间产物清理。
 
 当同一已确认平台注册分流的多文件批次原始合并因表头不同抛出 `HeaderMismatchError` 时，只有在每个输入工作表都完整命中该平台注册的一个具名精确变体、且这些变体的临时输出列完全同名同序时，才允许改用 `tools/preprocess_platform_comments.py --merge-registered-variants --platform <已确认分流器>`。该工具按各文件的精确变体先做固定预处理、再按用户提供顺序写入一个新的“平台预处理合并总表”；原始输入不改写，未匹配任一签名时不得产生部分输出、不得回退到其他平台或变体、不得使用 AI 判断。这个平台预处理合并总表就是本轮合并确认节点；用户确认合并完整后直接进入通用表头标准化，不得再次运行平台预处理器。相同原始表头的批次仍必须走既有原始合并流程，不能把本例外用于绕过表头一致性检查。
 
@@ -57,14 +71,14 @@ Twitter/X 使用独立 `twitter` 分流器，且仅当完整有序原始表头�
 合并之前必须先确认研究项目名、产品名和数据来源。研究项目名在同一研究项目中固定复用；用户明确说明新项目时才创建新的项目密钥。文件名格式固定为 `YYYYMMDD_产品名_数据来源_步骤名`，日期使用北京时间（Asia/Shanghai），步骤名固定为 `合并总表`、`标准化总表`、`清洗后总表`。同一流程只确认一次产品名和数据来源；确认后后续文件名只根据步骤自动替换步骤名，不再重复确认命名。
 
 返回任何合并、标准化或清洗文件时，链接文字必须使用实际完整文件名（含扩展名），不得使用“下载合并总表”等泛化标签。
-产品名和数据来源只能通过确定性规则获取：文件名、父级文件夹名、已登记的产品表头（`产品名`、`购买产品`、`商品名称`、`商品`）或 `评论日期与产品` 的固定拆分；数据来源只能通过固定关键词如 `淘宝`、`京东`、`亚马逊`、`Amazon`、`amazon`、`小红书`、`抖音`、`微博`、`B站`、`TikTok`、`TTCommentExporter`、`Twitter`、`twitter`、`YouTube`、`youtube`、`yt-comments` 获取。亚马逊输入路径含已登记地区关键词时，`亚马逊日本`、`Amazon Japan` 或 `amazon.co.jp` 必须显示为 `亚马逊日本评论数据`；`亚马逊美国`、`Amazon USA`、`Amazon US` 或 `amazon.com` 必须显示为 `亚马逊美国评论数据`；未带地区关键词时才显示为 `亚马逊评论数据`。`亚马逊日本评论数据` 必须计划并执行 `amazon-japan` 分流，`亚马逊美国评论数据` 必须计划并执行 `amazon-us` 分流；地区识别只能由已登记路径或文件关键词确定，实际执行仍必须完整匹配对应的有序表头签名，绝不得仅凭地区显示名、单个表头或内容推断分流。Twitter/Twitter 小写路径关键词固定显示为 `Twitter评论数据`，计划分流器固定为 `twitter`，但显示命名不等于通过分流校验，仍必须完整命中 Twitter/X 已登记有序表头。若同一批输入同时命中多个亚马逊地区，数据来源必须判为歧义并要求用户确认。YouTube 输入路径含独立目录段 `Shorts` 时，显示数据来源必须优先确定为 `YouTube Shorts评论数据`；该显示命名不改变与长视频共享的 `youtube` 哈希命名空间。若无法唯一确定产品名或数据来源，必须先询问用户，不能用 AI 猜测。命名工具输出 JSON 时必须兼容 Windows 非 UTF-8 控制台和包含表情符号的文件名，不得因控制台编码失败而改变或中断命名识别。
+产品名和数据来源只能通过确定性规则获取：文件名、父级文件夹名、已登记的产品表头（`产品名`、`购买产品`、`商品名称`、`商品`）或 `评论日期与产品` 的固定拆分；数据来源只能通过固定关键词如 `淘宝`、`京东`、`亚马逊`、`Amazon`、`amazon`、`小红书`、`抖音`、`微博`、`B站`、`TikTok`、`TTCommentExporter`、`Twitter`、`twitter`、`YouTube`、`youtube`、`yt-comments` 获取。亚马逊输入路径含已登记地区关键词时，`亚马逊日本`、`Amazon Japan` 或 `amazon.co.jp` 必须显示为 `亚马逊日本评论数据`；`亚马逊美国`、`Amazon USA`、`Amazon US` 或 `amazon.com` 必须显示为 `亚马逊美国评论数据`；未带地区关键词时才显示为 `亚马逊评论数据`。`亚马逊日本评论数据` 必须计划并执行 `amazon-japan` 分流，`亚马逊美国评论数据` 必须计划并执行 `amazon-us` 分流；地区识别只能由已登记路径或文件关键词确定，实际执行仍必须完整匹配对应的有序表头签名，绝不得仅凭地区显示名、单个表头或内容推断分流。Twitter/Twitter 小写路径关键词固定显示为 `Twitter评论数据`，但必须先由用户选择 `推文` 或 `评论` 并显式传入 `--x-data-type`：`推文` 计划 `twitter`，`评论` 计划 `twitter-comments`；显示命名和用户选择都不等于通过分流校验，实际执行仍必须完整命中 Twitter/X 已登记有序表头。若同一批输入同时命中多个亚马逊地区，数据来源必须判为歧义并要求用户确认。YouTube 输入路径含独立目录段 `Shorts` 时，显示数据来源必须优先确定为 `YouTube Shorts评论数据`；该显示命名不改变与长视频共享的 `youtube` 哈希命名空间。若无法唯一确定产品名或数据来源，必须先询问用户，不能用 AI 猜测。命名工具输出 JSON 时必须兼容 Windows 非 UTF-8 控制台和包含表情符号的文件名，不得因控制台编码失败而改变或中断命名识别。
 若存在多个待处理原始文件，必须在展示产品名、数据来源、计划平台预处理分流器及其“完整有序表头指纹校验”状态、合并 `.xlsx`、标准化 `.xlsx`、清洗 `.xlsx` 和清洗 `.csv` 四个输出文件名时一次性询问“请确认以上产品名、数据来源、平台预处理分流和文件命名是否正确，并确认是否可以进入合并流程。”用户确认后才允许执行合并。确认分流器不等于跳过校验；合并后实际预处理仍必须通过完整有序表头指纹，否则停止。若当前只收到 1 个文件，必须先询问“当前只收到 1 个文件，请确认是否只有这一个文件需要处理？你确认后我将跳过合并，直接进入标准化。”只有在用户确认确实只有一个文件后，才允许跳过合并步骤并直接进入标准化。
 
 多文件流程必须先合并原始输入文件；对同表头批次，输出一个新的原始合并总表，合并完成后先返回原始合并总表，并确认“是否已经提供并合并完所有需要合并的表格”。若原始合并因表头不一致安全停止，且满足已登记平台注册混合精确变体的例外条件，则只能使用上述 `--merge-registered-variants` 输出一个新的平台预处理合并总表并在同一确认节点返回它。用户确认所有需要合并的表格都已合并后，才允许对原始合并总表先运行适用的 B站前缀清理和/或精确平台注册预处理，或对平台预处理合并总表直接执行表头标准化，输出一个新的标准化合并总表。标准化后必须自动审查通过，才可返回标准化表供用户确认。原始输入文件和原始合并总表都不得被后续步骤改写；平台预处理合并总表同样不得被后续步骤改写。
 
 表头标准化必须不只改表头文字，而是把匹配到的源表头及其下面整列数据一起移动到标准列位置；只有不在保留清单内的列才会从标准化输出中省略。
 
-当用户要求“合并后再清洗”时，对同表头批次必须先合并原始输入文件，合并完成后暂停并确认“是否已经提供并合并完所有需要合并的表格”。只有已确认平台注册的混合精确变体才可在原始合并安全停止后走平台预处理后合并例外。用户确认所有需要合并的表格都已合并后，才允许对原始合并总表运行适用的确定性平台预处理和表头标准化，或对平台预处理合并总表直接表头标准化；标准化完成后必须先通过自动审查，才把标准化后的表格返回给用户确认；用户明确确认标准化表格可以进入清洗流程后，若为 `twitter` 分流必须先完成 Twitter/X 保留关键词提供、完整性确认和确定性筛选，再允许询问或确认 KOL 清理词并进入通用清洗流程。
+当用户要求“合并后再清洗”时，对同表头批次必须先合并原始输入文件，合并完成后暂停并确认“是否已经提供并合并完所有需要合并的表格”。只有已确认平台注册的混合精确变体才可在原始合并安全停止后走平台预处理后合并例外。用户确认所有需要合并的表格都已合并后，才允许对原始合并总表运行适用的确定性平台预处理和表头标准化，或对平台预处理合并总表直接表头标准化；标准化完成后必须先通过自动审查，才把标准化后的表格返回给用户确认；用户明确确认标准化表格可以进入清洗流程后，若为 `twitter` X 推文分流必须先完成 X 推文保留关键词提供、完整性确认和确定性筛选，再允许询问或确认 KOL 清理词并进入通用清洗流程；若为 `twitter-comments` X 评论分流则直接进入 KOL 清理词确认。
 
 合并必须输出到一个新建的独立 Excel 文档/工作簿文件作为总表，不是在原 Excel 文档里新建子表/Sheet，也不能把合并结果写回任何原始输入表格。合并完成后必须先把新合并表返回给用户，再等待用户确认是否进行标准化。
 
@@ -78,7 +92,7 @@ Twitter/X 使用独立 `twitter` 分流器，且仅当完整有序原始表头�
 2. 单文件流程也必须先确认产品名、数据来源和输出命名；若无法唯一确定，先询问用户，不能猜测。
 3. 若当前只收到 1 个文件，必须询问“当前只收到 1 个文件，请确认是否只有这一个文件需要处理？你确认后我将跳过合并，直接进入标准化。”
 4. 用户确认确实只有一个文件后，才允许跳过合并，并先执行适用的固定 B站前缀清理和/或精确平台注册预处理，再执行表头标准化与自动审查。
-5. 标准化自动审查通过后，标准化后的表格返回给用户确认；若为 `twitter` 分流，必须先询问“请提供本轮 Twitter/X 评论保留关键词。仅保留‘评论内容’包含任一关键词的整行数据；请一次性提供所有关键词。”，收到一个或多个关键词后再询问“是否已经提供完成所有 Twitter/X 保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。”，确认后用 `tools/filter_comments_by_keywords.py` 执行筛选；其他平台才直接询问 KOL 清理词。
+5. 标准化自动审查通过后，标准化后的表格返回给用户确认；若为 `twitter` X 推文分流，必须先询问“请提供本轮 X 推文保留关键词。仅保留‘评论内容’包含任一关键词的整行数据；请一次性提供所有关键词。”，收到一个或多个关键词后再询问“是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。”，确认后用 `tools/filter_comments_by_keywords.py` 执行筛选；`twitter-comments` X 评论分流及其他平台则直接询问 KOL 清理词。
    - 对非 Twitter/X 平台，标准化后的表格返回给用户确认后，才允许询问 KOL 清理词。
    - 如果没有，让用户回复“没有”。
    - 如果有，让用户一次性发来所有清理词。
@@ -88,7 +102,7 @@ Twitter/X 使用独立 `twitter` 分流器，且仅当完整有序原始表头�
    - `tools/preprocess_platform_comments.py`（仅完整命中已登记平台签名时，在标准化前需要；已确认平台注册混合精确变体在原始合并安全停止后必须传入 `--merge-registered-variants`）
    - `tools/standardize_excel_headers.py`
    - `tools/audit_standardized_comments.py`（标准化后必须通过，才可进入用户确认与清洗）
-   - `tools/filter_comments_by_keywords.py`（仅 `twitter` 分流在标准化审查及用户确认后、KOL 清理词前使用；每个确认的保留词传入一个独立 `--keep-keyword` 参数）
+   - `tools/filter_comments_by_keywords.py`（仅 `twitter` X 推文分流在标准化审查及用户确认后、KOL 清理词前使用；`twitter-comments` X 评论分流绝不使用；每个确认的保留词传入一个独立 `--keep-keyword` 参数）
    - `tools/clean_excel_comments.py`
    - `tools/cleanup_intermediate_outputs.py`（清洗成功生成 `.xlsx` 和 `.csv` 后立即清理中间产物）
    - 不要让用户手动输入命令。
@@ -100,7 +114,7 @@ Twitter/X 使用独立 `twitter` 分流器，且仅当完整有序原始表头�
 ## 处理边界
 
 - 原始 Excel/CSV 文件不得修改，必须另存为新文件。
-- 单文件清洗时，适用的平台预处理、表头标准化与标准化自动审查必须先于清洗执行；多文件流程中，必须先合并原始输入文件；同表头批次再对原始合并总表执行适用的平台预处理、表头标准化与自动审查。已确认平台注册的混合精确变体只可在原始合并安全停止后先做平台预处理后合并，再直接标准化与自动审查。`twitter` 分流的标准化输出经用户确认后必须先进行本轮确认保留词的确定性行筛选，然后才进入 KOL 和通用清洗；其他平台标准化后的清洗按表头“评论内容”定位评论列。
+- 单文件清洗时，适用的平台预处理、表头标准化与标准化自动审查必须先于清洗执行；多文件流程中，必须先合并原始输入文件；同表头批次再对原始合并总表执行适用的平台预处理、表头标准化与自动审查。已确认平台注册的混合精确变体只可在原始合并安全停止后先做平台预处理后合并，再直接标准化与自动审查。`twitter` X 推文分流的标准化输出经用户确认后必须先进行本轮确认保留词的确定性行筛选，然后才进入 KOL 和通用清洗；`twitter-comments` X 评论分流及其他平台标准化后直接按表头“评论内容”进入 KOL 和通用清洗。
 - 表格内容清洗必须是纯工具规则处理，不能接入 AI 判断某条评论是否应该删除。
 - AI 只负责调用工具、检查输出文件是否生成、返回结果路径。
 - 不要基于语义、情绪、质量、疑似广告等主观判断删除评论。
@@ -133,14 +147,14 @@ Reddit 只能走独立的 `reddit` 平台预处理分流器，且完整有序原
 - 删除首尾空白后长度小于等于 7 的中文主评论。
 - Chinese comments delete by character length; non-Chinese comments delete by deterministic word count.
 - Deterministic script classification gives Japanese Kana, Korean Hangul, Thai, and Devanagari precedence over Han characters for both length and fixed-word rules. Han-only text is treated as Chinese because distinguishing Han-only Japanese from Chinese would require semantic inference.
-- Non-Chinese comments with four or fewer words are deleted.
+- Non-Chinese comments with two or fewer words are deleted.
 - For unspaced non-Chinese scripts, only very short text with four or fewer characters is deleted by the short-text rule.
 - Pure numeric comments keep the legacy seven-character threshold for backward compatibility.
 - 删除完全等于占位文案的评论。
 - 删除包含用户提供 KOL 清理词的评论。
-- 默认基础固定清理词只能追加，不能覆盖或移除原有固定词“链接”。`http://`、`https://`及已登记的链接类固定词对所有平台生效，包括 Twitter/X；不得通过平台专用或临时配置绕过。
+- 默认基础固定清理词只能追加，不能覆盖或移除原有固定词“链接”。`http://`、`https://`及已登记的链接类固定词对所有平台生效，包括 Twitter/X；唯一固定例外是 `twitter-comments` 在标准列`评论内容`中先删除 `https://` 网址文本，随后仍执行其余正式规则。不得通过平台专用或临时配置增加、取消或绕过该例外。
 - When adding a fixed delete word later, add confirmed equivalents for Chinese, English, Japanese, Korean, Spanish, Thai, and Hindi where applicable.
-- Fixed delete words must be isolated by deterministic script group. Chinese comments only use Chinese fixed words; Japanese, Korean, Thai, and Hindi comments only use their respective script groups. English and Spanish share the Latin-script group because deterministic script inspection cannot distinguish them reliably. The base profile applies language-neutral URL markers `http://` and `https://` to all groups, including Twitter/X; no platform-specific URL/link exemption is active.
+- Fixed delete words must be isolated by deterministic script group. Chinese comments only use Chinese fixed words; Japanese, Korean, Thai, and Hindi comments only use their respective script groups. English and Spanish share the Latin-script group because deterministic script inspection cannot distinguish them reliably. The base profile applies language-neutral URL markers `http://` and `https://` to all groups, including Twitter/X. Before that matching step, the fixed `twitter-comments` route strips literal `https://` URL text from `评论内容` only; no other column, platform, URL form, or per-run configuration receives an exemption.
 - Latin-script fixed words must match complete lexical boundaries. Matching remains case-insensitive where configured; for example, an active fixed word must not match a longer token such as `TESTV`, `contest`, or `testing`.
 - 完整固定清理词清单以 `config/comment-cleaner.json` 为准；当前配置覆盖中文、英文、日文、韩文、西语、泰文和印地语。
 - 中文短词误删保护：`无`、`第一`、`略`、`测试`、`来了`、`路过`已从可执行固定词表移除，不能因中文子串包含而删除整行；例如“无炫光”“第一次买”“价格略贵”“感应到人来了就亮灯”必须进入后续规则判断。不得创建临时清洗配置绕过该文件；未来如需改动，必须经用户明确确认并同步更新正式配置、Skill 文档与回归测试。

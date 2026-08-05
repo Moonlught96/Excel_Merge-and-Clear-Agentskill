@@ -4,6 +4,7 @@ import io
 import unittest
 from datetime import datetime
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 from unittest import mock
 
 from openpyxl import Workbook, load_workbook
@@ -82,7 +83,7 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual({}, plan.filenames)
 
     def test_can_use_product_from_workbook_when_filename_and_path_do_not_have_it(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-output-name-workbook-product"
+        tmp = TEST_TEMP_ROOT / "case-output-name-workbook-product"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "淘宝评论数据.xlsx"
 
@@ -100,7 +101,7 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual("20260707_ScreenBar Halo2_淘宝评论数据_合并总表.xlsx", plan.filenames["merge"])
 
     def test_can_use_product_from_csv_when_filename_and_path_do_not_have_it(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-output-name-csv-product"
+        tmp = TEST_TEMP_ROOT / "case-output-name-csv-product"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "淘宝评论数据.csv"
         input_path.write_text(
@@ -132,6 +133,45 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual("20260707_ScreenBar系列_TikTok评论数据_合并总表.xlsx", tiktok_plan.filenames["merge"])
         self.assertEqual("20260707_ScreenBar系列_YouTube评论数据_合并总表.xlsx", youtube_plan.filenames["merge"])
 
+    def test_requires_explicit_x_data_type_before_planning_x_preprocessing_route(self) -> None:
+        input_paths = [
+            Path(
+                "D:/专案/ScreenBar十周年专案/产品数据/Twitter/"
+                "twitter-screenbar搜索结果-1784787464581.csv"
+            )
+        ]
+        unselected = build_naming_plan(
+            input_paths,
+            product_name="ScreenBar系列",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+        post_plan = build_naming_plan(
+            input_paths,
+            product_name="ScreenBar系列",
+            x_data_type="推文",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+        comment_plan = build_naming_plan(
+            input_paths,
+            product_name="ScreenBar系列",
+            x_data_type="评论",
+            today=datetime(2026, 7, 24, 9, 30),
+        )
+
+        self.assertEqual("Twitter评论数据", unselected.data_source)
+        self.assertIsNone(unselected.preprocessing_profile)
+        self.assertIn("x_data_type", unselected.missing_fields)
+        self.assertEqual({}, unselected.filenames)
+
+        self.assertEqual("twitter", post_plan.preprocessing_profile)
+        self.assertEqual("推文", post_plan.x_data_type)
+        self.assertEqual("twitter-comments", comment_plan.preprocessing_profile)
+        self.assertEqual("评论", comment_plan.x_data_type)
+        self.assertEqual(
+            "20260724_ScreenBar系列_Twitter评论数据_合并总表.xlsx",
+            comment_plan.filenames["merge"],
+        )
+
     def test_detects_twitter_source_and_preprocessing_route(self) -> None:
         plan = build_naming_plan(
             [
@@ -141,6 +181,7 @@ class OutputFileNamingTest(unittest.TestCase):
                 )
             ],
             product_name="ScreenBar系列",
+            x_data_type="推文",
             today=datetime(2026, 7, 24, 9, 30),
         )
 
@@ -339,7 +380,7 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual({}, tiktok_plan.filenames)
 
     def test_product_override_does_not_open_input_workbook(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-output-name-product-override"
+        tmp = TEST_TEMP_ROOT / "case-output-name-product-override"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "TTCommentExporter-7371053582810008864-51-comments-replies.xlsx"
         input_path.write_bytes(b"not an xlsx archive")
@@ -356,7 +397,7 @@ class OutputFileNamingTest(unittest.TestCase):
         self.assertEqual([], plan.missing_fields)
 
     def test_product_discovery_closes_the_input_workbook(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-output-name-closes-workbook"
+        tmp = TEST_TEMP_ROOT / "case-output-name-closes-workbook"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
 

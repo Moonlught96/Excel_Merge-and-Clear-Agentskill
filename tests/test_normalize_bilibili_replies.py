@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 from unittest import mock
 
 from openpyxl import Workbook, load_workbook
@@ -12,7 +13,7 @@ from tools.strip_bilibili_reply_prefixes import OutputPathConflictError, strip_b
 
 class StripBilibiliReplyPrefixesTest(unittest.TestCase):
     def test_closes_input_workbook_when_prefix_processing_fails(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-strip-closes-on-error"
+        tmp = TEST_TEMP_ROOT / "case-strip-closes-on-error"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "prefix-stripped.xlsx"
@@ -39,7 +40,7 @@ class StripBilibiliReplyPrefixesTest(unittest.TestCase):
         opened.close.assert_called_once_with()
 
     def test_requires_explicit_overwrite_for_existing_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-strip-existing-output"
+        tmp = TEST_TEMP_ROOT / "case-strip-existing-output"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "prefix-stripped.xlsx"
@@ -60,7 +61,7 @@ class StripBilibiliReplyPrefixesTest(unittest.TestCase):
         self.assertEqual("existing", output_path.read_text(encoding="utf-8"))
 
     def test_strips_reply_prefix_without_moving_rows_or_columns(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-strip-bilibili-reply-prefixes"
+        tmp = TEST_TEMP_ROOT / "case-strip-bilibili-reply-prefixes"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "merged.xlsx"
         output_path = tmp / "prefix-stripped.xlsx"
@@ -100,7 +101,7 @@ class StripBilibiliReplyPrefixesTest(unittest.TestCase):
         self.assertEqual(["content"], summary["sheets"][0]["target_headers"])
 
     def test_preserves_formula_cells_outside_the_content_column(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-strip-preserves-formulas"
+        tmp = TEST_TEMP_ROOT / "case-strip-preserves-formulas"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "merged.xlsx"
         output_path = tmp / "prefix-stripped.xlsx"
@@ -119,7 +120,7 @@ class StripBilibiliReplyPrefixesTest(unittest.TestCase):
         self.assertEqual("=1+1", normalized["总表"].cell(row=2, column=2).value)
 
     def test_csv_formula_like_reply_body_remains_text(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-strip-csv-formula-text"
+        tmp = TEST_TEMP_ROOT / "case-strip-csv-formula-text"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.csv"
         output_path = tmp / "prefix-stripped.xlsx"

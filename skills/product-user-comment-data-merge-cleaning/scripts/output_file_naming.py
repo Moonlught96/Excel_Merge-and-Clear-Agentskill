@@ -117,6 +117,7 @@ class NamingPlan:
     date_text: str
     product_name: str | None
     data_source: str | None
+    x_data_type: str | None
     product_candidates: list[str]
     data_source_candidates: list[str]
     preprocessing_profile: str | None
@@ -155,7 +156,6 @@ def normalize_stem_for_product(stem: str) -> str:
     value = re.sub(r"^\d{8,}", "", value)
     value = re.sub(r"\d{8}-\d{6}", "", value)
     value = re.sub(r"\d{8,14}", "", value)
-    value = re.sub(r"(^|[-_ ])\d+(?=$|[-_ ])", " ", value)
     value = re.sub(r"(^|[-_ ])\d+(?=$|[-_ ])", " ", value)
     value = re.sub(r"[-_]+$", "", value)
     value = re.sub(r"^[-_]+", "", value)
@@ -348,7 +348,20 @@ def output_filenames(date_text: str, product_name: str, data_source: str) -> dic
     return filenames
 
 
-def preprocessing_profile_for_data_source(data_source: str | None) -> str | None:
+def normalize_x_data_type(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if normalized not in {"推文", "评论"}:
+        raise ValueError("x_data_type must be one of: 推文, 评论")
+    return normalized
+
+
+def preprocessing_profile_for_data_source(
+    data_source: str | None,
+    *,
+    x_data_type: str | None = None,
+) -> str | None:
     if data_source == "亚马逊日本评论数据":
         return "amazon-japan"
     if data_source == "亚马逊美国评论数据":
@@ -356,7 +369,11 @@ def preprocessing_profile_for_data_source(data_source: str | None) -> str | None
     if data_source == "乐天市场评论数据":
         return "rakuten"
     if data_source == "Twitter评论数据":
-        return "twitter"
+        if x_data_type == "推文":
+            return "twitter"
+        if x_data_type == "评论":
+            return "twitter-comments"
+        return None
     if data_source == "Reddit评论数据":
         return "reddit"
     return None
@@ -367,9 +384,11 @@ def build_naming_plan(
     *,
     product_name: str | None = None,
     data_source: str | None = None,
+    x_data_type: str | None = None,
     today: datetime | None = None,
 ) -> NamingPlan:
     date_text = beijing_date_text(today)
+    selected_x_data_type = normalize_x_data_type(x_data_type)
     if data_source:
         detected_source, source_candidates, source_ambiguous = choose_single([], data_source)
     else:
@@ -391,7 +410,15 @@ def build_naming_plan(
     if not detected_source or source_ambiguous:
         missing_fields.append("data_source")
 
-    preprocessing_profile = preprocessing_profile_for_data_source(detected_source)
+    if detected_source == "Twitter评论数据" and selected_x_data_type is None:
+        missing_fields.append("x_data_type")
+    if detected_source != "Twitter评论数据" and selected_x_data_type is not None:
+        raise ValueError("x_data_type is only valid when data_source is Twitter评论数据")
+
+    preprocessing_profile = preprocessing_profile_for_data_source(
+        detected_source,
+        x_data_type=selected_x_data_type,
+    )
 
     filenames = (
         output_filenames(date_text, detected_product, detected_source)
@@ -402,6 +429,7 @@ def build_naming_plan(
         date_text=date_text,
         product_name=detected_product,
         data_source=detected_source,
+        x_data_type=selected_x_data_type,
         product_candidates=product_candidates,
         data_source_candidates=source_candidates,
         preprocessing_profile=preprocessing_profile,
@@ -415,6 +443,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("input_paths", type=Path, nargs="+", help="Explicit input .xlsx/.xlsm/.csv files.")
     parser.add_argument("--product-name", default=None, help="Confirmed product name.")
     parser.add_argument("--data-source", default=None, help="Confirmed data source.")
+    parser.add_argument(
+        "--x-data-type",
+        choices=("推文", "评论"),
+        default=None,
+        help="Confirmed X/Twitter data type; required when source is Twitter评论数据.",
+    )
     parser.add_argument("--date", default=None, help="Override date in YYYYMMDD format for tests/manual runs.")
     return parser.parse_args()
 
@@ -438,6 +472,7 @@ def main() -> int:
         args.input_paths,
         product_name=args.product_name,
         data_source=args.data_source,
+        x_data_type=args.x_data_type,
         today=today,
     )
     write_json_document(
@@ -445,6 +480,7 @@ def main() -> int:
             "date": plan.date_text,
             "product_name": plan.product_name,
             "data_source": plan.data_source,
+            "x_data_type": plan.x_data_type,
             "missing_fields": plan.missing_fields,
             "product_candidates": plan.product_candidates,
             "data_source_candidates": plan.data_source_candidates,

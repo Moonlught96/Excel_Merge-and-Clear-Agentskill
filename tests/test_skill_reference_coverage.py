@@ -94,7 +94,7 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "  - 亚马逊日本: none.\n"
             "  - 亚马逊美国: none.\n"
             "  - 乐天市场: none.\n"
-            "  - Twitter/X: `Twitter用户ID`.\n"
+            "  - Twitter/X 推文和 X 评论: `Twitter用户ID`.\n"
             "  - Reddit: none."
         )
         display_mapping_block = (
@@ -108,7 +108,7 @@ class SkillReferenceCoverageTest(unittest.TestCase):
             "  - 亚马逊日本: `名称`.\n"
             "  - 亚马逊美国: `名称`.\n"
             "  - 乐天市场: `乐天市场昵称`.\n"
-            "  - Twitter/X: `Twitter昵称`.\n"
+            "  - Twitter/X 推文和 X 评论: `Twitter昵称`.\n"
             "  - Reddit: `Reddit作者`."
         )
         self.assertIn(account_mapping_block, header_reference)
@@ -224,7 +224,7 @@ class SkillReferenceCoverageTest(unittest.TestCase):
 
         numeric_rules = {
             "min_trimmed_length": "less than or equal to 7 characters",
-            "non_chinese_max_short_words": "four or fewer words",
+            "non_chinese_max_short_words": "two or fewer words",
             "non_chinese_max_short_unspaced_chars": "four or fewer characters",
             "random_digit_min_length": "pure digit token length at least 9",
             "random_letter_min_length": "letter-only token length at least 10",
@@ -261,8 +261,8 @@ class SkillReferenceCoverageTest(unittest.TestCase):
 
         for phrase in (
             "Twitter`, `twitter`, `X`, and `x`",
-            "请提供本轮 Twitter/X 评论保留关键词。仅保留“评论内容”包含任一关键词的整行数据；请一次性提供所有关键词。",
-            "是否已经提供完成所有 Twitter/X 保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。",
+            "请提供本轮 X 推文保留关键词。仅保留“评论内容”包含任一关键词的整行数据；请一次性提供所有关键词。",
+            "是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。",
             "Unicode `casefold()` literal substring check",
             "does not translate, segment, normalize Unicode, expand abbreviations",
             "`.keyword-filter.summary.json`",
@@ -270,7 +270,7 @@ class SkillReferenceCoverageTest(unittest.TestCase):
         ):
             self.assertIn(phrase, reference)
 
-        self.assertIn("## Twitter/X Keep-Keyword Gate", workflow)
+        self.assertIn("## X Tweet Keep-Keyword Gate", workflow)
         self.assertIn("scripts/filter_comments_by_keywords.py", workflow)
 
 

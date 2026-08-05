@@ -60,28 +60,31 @@ def cleanup_intermediate_outputs(
     protected_set = set(protected)
     resolved_summary_path = summary_path.resolve() if summary_path is not None else None
 
-    verified_final_outputs: list[Path] = []
-    if final_output_paths is not None:
-        verified_final_outputs = resolve_paths(final_output_paths)
-        if not verified_final_outputs:
-            raise FinalOutputVerificationError(
-                "At least one final output must be declared before intermediate cleanup."
-            )
-        missing_final_outputs = [
-            path for path in verified_final_outputs if not path.is_file()
-        ]
-        if missing_final_outputs:
-            raise FinalOutputVerificationError(
-                f"Declared final output does not exist: {missing_final_outputs[0]}"
-            )
-        unprotected_final_outputs = [
-            path for path in verified_final_outputs if path not in protected_set
-        ]
-        if unprotected_final_outputs:
-            raise FinalOutputVerificationError(
-                "Declared final output must also be protected from cleanup: "
-                f"{unprotected_final_outputs[0]}"
-            )
+    if final_output_paths is None:
+        raise FinalOutputVerificationError(
+            "Exactly one final .xlsx and one final .csv output must be declared before intermediate cleanup."
+        )
+    verified_final_outputs = resolve_paths(final_output_paths)
+    final_suffixes = {path.suffix.casefold() for path in verified_final_outputs}
+    if len(verified_final_outputs) != 2 or final_suffixes != {".xlsx", ".csv"}:
+        raise FinalOutputVerificationError(
+            "Exactly one final .xlsx and one final .csv output must be declared before intermediate cleanup."
+        )
+    missing_final_outputs = [
+        path for path in verified_final_outputs if not path.is_file()
+    ]
+    if missing_final_outputs:
+        raise FinalOutputVerificationError(
+            f"Declared final output does not exist: {missing_final_outputs[0]}"
+        )
+    unprotected_final_outputs = [
+        path for path in verified_final_outputs if path not in protected_set
+    ]
+    if unprotected_final_outputs:
+        raise FinalOutputVerificationError(
+            "Declared final output must also be protected from cleanup: "
+            f"{unprotected_final_outputs[0]}"
+        )
 
     conflicts = [path for path in intermediates if path in protected_set]
     if conflicts:
@@ -98,6 +101,16 @@ def cleanup_intermediate_outputs(
     ):
         raise ProtectedOutputError(
             "Refusing to recreate a finalized cleaning deletion log as a cleanup summary: "
+            f"{resolved_summary_path}"
+        )
+    finalized_audit_artifacts = {
+        final_output.with_suffix(suffix)
+        for final_output in verified_final_outputs
+        for suffix in (".deletions.csv", ".summary.json")
+    }
+    if resolved_summary_path is not None and resolved_summary_path in finalized_audit_artifacts:
+        raise ProtectedOutputError(
+            "Refusing to recreate a finalized cleaning audit artifact as a cleanup summary: "
             f"{resolved_summary_path}"
         )
     if resolved_summary_path is not None:

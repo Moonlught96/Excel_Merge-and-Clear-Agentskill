@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 from tools.output_path_safety import (
     OutputPathConflictError,
@@ -19,7 +20,7 @@ class OutputPathSafetyTest(unittest.TestCase):
         self.assertEqual("20260728", beijing_date_text(utc_time))
 
     def test_rejects_output_that_matches_any_input(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-output-safety-input-conflict"
+        tmp = TEST_TEMP_ROOT / "case-output-safety-input-conflict"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.csv"
         input_path.write_text("source", encoding="utf-8")
@@ -28,7 +29,7 @@ class OutputPathSafetyTest(unittest.TestCase):
             ensure_output_paths_safe([input_path], [input_path], overwrite=True)
 
     def test_requires_explicit_overwrite_for_existing_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-output-safety-existing"
+        tmp = TEST_TEMP_ROOT / "case-output-safety-existing"
         tmp.mkdir(parents=True, exist_ok=True)
         output_path = tmp / "result.xlsx"
         output_path.write_text("existing", encoding="utf-8")
@@ -55,7 +56,7 @@ class OutputPathSafetyTest(unittest.TestCase):
         )
 
     def test_rejects_confirmation_without_an_overwrite_request(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-output-safety-confirm-without-overwrite"
+        tmp = TEST_TEMP_ROOT / "case-output-safety-confirm-without-overwrite"
         tmp.mkdir(parents=True, exist_ok=True)
         output_path = tmp / "result.xlsx"
         output_path.write_text("existing", encoding="utf-8")
@@ -69,7 +70,7 @@ class OutputPathSafetyTest(unittest.TestCase):
             )
 
     def test_atomic_output_keeps_existing_file_when_write_fails(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-output-safety-atomic-failure"
+        tmp = TEST_TEMP_ROOT / "case-output-safety-atomic-failure"
         tmp.mkdir(parents=True, exist_ok=True)
         output_path = tmp / "result.xlsx"
         output_path.write_text("existing", encoding="utf-8")
@@ -83,7 +84,7 @@ class OutputPathSafetyTest(unittest.TestCase):
         self.assertEqual([], list(tmp.glob(".result.*.tmp.xlsx")))
 
     def test_atomic_output_replaces_target_only_after_success(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-output-safety-atomic-success"
+        tmp = TEST_TEMP_ROOT / "case-output-safety-atomic-success"
         tmp.mkdir(parents=True, exist_ok=True)
         output_path = tmp / "result.xlsx"
         output_path.write_text("existing", encoding="utf-8")

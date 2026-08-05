@@ -7,6 +7,7 @@ import struct
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 from tools import hash_id_pseudonymizer
 from tools.hash_id_pseudonymizer import (
@@ -390,6 +391,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
             "Twitter": "twitter",
             "twitter": "twitter",
             "X": "twitter",
+            "twitter-comments": "twitter",
             "Reddit": "reddit",
             "reddit": "reddit",
             "淘宝": "taobao",
@@ -412,7 +414,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
     def test_config_rejects_unsupported_schema_and_algorithm_versions(self) -> None:
         source_path = PROJECT_ROOT / "config" / "hash-id.json"
         base_config = json.loads(source_path.read_text(encoding="utf-8"))
-        output_dir = PROJECT_ROOT / ".tmp-tests" / "hash-id-config-validation"
+        output_dir = TEST_TEMP_ROOT / "hash-id-config-validation"
         output_dir.mkdir(parents=True, exist_ok=True)
         invalid_values = (
             ("schema_version", 3),
@@ -441,7 +443,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
         source_path = PROJECT_ROOT / "config" / "hash-id.json"
         old_config = json.loads(source_path.read_text(encoding="utf-8"))
         old_config["schema_version"] = 1
-        output_dir = PROJECT_ROOT / ".tmp-tests" / "hash-id-schema-v1-rejection"
+        output_dir = TEST_TEMP_ROOT / "hash-id-schema-v1-rejection"
         output_dir.mkdir(parents=True, exist_ok=True)
         config_path = output_dir / "schema-v1.json"
         config_path.write_text(
@@ -481,7 +483,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
     def test_config_rejects_invalid_display_name_headers(self) -> None:
         source_path = PROJECT_ROOT / "config" / "hash-id.json"
         base_config = json.loads(source_path.read_text(encoding="utf-8"))
-        output_dir = PROJECT_ROOT / ".tmp-tests" / "hash-id-display-name-validation"
+        output_dir = TEST_TEMP_ROOT / "hash-id-display-name-validation"
         output_dir.mkdir(parents=True, exist_ok=True)
         invalid_values = (
             ("missing", None),
@@ -512,7 +514,7 @@ class HashIdPseudonymizerTest(unittest.TestCase):
     def test_config_rejects_blank_and_duplicate_user_id_headers(self) -> None:
         source_path = PROJECT_ROOT / "config" / "hash-id.json"
         base_config = json.loads(source_path.read_text(encoding="utf-8"))
-        output_dir = PROJECT_ROOT / ".tmp-tests" / "hash-id-user-id-validation"
+        output_dir = TEST_TEMP_ROOT / "hash-id-user-id-validation"
         output_dir.mkdir(parents=True, exist_ok=True)
         invalid_values = (
             ("blank", [" "]),

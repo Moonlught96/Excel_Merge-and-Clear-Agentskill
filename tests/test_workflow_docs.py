@@ -32,6 +32,13 @@ class WorkflowDocsTest(unittest.TestCase):
 
         required_contract = (
             "## Multi-File Workflow",
+            "## X Data-Type Gate",
+            "检测到 X/Twitter 数据，请选择本轮数据类型：",
+            "[1] 推文：使用既有 `twitter` 推文分流",
+            "[2] 评论：使用独立的 X 评论分流",
+            "X 评论使用独立的 `twitter-comments` 分流",
+            "`twitter-comments` 与 `twitter` 共用 `twitter` 哈希命名空间",
+            "X 评论不执行 X 推文保留关键词筛选",
             "请确认以上产品名、数据来源、平台预处理分流和文件命名是否正确，并确认是否可以进入合并流程。",
             "当前只收到 1 个文件，请确认是否只有这一个文件需要处理？你确认后我将跳过合并，直接进入标准化。",
             "是否已经提供并合并完所有需要合并的表格？你确认后我再进行标准化。",
@@ -55,7 +62,7 @@ class WorkflowDocsTest(unittest.TestCase):
             "Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.",
             "Eight-digit `YYYYMMDD` values are parsed as calendar dates before Unix timestamp detection.",
             "Chinese comments whose trimmed length is less than or equal to 7 characters are deleted.",
-            "Non-Chinese comments with four or fewer words are deleted.",
+            "Non-Chinese comments with two or fewer words are deleted.",
             "Pure numeric comments keep the legacy seven-character threshold",
             "Fixed delete words are appended to the original `链接` rule",
             "Chinese, English, Japanese, Korean, Spanish, Thai, and Hindi",
@@ -78,10 +85,10 @@ class WorkflowDocsTest(unittest.TestCase):
             "external, copied, or temporary cleaner configuration is a hard error",
             "--confirm-project-key-creation \"<research-project>\"",
             "The public workflow CLI must explicitly pass `--target-header 评论内容`",
-            "Canonical URL/link marker terms apply to every platform, including Twitter/X",
+            "The one canonical `twitter-comments` exception strips literal `https://` URL text from the `评论内容` cell only",
             "--final-output \"<cleaned.xlsx>\" --final-output \"<cleaned.csv>\"",
             "literal exporter null marker `None`",
-            "trailing suffix `(edited)` is removed only for parsing",
+            "trailing suffix `(edited)` or `（修改过）` is removed only for parsing",
             "cannot be used to regenerate that log",
             "Every transformation CLI requires an explicit `--output` path.",
             "Literal header characters, including whitespace, must exactly match the registered signature.",
@@ -120,6 +127,9 @@ class WorkflowDocsTest(unittest.TestCase):
         self.assertIn("`amazon-us`", confirmation_template)
         self.assertIn("New Research Project Hash-Key Privacy Confirmation", confirmation_template)
         self.assertIn("--confirm-project-key-creation", confirmation_template)
+        self.assertIn("请选择本轮数据类型", confirmation_template)
+        self.assertIn("[1] 推文", confirmation_template)
+        self.assertIn("[2] 评论", confirmation_template)
 
         gitignore = Path(".gitignore").read_text(encoding="utf-8")
         self.assertIn("outputs/", gitignore)
@@ -149,7 +159,7 @@ class WorkflowDocsTest(unittest.TestCase):
             "最终默认只保留清洗后的 `.xlsx` 和 `.csv`",
             "固定清理词只能追加，不能覆盖或移除原有固定词“链接”",
             "删除首尾空白后长度小于等于 7 的中文主评论",
-            "Non-Chinese comments with four or fewer words are deleted.",
+            "Non-Chinese comments with two or fewer words are deleted.",
             "Pure numeric comments keep the legacy seven-character threshold for backward compatibility.",
             "完整固定清理词清单以 `config/comment-cleaner.json` 为准",
             "缺少必需的`评论日期`或`评论内容`已登记别名时必须停止",
@@ -177,6 +187,13 @@ class WorkflowDocsTest(unittest.TestCase):
             "禁止创建、复制、传入或恢复外部/临时清洗配置",
             "`--confirm-overwrite <路径>`",
             "不得在同一最终输出路径重新生成、复制恢复或借 `cleanup_intermediate_outputs.py --summary` 重建该日志",
+            "检测到 X/Twitter 数据，请选择本轮数据类型：",
+            "[1] 推文：使用既有 `twitter` 推文分流和推文保留关键词流程。",
+            "[2] 评论：使用独立的 X 评论分流，不套用推文分流或推文保留关键词流程。",
+            "X 评论使用独立的 `twitter-comments` 分流",
+            "`twitter-comments` 与 `twitter` 共用 `twitter` 哈希命名空间",
+            "X 评论不执行 X 推文保留关键词筛选",
+            "唯一已确认的固定例外是 `twitter-comments`：仅在标准列`评论内容`中",
         )
         for instruction in required_instructions:
             self.assertIn(instruction, agents)

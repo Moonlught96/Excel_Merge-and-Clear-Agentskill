@@ -23,7 +23,7 @@ Examples of locked behavior include:
 - deterministic processing without AI data judgment;
 - the eleven-column standard output order: `评论日期`, `评论内容`, `产品名`, `电商平台评分`, `用户属性`, `哈希ID`, `点赞数`, `子评论数/追评数`, `一级评论`, `二级评论`, and `三级评论`;
 - Chinese main-comment threshold of 7 or fewer characters;
-- non-Chinese threshold of 4 or fewer words and unspaced fallback of 4 or fewer characters;
+- non-Chinese threshold of 2 or fewer words and unspaced fallback of 4 or fewer characters;
 - pure numeric legacy threshold;
 - fixed-word append-only behavior preserving `链接`;
 - same-worksheet main-comment duplicate policy that keeps the highest `点赞数`, with the last occurrence as the deterministic tie, blank, non-numeric, or missing-column fallback;
@@ -32,11 +32,11 @@ Examples of locked behavior include:
 - default retention of only cleaned `.xlsx` and `.csv`.
 - rejection of duplicate input paths and unconfirmed output replacement;
 - canonical bundled cleaner configuration only; no external or per-run cleaner JSON;
-- platform-specific cleaner exceptions only through a tested `platform_profiles` entry in that canonical configuration;
+- platform-specific cleaner exceptions are prohibited; every platform uses the same reviewed canonical fixed-word configuration;
 - exact `--confirm-overwrite` confirmation for every existing output replacement;
 - mandatory explicit standardized `评论内容` header and confirmed platform for public cleaner CLI calls;
 - mandatory explicit final `.xlsx` and `.csv` verification before intermediate cleanup;
-- no recreation of default-retention-deleted cleaner logs at a finalized output path;
+- no recreation of default-retention-deleted cleaner `.deletions.csv` or `.summary.json` artifacts at a finalized output path;
 - mandatory protected paths for intermediate cleanup;
 - formula-aware, duplicate-multiplicity-aware audit comparison.
 
@@ -57,13 +57,14 @@ Examples of locked behavior include:
 4. Specify every source field's fixed order, parser, separator, unmatched-value behavior, and whether it exists only temporarily for hash derivation.
 5. Add tests for positive signature detection, unmatched-signature rejection, expected column values, sensitive-field omission, and successful common standardization/hash derivation.
 6. Add a deterministic naming and identity configuration only when the user confirms it; do not infer a platform or identity field from values.
-7. Update `header-standardization.md`, `workflow.md`, `data-contract.md`, `tool-reference.md`, `naming-and-retention.md`, and the change record.
-8. Synchronize the bundled scripts/config and run an isolated Skill copy test.
+7. Treat X 推文 and X 评论 as separate profiles. A shared exporter signature is allowed only when the user first confirms the data-type gate and the configuration forces explicit profile selection. The registered `twitter-comments` profile may reuse `Twitter用户ID`/`Twitter昵称` and the `twitter` hash namespace only because the user explicitly confirmed that identity contract; it must never reuse the X 推文 keep-keyword filter.
+8. Update `header-standardization.md`, `workflow.md`, `data-contract.md`, `tool-reference.md`, `naming-and-retention.md`, and the change record.
+9. Synchronize the bundled scripts/config and run an isolated Skill copy test.
 
 ## Changing The Standardized Output Audit
 
 1. Add a failing test for each new structural check before changing the audit tool.
-2. Audit only deterministic structure, configuration, counts, header names, and hash format. Never inspect comment semantics or raw identity values.
+2. Audit only deterministic structure, configuration, counts, header names, hash format, and fixed source-to-output mapping equality. Never inspect comment semantics or raw identity values.
 3. Make failures block standardization approval, KOL collection, and cleaning until the underlying deterministic defect or configuration is corrected.
 4. Ensure the audit JSON contains no raw comment content, raw identity values, or project secret material.
 5. Record the audit artifact as an explicit cleanup intermediate unless the user requests retention before cleaning.
@@ -73,18 +74,19 @@ Examples of locked behavior include:
 1. Append the confirmed term; never replace or remove existing terms.
 2. Add confirmed equivalents for Chinese, English, Japanese, Korean, Spanish, Thai, and Hindi where applicable.
 3. Use the case-insensitive list when case variants must match.
-4. Do not use AI-generated translations as live cleaning decisions.
-5. Add tests for matching and a nearby negative case.
-6. Update `references/cleaning-rules.md` and synchronize the bundled configuration.
+4. For a Han-only fixed term that must be treated as Japanese, add its exact literal mapping to `fixed_term_script_group_overrides`; do not add a Python-only exception list.
+5. Do not use AI-generated translations as live cleaning decisions.
+6. Add tests for matching and a nearby negative case.
+7. Update `references/cleaning-rules.md` and synchronize the bundled configuration.
 
 ## Changing Cleaner Configuration
 
 1. Require the user to identify the exact rule change; never create an external or temporary cleaner JSON for one run.
 2. Update the canonical root `config/comment-cleaner.json` and its bundled Skill copy together.
-3. A platform exception must be an explicit, narrowly scoped `platform_profiles` entry in that canonical configuration. It may remove only listed base terms for that named platform; it must not create a new per-run configuration or alter another platform's active rules.
-4. Update deterministic positive and negative tests, including adjacent values that must not be deleted and a cross-platform assertion proving the exception is isolated.
+3. Platform-specific cleaner exceptions and `platform_profiles` are prohibited. A user-confirmed cleaner rule change applies through the canonical configuration to every platform or must be implemented as a separately confirmed deterministic workflow stage, never by removing base cleaner terms.
+4. Update deterministic positive and negative tests, including adjacent values that must not be deleted and a cross-platform assertion proving every platform retains the same fixed terms.
 5. Update `references/cleaning-rules.md`, `references/data-contract.md`, and this policy when the execution contract changes.
-6. Verify the cleaner CLI still rejects every non-canonical `--config` path and requires its standardized header/platform arguments.
+6. Verify all public preprocessing, standardization, hash-ID, audit, and cleaner CLIs reject every non-canonical `--config` path; verify the cleaner still requires its standardized header/platform arguments.
 
 ## Adding Automation
 

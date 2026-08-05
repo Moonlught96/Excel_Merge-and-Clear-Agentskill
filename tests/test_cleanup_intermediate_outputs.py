@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 from tools.cleanup_intermediate_outputs import (
     FinalOutputVerificationError,
@@ -39,7 +40,7 @@ class CleanupIntermediateOutputsTest(unittest.TestCase):
         self.assertEqual([Path("cleaned.xlsx"), Path("cleaned.csv")], args.final_output)
 
     def test_refuses_cleanup_when_a_declared_final_output_is_missing(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-missing-final-output"
+        tmp = TEST_TEMP_ROOT / "case-cleanup-missing-final-output"
         tmp.mkdir(parents=True, exist_ok=True)
         intermediate = tmp / "standardized.xlsx"
         cleaned_xlsx = tmp / "cleaned.xlsx"
@@ -58,19 +59,22 @@ class CleanupIntermediateOutputsTest(unittest.TestCase):
         self.assertTrue(cleaned_xlsx.exists())
 
     def test_existing_cleanup_summary_requires_explicit_overwrite(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-summary-no-clobber"
+        tmp = TEST_TEMP_ROOT / "case-cleanup-summary-no-clobber"
         tmp.mkdir(parents=True, exist_ok=True)
         intermediate = tmp / "standardized.xlsx"
-        protected = tmp / "cleaned.xlsx"
+        cleaned_xlsx = tmp / "cleaned.xlsx"
+        cleaned_csv = tmp / "cleaned.csv"
         summary = tmp / "cleanup.summary.json"
         intermediate.write_text("intermediate", encoding="utf-8")
-        protected.write_text("cleaned", encoding="utf-8")
+        cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+        cleaned_csv.write_text("cleaned", encoding="utf-8")
         summary.write_text("keep", encoding="utf-8")
 
         with self.assertRaises(OutputPathConflictError):
             cleanup_intermediate_outputs(
                 intermediate_paths=[intermediate],
-                protected_paths=[protected],
+                protected_paths=[cleaned_xlsx, cleaned_csv],
+                final_output_paths=[cleaned_xlsx, cleaned_csv],
                 summary_path=summary,
                 overwrite=False,
             )
@@ -79,7 +83,7 @@ class CleanupIntermediateOutputsTest(unittest.TestCase):
         self.assertEqual("keep", summary.read_text(encoding="utf-8"))
 
     def test_refuses_cleanup_without_any_protected_paths(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-requires-protection"
+        tmp = TEST_TEMP_ROOT / "case-cleanup-requires-protection"
         tmp.mkdir(parents=True, exist_ok=True)
         intermediate = tmp / "standardized.xlsx"
         intermediate.write_text("intermediate", encoding="utf-8")
@@ -88,12 +92,13 @@ class CleanupIntermediateOutputsTest(unittest.TestCase):
             cleanup_intermediate_outputs(
                 intermediate_paths=[intermediate],
                 protected_paths=[],
+                final_output_paths=[tmp / "cleaned.xlsx", tmp / "cleaned.csv"],
             )
 
         self.assertTrue(intermediate.exists())
 
     def test_deletes_only_declared_intermediate_files_and_keeps_cleaned_outputs(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-intermediate-outputs"
+        tmp = TEST_TEMP_ROOT / "case-cleanup-intermediate-outputs"
         tmp.mkdir(parents=True, exist_ok=True)
 
         merged = tmp / "20260708_product_source_合并总表.xlsx"
@@ -131,6 +136,7 @@ class CleanupIntermediateOutputsTest(unittest.TestCase):
                 cleaned_summary,
             ],
             protected_paths=[cleaned_xlsx, cleaned_csv],
+            final_output_paths=[cleaned_xlsx, cleaned_csv],
             summary_path=tmp / "cleanup.summary.json",
             delete_file=deleted_paths.append,
         )
@@ -160,33 +166,39 @@ class CleanupIntermediateOutputsTest(unittest.TestCase):
         self.assertEqual([str(cleaned_xlsx.resolve()), str(cleaned_csv.resolve())], summary["protected_files"])
 
     def test_refuses_to_delete_protected_cleaned_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-protected-output"
+        tmp = TEST_TEMP_ROOT / "case-cleanup-protected-output"
         tmp.mkdir(parents=True, exist_ok=True)
 
         cleaned_xlsx = tmp / "20260708_product_source_清洗后总表.xlsx"
+        cleaned_csv = tmp / "20260708_product_source_清洗后总表.csv"
         cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+        cleaned_csv.write_text("cleaned", encoding="utf-8")
 
         with self.assertRaisesRegex(ProtectedOutputError, "protected output"):
             cleanup_intermediate_outputs(
                 intermediate_paths=[cleaned_xlsx],
-                protected_paths=[cleaned_xlsx],
+                protected_paths=[cleaned_xlsx, cleaned_csv],
+                final_output_paths=[cleaned_xlsx, cleaned_csv],
                 summary_path=tmp / "cleanup.summary.json",
             )
 
         self.assertTrue(cleaned_xlsx.exists())
 
     def test_can_cleanup_without_creating_an_extra_summary_file(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-without-summary"
+        tmp = TEST_TEMP_ROOT / "case-cleanup-without-summary"
         tmp.mkdir(parents=True, exist_ok=True)
         intermediate = tmp / "standardized.xlsx"
         cleaned_xlsx = tmp / "cleaned.xlsx"
+        cleaned_csv = tmp / "cleaned.csv"
         intermediate.write_text("intermediate", encoding="utf-8")
         cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+        cleaned_csv.write_text("cleaned", encoding="utf-8")
 
         try:
             result = cleanup_intermediate_outputs(
                 intermediate_paths=[intermediate],
-                protected_paths=[cleaned_xlsx],
+                protected_paths=[cleaned_xlsx, cleaned_csv],
+                final_output_paths=[cleaned_xlsx, cleaned_csv],
                 summary_path=None,
             )
         except Exception as error:  # pragma: no cover - makes the RED failure explicit
@@ -198,40 +210,85 @@ class CleanupIntermediateOutputsTest(unittest.TestCase):
         self.assertEqual([], list(tmp.glob("*.json")))
 
     def test_refuses_summary_path_that_would_overwrite_protected_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-summary-conflict"
+        tmp = TEST_TEMP_ROOT / "case-cleanup-summary-conflict"
         tmp.mkdir(parents=True, exist_ok=True)
         intermediate = tmp / "standardized.xlsx"
         cleaned_xlsx = tmp / "cleaned.xlsx"
+        cleaned_csv = tmp / "cleaned.csv"
         intermediate.write_text("intermediate", encoding="utf-8")
         cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+        cleaned_csv.write_text("cleaned", encoding="utf-8")
 
         with self.assertRaisesRegex(ProtectedOutputError, "protected output"):
             cleanup_intermediate_outputs(
                 intermediate_paths=[intermediate],
-                protected_paths=[cleaned_xlsx],
+                protected_paths=[cleaned_xlsx, cleaned_csv],
+                final_output_paths=[cleaned_xlsx, cleaned_csv],
                 summary_path=cleaned_xlsx,
             )
 
         self.assertEqual("cleaned", cleaned_xlsx.read_text(encoding="utf-8"))
 
     def test_refuses_to_recreate_a_cleaning_deletion_log_as_a_summary(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleanup-no-log-restoration"
+        tmp = TEST_TEMP_ROOT / "case-cleanup-no-log-restoration"
         tmp.mkdir(parents=True, exist_ok=True)
         intermediate = tmp / "standardized.xlsx"
         cleaned_xlsx = tmp / "cleaned.xlsx"
+        cleaned_csv = tmp / "cleaned.csv"
         deleted_log = tmp / "cleaned.deletions.csv"
         intermediate.write_text("intermediate", encoding="utf-8")
         cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+        cleaned_csv.write_text("cleaned", encoding="utf-8")
 
         with self.assertRaisesRegex(ProtectedOutputError, "deletion log"):
             cleanup_intermediate_outputs(
                 intermediate_paths=[intermediate],
-                protected_paths=[cleaned_xlsx],
+                protected_paths=[cleaned_xlsx, cleaned_csv],
+                final_output_paths=[cleaned_xlsx, cleaned_csv],
                 summary_path=deleted_log,
             )
 
         self.assertTrue(intermediate.exists())
         self.assertFalse(deleted_log.exists())
+
+    def test_refuses_cleanup_without_declared_final_outputs(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-cleanup-final-outputs-required"
+        tmp.mkdir(parents=True, exist_ok=True)
+        intermediate = tmp / "standardized.xlsx"
+        cleaned_xlsx = tmp / "cleaned.xlsx"
+        intermediate.write_text("intermediate", encoding="utf-8")
+        cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+
+        with self.assertRaisesRegex(FinalOutputVerificationError, "final .xlsx"):
+            cleanup_intermediate_outputs(
+                intermediate_paths=[intermediate],
+                protected_paths=[cleaned_xlsx],
+            )
+
+        self.assertTrue(intermediate.exists())
+        self.assertTrue(cleaned_xlsx.exists())
+
+    def test_refuses_to_recreate_a_final_cleaning_summary_as_cleanup_summary(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-cleanup-no-final-summary-restoration"
+        tmp.mkdir(parents=True, exist_ok=True)
+        intermediate = tmp / "standardized.xlsx"
+        cleaned_xlsx = tmp / "cleaned.xlsx"
+        cleaned_csv = tmp / "cleaned.csv"
+        cleaned_summary = cleaned_xlsx.with_suffix(".summary.json")
+        intermediate.write_text("intermediate", encoding="utf-8")
+        cleaned_xlsx.write_text("cleaned", encoding="utf-8")
+        cleaned_csv.write_text("cleaned", encoding="utf-8")
+
+        with self.assertRaisesRegex(ProtectedOutputError, "finalized cleaning audit artifact"):
+            cleanup_intermediate_outputs(
+                intermediate_paths=[intermediate],
+                protected_paths=[cleaned_xlsx, cleaned_csv],
+                final_output_paths=[cleaned_xlsx, cleaned_csv],
+                summary_path=cleaned_summary,
+            )
+
+        self.assertTrue(intermediate.exists())
+        self.assertFalse(cleaned_summary.exists())
 
 
 if __name__ == "__main__":

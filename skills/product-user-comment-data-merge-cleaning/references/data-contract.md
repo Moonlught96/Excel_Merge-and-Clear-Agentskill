@@ -11,7 +11,7 @@
 - [Non-Destructive Guarantees](#non-destructive-guarantees)
 - [Execution Guard Contract](#execution-guard-contract)
 - [Standardized Output Audit Contract](#standardized-output-audit-contract)
-- [Twitter/X Keep-Keyword Filter Contract](#twitterx-keep-keyword-filter-contract)
+- [X Tweet Keep-Keyword Filter Contract](#x-tweet-keep-keyword-filter-contract)
 - [Hash ID Pseudonymization Contract](#hash-id-pseudonymization-contract)
 
 ## Deterministic Processing Boundary
@@ -42,7 +42,7 @@
 - Literal header characters, including whitespace, must exactly match the registered signature. Common header-alias normalization must never be used to relax platform-profile routing.
 - The `amazon-japan` profile has one exact named `default` 13-column ordered signature: `标题`, `标题链接`, `图片`, `aprofile_链接`, `名称`, `aiconalt`, `查看`, `状态`, `查看1`, `asizebase`, `crhelpfultext`, `asizebase_链接`, and `asizebase2`; it parses `查看` as review date. The independent `amazon-us` profile has the exact 10-column ordered signature ending at `asizebase`; it has no confirmed date source and writes an empty `评论日期`. Both profiles use separate hash namespaces. The full fixed mappings are in `header-standardization.md`.
 - The current `rakuten` profile has five registered named variants: `reviewer-title-body-review-date`, `reviewer-date-body-title`, `title-review-date-body-reviewer`, `poster-title-body-review-date`, and `reviewer-name-title-content`. Their full signatures and deterministic output rules are in `header-standardization.md`; a single shared header never selects a Rakuten variant.
-- The current `twitter` profile has one exact registered signature. Its complete signature, temporary mapping, hash-input fields, and omission rules are in `header-standardization.md`; it never routes from a partial Twitter/X-like header set.
+- The current `twitter` profile is an X 推文 profile and `twitter-comments` is the separate X 评论 profile. Both have the same explicitly confirmed full signature and fixed temporary mapping, so automatic detection must stop as ambiguous and the current user-selected type must choose the profile. `twitter-comments` never falls back to the X 推文 workflow or its keep-keyword filter. Its complete signature, temporary mapping, hash-input fields, and omission rules are in `header-standardization.md`.
 - The current `reddit` profile has one exact registered signature. It deterministically joins `标题` and `内容`, copies `时间`, `点赞数`, and `评论/回复数`, and exposes temporary `Reddit作者` only as its approved display-name hash input. `记录类型`, `层级`, `是否回复`, `评论ID`, and `父ID` are omitted; every input row remains independent and no parent-child hierarchy is reconstructed. Its complete signature and output contract are in `header-standardization.md`; it never routes from a partial Reddit-like header set.
 - Existing fixed platform aliases remain in `config/header-standardizer.json` until an explicitly confirmed profile migration. An unregistered platform must not be guessed into an existing profile.
 - A profile must write a new temporary `.xlsx` and summary. It must not overwrite the raw input, raw merged workbook, or B站 prefix-stripped workbook.
@@ -101,8 +101,8 @@ The standardized workbook contains exactly these columns in this order:
 
 ## Execution Guard Contract
 
-- The common cleaner executable accepts only the canonical bundled `config/comment-cleaner.json` resolved relative to the Skill folder. An external, copied, or temporary cleaner configuration is a hard error, even when its content appears identical.
-- The canonical configuration currently has no platform-specific fixed-rule exception. URL/link marker terms remain active for every platform, including Twitter/X; a per-run configuration cannot alter that rule.
+- Public preprocessing, standardization, hash-ID, audit, and cleaning CLIs accept only their canonical bundled configuration resolved relative to the Skill folder. An external, copied, or temporary cleaner configuration is a hard error, even when its content appears identical; the same prohibition applies to every other public workflow configuration.
+- Per-run platform-specific fixed-rule cleaner exceptions and `platform_profiles` are prohibited. URL/link marker terms remain active for every platform, including Twitter/X. The sole canonical exception is the registered `twitter-comments` cleaning step: it strips literal `https://` URL text from the standardized `评论内容` cell only before normal rules; it cannot read or modify any other column, does not apply to `twitter` X posts, and does not disable `http://` or other link rules. A per-run configuration cannot alter that rule.
 - A new research project requires an explicit user privacy confirmation before standardization may invoke `--initialize-project`. The CLI then requires `--confirm-project-key-creation` to exactly equal `--project-name`; this records the confirmed command intent but does not replace the conversation-level confirmation gate.
 - Replacing an existing output through any writer CLI or direct Python call requires both `--overwrite` and one exact `--confirm-overwrite` path for every existing output being replaced. A confirmation path must itself be one of that command's existing outputs; unconfirmed, missing, or unrelated paths are rejected.
 - Default retention removes `.deletions.csv` and cleaner `.summary.json` after final output verification. Once the final `.xlsx` remains but its deletion log is absent, the same output path is final and cannot be used to regenerate that log. Cleanup also rejects a `.deletions.csv` path as its optional summary target.
@@ -112,14 +112,14 @@ The standardized workbook contains exactly these columns in this order:
 ## Standardized Output Audit Contract
 
 - Immediately after standardization, run `scripts/audit_standardized_comments.py` against the standardized workbook and the exact source workbook supplied to standardization.
-- The audit checks only deterministic, non-semantic invariants: fixed output header order, duplicate/unexpected identity headers, 64-character lowercase hexadecimal nonblank `哈希ID` values, nonblank `点赞数` values on every data row, worksheet name/order, and source-to-output row counts. It verifies the standardizer's blank-to-`0` default and never rewrites the workbook.
+- The audit checks only deterministic, non-semantic invariants: fixed output header order, duplicate/unexpected identity headers, 64-character lowercase hexadecimal nonblank `哈希ID` values, nonblank `点赞数` values on every data row, worksheet name/order, source-to-output row counts, and each verifiable fixed source-to-output mapped value. It verifies the standardizer's blank-to-`0` default and never rewrites the workbook.
 - The audit must not read, expose, classify, translate, or judge comment text or raw identity values. Its JSON report contains only paths, sheet names, counts, headers, and issue codes.
 - A failed audit blocks the user-confirmation, KOL, and cleaning phases. A passed audit does not remove the existing user confirmation of the standardized workbook.
 - The audit JSON is a current-run intermediate. Delete it with other intermediate outputs after successful cleaning unless the user explicitly asked to retain audit artifacts before cleaning.
 
-## Twitter/X Keep-Keyword Filter Contract
+## X Tweet Keep-Keyword Filter Contract
 
-- This contract applies only after a registered `twitter` preprocessing profile has matched, standardization/audit have passed, and the user has approved the standardized workbook.
+- This contract applies only after the user selected `推文`, a registered `twitter` X 推文 preprocessing profile has matched, standardization/audit have passed, and the user has approved the standardized workbook. It does not apply to the registered `twitter-comments` X 评论 profile.
 - It runs before the universal KOL clean-word and common-cleaning stages. It is defined in detail in `twitter-x-keyword-filter.md`.
 - The user must provide one or more nonblank keep keywords and explicitly confirm that the list is complete before execution.
 - For each worksheet, the filter requires exactly one `评论内容` header and retains a row only when its comment contains at least one confirmed literal keyword through Unicode casefolded substring matching.
@@ -141,7 +141,7 @@ The standardized workbook contains exactly these columns in this order:
 - The same normalized display name in the same research project and platform produces the same hash regardless of whether the registered source header is `username`, `用户名`, `昵称`, `用户名称`, `author`, or `author_name`.
 - `YouTube` and `YouTube Shorts` resolve to the same `youtube` platform namespace. They must not create separate hash domains for the same research project.
 - `乐天市场`, `Rakuten`, and `rakuten` resolve to the same `rakuten` platform namespace. `乐天市场昵称` is an approved temporary display-name input only after a configured Rakuten preprocessing variant has produced it; exact `購入者さん` is blanked before hash selection and never produces a hash.
-- `Twitter`, `twitter`, `X`, and `x` resolve to the same `twitter` platform namespace. Temporary `Twitter用户ID` is the stable account-ID source; only when that complete worksheet column is empty may temporary `Twitter昵称` be selected as the display-name fallback.
+- Registered X 推文 labels `Twitter`, `twitter`, `X`, and `x`, plus the registered X 评论 route label `twitter-comments`, resolve to the `twitter` platform namespace. Temporary `Twitter用户ID` is the stable account-ID source; only when that complete worksheet column is empty may temporary `Twitter昵称` be selected as the display-name fallback. The user has explicitly confirmed that `twitter-comments` shares this identity policy, so the same project and same `user_id` produce the same hash in X 推文 and X 评论 while the raw identity fields remain omitted.
 - `Reddit` and `reddit` resolve to the same `reddit` platform namespace. There is no registered stable account-ID source; temporary `Reddit作者` is the approved weak display-name fallback for the entire worksheet.
 - Account-ID and display-name hashes use separate identity domains, so the same text hashed once as an account ID and once as a display name produces different values.
 - Cross-project and cross-platform hashes differ.

@@ -1,6 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import unittest
+import json
 from pathlib import Path
 from unittest import mock
 
@@ -17,11 +18,12 @@ from tools.clean_excel_comments import (
     parse_args,
     should_delete_comment,
 )
+from tests.test_support import TEST_TEMP_ROOT
 
 
 class CleanExcelCommentsTest(unittest.TestCase):
     def test_cli_requires_explicit_standard_comment_header_and_platform(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleaner-explicit-comment-column"
+        tmp = TEST_TEMP_ROOT / "case-cleaner-explicit-comment-column"
         tmp.mkdir(parents=True, exist_ok=True)
 
         with self.assertRaises(SystemExit):
@@ -65,7 +67,6 @@ class CleanExcelCommentsTest(unittest.TestCase):
     def test_twitter_uses_base_url_and_spam_rules(self) -> None:
         twitter_config = load_config(DEFAULT_CONFIG_PATH, platform="Twitter")
 
-        self.assertIsNone(twitter_config.platform_profile)
         self.assertEqual(
             "评论包含固定删除词: https://",
             should_delete_comment(
@@ -85,8 +86,88 @@ class CleanExcelCommentsTest(unittest.TestCase):
             ),
         )
 
+    def test_twitter_comments_strip_https_urls_only_from_comment_content(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-twitter-comments-strip-https"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "standardized.xlsx"
+        output_path = tmp / "cleaned.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论内容", "profile_image_url", "点赞数"])
+        sheet.append(
+            [
+                "A detailed ScreenBar review https://t.co/review",
+                "https://pbs.twimg.com/profile-image.png",
+                4,
+            ]
+        )
+        sheet.append(["https://t.co/url-only", "https://pbs.twimg.com/second.png", 1])
+        sheet.append(["http://example.com", "https://pbs.twimg.com/third.png", 1])
+        workbook.save(input_path)
+        workbook.close()
+
+        result = clean_workbook(
+            input_path,
+            load_config(DEFAULT_CONFIG_PATH, platform="twitter-comments"),
+            (),
+            output_path=output_path,
+        )
+
+        cleaned = load_workbook(result.output_xlsx, data_only=False)
+        cleaned_sheet = cleaned.active
+        self.assertEqual(2, cleaned_sheet.max_row)
+        self.assertEqual("A detailed ScreenBar review", cleaned_sheet.cell(row=2, column=1).value)
+        self.assertEqual(
+            "https://pbs.twimg.com/profile-image.png",
+            cleaned_sheet.cell(row=2, column=2).value,
+        )
+        self.assertEqual(2, result.rows_deleted)
+        self.assertEqual(2, result.https_urls_stripped)
+
+    def test_twitter_posts_keep_https_delete_rule(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-twitter-posts-keep-https-delete"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "standardized.xlsx"
+        output_path = tmp / "cleaned.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论内容", "点赞数"])
+        sheet.append(["A detailed ScreenBar post https://t.co/post", 4])
+        workbook.save(input_path)
+        workbook.close()
+
+        result = clean_workbook(
+            input_path,
+            load_config(DEFAULT_CONFIG_PATH, platform="twitter"),
+            (),
+            output_path=output_path,
+        )
+
+        cleaned = load_workbook(result.output_xlsx, data_only=False)
+        self.assertEqual(1, cleaned.active.max_row)
+        self.assertEqual(1, result.rows_deleted)
+        self.assertEqual(0, result.https_urls_stripped)
+
+    def test_rejects_platform_specific_cleaner_exceptions_in_the_canonical_config(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-cleaner-platform-profile-rejected"
+        tmp.mkdir(parents=True, exist_ok=True)
+        config_path = tmp / "comment-cleaner.json"
+        config_data = json.loads(DEFAULT_CONFIG_PATH.read_text(encoding="utf-8"))
+        config_data["platform_profiles"] = {
+            "twitter": {
+                "aliases": ["Twitter"],
+                "remove_delete_contains_texts": ["链接"],
+            }
+        }
+        config_path.write_text(json.dumps(config_data, ensure_ascii=False), encoding="utf-8")
+
+        with self.assertRaisesRegex(Exception, "platform_profiles"):
+            load_config(config_path, platform="Twitter")
+
     def test_cli_rejects_external_or_temporary_cleaner_config(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleaner-external-config"
+        tmp = TEST_TEMP_ROOT / "case-cleaner-external-config"
         tmp.mkdir(parents=True, exist_ok=True)
         external_config = tmp / "comment-cleaner-temporary.json"
         external_config.write_text(
@@ -110,7 +191,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
             )
 
     def test_refuses_to_regenerate_a_deleted_cleaning_log_at_finalized_path(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cleaner-finalized-log-restoration"
+        tmp = TEST_TEMP_ROOT / "case-cleaner-finalized-log-restoration"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "cleaned.xlsx"
@@ -137,8 +218,39 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual("finalized-cleaned-output", output_path.read_text(encoding="utf-8"))
         self.assertFalse(deletion_log_path.exists())
 
+    def test_refuses_to_regenerate_a_deleted_cleaning_summary_at_finalized_path(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-cleaner-finalized-summary-restoration"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.xlsx"
+        output_path = tmp / "cleaned.xlsx"
+        deletion_log_path = output_path.with_suffix(".deletions.csv")
+        summary_path = output_path.with_suffix(".summary.json")
+
+        workbook = Workbook()
+        workbook.active.append(["评论内容"])
+        workbook.active.append(["这是需要保留的完整评论内容"])
+        workbook.save(input_path)
+        workbook.close()
+        output_path.write_text("finalized-cleaned-output", encoding="utf-8")
+        deletion_log_path.write_text("finalized-deletion-log", encoding="utf-8")
+        summary_path.unlink(missing_ok=True)
+
+        with self.assertRaisesRegex(FinalizedCleaningAuditArtifactsError, "Refusing to regenerate"):
+            clean_workbook(
+                input_path,
+                CleanerConfig(target_header="评论内容"),
+                (),
+                output_path=output_path,
+                overwrite=True,
+                overwrite_confirmations=(output_path, deletion_log_path),
+            )
+
+        self.assertEqual("finalized-cleaned-output", output_path.read_text(encoding="utf-8"))
+        self.assertEqual("finalized-deletion-log", deletion_log_path.read_text(encoding="utf-8"))
+        self.assertFalse(summary_path.exists())
+
     def test_closes_input_workbook_when_cleaning_fails(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-clean-closes-on-error"
+        tmp = TEST_TEMP_ROOT / "case-clean-closes-on-error"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "cleaned.xlsx"
@@ -294,6 +406,52 @@ class CleanExcelCommentsTest(unittest.TestCase):
             ),
         )
 
+    def test_han_only_japanese_fixed_word_uses_configured_script_group_override(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-cleaner-japanese-han-override"
+        tmp.mkdir(parents=True, exist_ok=True)
+        config_path = tmp / "comment-cleaner.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "target_header": "评论内容",
+                    "delete_contains_texts": ["漢字限定語"],
+                    "delete_contains_case_insensitive_texts": [],
+                    "fixed_term_script_group_overrides": {
+                        "漢字限定語": "japanese"
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        config = load_config(config_path)
+
+        self.assertEqual(
+            "评论包含固定删除词: 漢字限定語",
+            should_delete_comment(
+                "これは漢字限定語を含む十分に長い製品レビューです",
+                set(),
+                config,
+                (),
+            ),
+        )
+
+    def test_default_cleaner_config_uses_canonical_han_only_japanese_overrides(self) -> None:
+        config = CleanerConfig(
+            delete_contains_texts=("割引",),
+            delete_contains_case_insensitive_texts=(),
+        )
+
+        self.assertEqual(
+            "评论包含固定删除词: 割引",
+            should_delete_comment(
+                "これは十分に長い製品割引レビューの内容です",
+                set(),
+                config,
+                (),
+            ),
+        )
+
     def test_japanese_with_kanji_does_not_use_chinese_length_threshold(self) -> None:
         config = CleanerConfig(
             delete_contains_texts=(),
@@ -315,7 +473,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertIsNone(should_delete_comment("漢字좋아요", set(), config, ()))
 
     def test_clean_workbook_matches_rpa_rules_without_like_column(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-rules"
+        tmp = TEST_TEMP_ROOT / "case-rules"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "dirty.xlsx"
         output_dir = tmp / "out"
@@ -358,7 +516,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertTrue(result.summary_json.exists())
 
     def test_clean_workbook_rejects_legacy_numeric_target_column_fallback(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-reject-legacy-target-column"
+        tmp = TEST_TEMP_ROOT / "case-reject-legacy-target-column"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "legacy.xlsx"
 
@@ -378,7 +536,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
             )
 
     def test_duplicate_main_comments_keep_highest_like_count_then_last_tie(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-duplicate-main-comments-max-likes"
+        tmp = TEST_TEMP_ROOT / "case-duplicate-main-comments-max-likes"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "duplicates.xlsx"
 
@@ -411,7 +569,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(2, result.rows_deleted)
 
     def test_clean_words_are_optional(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-optional-clean-words"
+        tmp = TEST_TEMP_ROOT / "case-optional-clean-words"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "dirty.xlsx"
 
@@ -434,7 +592,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(0, result.rows_deleted)
 
     def test_clean_workbook_accepts_confirmed_output_filename(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-confirmed-output-filename"
+        tmp = TEST_TEMP_ROOT / "case-confirmed-output-filename"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
         output_path = tmp / "20260707_ScreenBar Halo2_淘宝评论数据_清洗后总表.xlsx"
@@ -458,7 +616,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertTrue(output_path.exists())
 
     def test_clean_workbook_rejects_output_path_that_would_overwrite_input_file(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-clean-output-conflict"
+        tmp = TEST_TEMP_ROOT / "case-clean-output-conflict"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "dirty.xlsx"
 
@@ -480,7 +638,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual("正常评论内容很完整", original.active.cell(row=2, column=3).value)
 
     def test_clean_workbook_rejects_derived_csv_path_that_would_overwrite_csv_input(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-clean-csv-sidecar-conflict"
+        tmp = TEST_TEMP_ROOT / "case-clean-csv-sidecar-conflict"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.csv"
         output_path = tmp / "source.xlsx"
@@ -500,7 +658,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertFalse(output_path.exists())
 
     def test_requires_explicit_overwrite_for_any_existing_clean_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-clean-existing-output"
+        tmp = TEST_TEMP_ROOT / "case-clean-existing-output"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
         output_path = tmp / "cleaned.xlsx"
@@ -525,7 +683,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertFalse(output_path.exists())
 
     def test_comments_with_seven_or_fewer_characters_are_deleted(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-length-limit"
+        tmp = TEST_TEMP_ROOT / "case-length-limit"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "dirty.xlsx"
 
@@ -554,7 +712,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(1, result.rows_deleted)
 
     def test_clean_workbook_can_target_comment_by_header_after_standardization(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-target-header"
+        tmp = TEST_TEMP_ROOT / "case-target-header"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
 
@@ -581,7 +739,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(1, result.rows_deleted)
 
     def test_clean_workbook_accepts_csv_input_through_compatibility_layer(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-clean-csv-input"
+        tmp = TEST_TEMP_ROOT / "case-clean-csv-input"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.csv"
         input_path.write_text(
@@ -607,7 +765,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertTrue(result.output_csv and result.output_csv.exists())
 
     def test_deletes_expanded_fixed_contains_words(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-expanded-fixed-contains"
+        tmp = TEST_TEMP_ROOT / "case-expanded-fixed-contains"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
 
@@ -639,7 +797,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(7, result.rows_deleted)
 
     def test_deletes_multilingual_fixed_spam_words(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-multilingual-fixed-contains"
+        tmp = TEST_TEMP_ROOT / "case-multilingual-fixed-contains"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
 
@@ -668,8 +826,55 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual([("2026/01/01", "This monitor light works great", 1)], rows[1:])
         self.assertEqual(5, result.rows_deleted)
 
+    def test_deletes_fixed_promotion_terms_in_every_supported_language_group(self) -> None:
+        config = load_config(DEFAULT_CONFIG_PATH)
+        cases = (
+            ("优惠", "这是一条足够长的产品优惠评论内容"),
+            ("好物", "这是一条足够长的产品好物评论内容"),
+            ("红包", "这是一条足够长的产品红包评论内容"),
+            ("特价", "这是一条足够长的产品特价评论内容"),
+            ("国补", "这是一条足够长的产品国补评论内容"),
+            ("discount", "This is a detailed product discount comment today"),
+            ("good stuff", "This is a detailed good stuff product comment today"),
+            ("red envelope", "This is a detailed red envelope product comment today"),
+            ("special price", "This is a detailed special price product comment today"),
+            ("national subsidy", "This is a detailed national subsidy product comment today"),
+            ("割引", "これは十分に長い製品割引レビューの内容です"),
+            ("良いもの", "これは十分に長い製品の良いものレビューです"),
+            ("お年玉", "これは十分に長い製品お年玉レビューの内容です"),
+            ("特価", "これは十分に長い製品特価レビューの内容です"),
+            ("国の補助金", "これは十分に長い製品国の補助金レビューです"),
+            ("할인", "이것은 충분히 긴 제품 할인 리뷰 내용입니다"),
+            ("좋은 물건", "이것은 충분히 긴 제품 좋은 물건 리뷰 내용입니다"),
+            ("홍바오", "이것은 충분히 긴 제품 홍바오 리뷰 내용입니다"),
+            ("특가", "이것은 충분히 긴 제품 특가 리뷰 내용입니다"),
+            ("국가 보조금", "이것은 충분히 긴 제품 국가 보조금 리뷰 내용입니다"),
+            ("descuento", "Este es un comentario detallado sobre descuento hoy"),
+            ("cosas buenas", "Este es un comentario sobre cosas buenas del producto hoy"),
+            ("sobre rojo", "Este es un comentario sobre sobre rojo del producto hoy"),
+            ("precio especial", "Este es un comentario sobre precio especial del producto hoy"),
+            ("subsidio nacional", "Este es un comentario sobre subsidio nacional del producto hoy"),
+            ("ส่วนลด", "นี่คือรีวิวสินค้าที่มีรายละเอียดส่วนลดสำหรับวันนี้"),
+            ("ของดี", "นี่คือรีวิวสินค้าที่มีรายละเอียดของดีสำหรับวันนี้"),
+            ("อั่งเปา", "นี่คือรีวิวสินค้าที่มีรายละเอียดอั่งเปาสำหรับวันนี้"),
+            ("ราคาพิเศษ", "นี่คือรีวิวสินค้าที่มีรายละเอียดราคาพิเศษสำหรับวันนี้"),
+            ("เงินอุดหนุนจากรัฐ", "นี่คือรีวิวสินค้าที่มีรายละเอียดเงินอุดหนุนจากรัฐสำหรับวันนี้"),
+            ("छूट", "यह उत्पाद के बारे में पर्याप्त विस्तृत छूट टिप्पणी है"),
+            ("अच्छी चीज़", "यह उत्पाद के बारे में पर्याप्त विस्तृत अच्छी चीज़ टिप्पणी है"),
+            ("लाल लिफाफा", "यह उत्पाद के बारे में पर्याप्त विस्तृत लाल लिफाफा टिप्पणी है"),
+            ("विशेष कीमत", "यह उत्पाद के बारे में पर्याप्त विस्तृत विशेष कीमत टिप्पणी है"),
+            ("राष्ट्रीय सब्सिडी", "यह उत्पाद के बारे में पर्याप्त विस्तृत राष्ट्रीय सब्सिडी टिप्पणी है"),
+        )
+
+        for term, comment in cases:
+            with self.subTest(term=term):
+                self.assertEqual(
+                    f"评论包含固定删除词: {term}",
+                    should_delete_comment(comment, set(), config, ()),
+                )
+
     def test_deletes_random_alnum_without_chinese_but_keeps_normal_english_phrase(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-random-alnum-without-chinese"
+        tmp = TEST_TEMP_ROOT / "case-random-alnum-without-chinese"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
 
@@ -698,14 +903,15 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(
             [
                 ("2026/01/01", "good product works well today", 1),
+                ("2026/01/01", "good product works well", 1),
                 ("2026/01/05", "中文夹着 jdsklafjskl 不按纯英文数字堆砌删除", 1),
             ],
             rows[1:],
         )
-        self.assertEqual(4, result.rows_deleted)
+        self.assertEqual(3, result.rows_deleted)
 
-    def test_deletes_non_chinese_comments_with_four_or_fewer_words(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-non-chinese-short-word-limit"
+    def test_deletes_non_chinese_comments_with_two_or_fewer_words(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-non-chinese-short-word-limit"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
 
@@ -713,11 +919,14 @@ class CleanExcelCommentsTest(unittest.TestCase):
         sheet = workbook.active
         sheet.title = "SheetA"
         sheet.append(["date", "评论内容", "likes"])
-        sheet.append(["2026/01/01", "This works very well", 1])
-        sheet.append(["2026/01/02", "This monitor light works very well", 1])
-        sheet.append(["2026/01/03", "muy buen producto", 1])
-        sheet.append(["2026/01/04", "esta lámpara funciona muy bien", 1])
-        sheet.append(["2026/01/05", "\u0e42\u0e04\u0e21\u0e44\u0e1f\u0e15\u0e31\u0e49\u0e07\u0e42\u0e15\u0e4a\u0e30\u0e19\u0e35\u0e49\u0e14\u0e35\u0e21\u0e32\u0e01", 1])
+        sheet.append(["2026/01/01", "This works", 1])
+        sheet.append(["2026/01/02", "This works well", 1])
+        sheet.append(["2026/01/03", "This works very well", 1])
+        sheet.append(["2026/01/04", "This monitor light works very well", 1])
+        sheet.append(["2026/01/05", "muy bueno", 1])
+        sheet.append(["2026/01/06", "muy buen producto", 1])
+        sheet.append(["2026/01/07", "esta lámpara funciona muy bien", 1])
+        sheet.append(["2026/01/08", "\u0e42\u0e04\u0e21\u0e44\u0e1f\u0e15\u0e31\u0e49\u0e07\u0e42\u0e15\u0e4a\u0e30\u0e19\u0e35\u0e49\u0e14\u0e35\u0e21\u0e32\u0e01", 1])
         workbook.save(input_path)
 
         result = clean_workbook(
@@ -732,16 +941,19 @@ class CleanExcelCommentsTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                ("2026/01/02", "This monitor light works very well", 1),
-                ("2026/01/04", "esta lámpara funciona muy bien", 1),
-                ("2026/01/05", "\u0e42\u0e04\u0e21\u0e44\u0e1f\u0e15\u0e31\u0e49\u0e07\u0e42\u0e15\u0e4a\u0e30\u0e19\u0e35\u0e49\u0e14\u0e35\u0e21\u0e32\u0e01", 1),
+                ("2026/01/02", "This works well", 1),
+                ("2026/01/03", "This works very well", 1),
+                ("2026/01/04", "This monitor light works very well", 1),
+                ("2026/01/06", "muy buen producto", 1),
+                ("2026/01/07", "esta lámpara funciona muy bien", 1),
+                ("2026/01/08", "\u0e42\u0e04\u0e21\u0e44\u0e1f\u0e15\u0e31\u0e49\u0e07\u0e42\u0e15\u0e4a\u0e30\u0e19\u0e35\u0e49\u0e14\u0e35\u0e21\u0e32\u0e01", 1),
             ],
             rows[1:],
         )
         self.assertEqual(2, result.rows_deleted)
 
     def test_deletes_thai_hindi_and_spanish_fixed_spam_words(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-thai-hindi-spanish-fixed-contains"
+        tmp = TEST_TEMP_ROOT / "case-thai-hindi-spanish-fixed-contains"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
 
@@ -776,7 +988,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(3, result.rows_deleted)
 
     def test_duplicate_subcomments_are_cleared_without_deleting_main_comment_rows(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-duplicate-subcomments"
+        tmp = TEST_TEMP_ROOT / "case-duplicate-subcomments"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
 
@@ -830,7 +1042,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(3, result.cells_cleared)
 
     def test_short_subcomments_are_cleared_without_deleting_main_comment_rows(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-short-subcomments"
+        tmp = TEST_TEMP_ROOT / "case-short-subcomments"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
 
@@ -866,7 +1078,7 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertEqual(2, result.cells_cleared)
 
     def test_cleaning_preserves_hash_id_column_values(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-preserve-hash-id"
+        tmp = TEST_TEMP_ROOT / "case-preserve-hash-id"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "standardized.xlsx"
         hash_id = "a" * 64

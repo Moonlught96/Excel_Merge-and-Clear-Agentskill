@@ -7,7 +7,7 @@
 - [CSV Physical-Line Counts](#csv-physical-line-counts-resolved)
 - [Blank Stable Account-ID Column Blocks Display-Name Hashing](#blank-stable-account-id-column-blocks-display-name-hashing)
 - [Literal Exporter `None` Is Not A Stable Account ID](#literal-exporter-none-is-not-a-stable-account-id)
-- [Known Trailing `(edited)` Date Suffix](#known-trailing-edited-date-suffix)
+- [Known Trailing Edited-Date Suffixes](#known-trailing-edited-date-suffixes)
 - [YouTube Export Variants Use Different Display-Name Headers](#youtube-export-variants-use-different-display-name-headers)
 - [Output Collision And Partial-Write Risks](#output-collision-and-partial-write-risks)
 - [Compact Dates Mistaken For Unix Timestamps](#compact-dates-mistaken-for-unix-timestamps)
@@ -22,6 +22,7 @@
 - [Standardized Output Audit Stops Unsafe Progression](#standardized-output-audit-stops-unsafe-progression)
 - [Short Chinese Fixed Terms Can Cause False Positives](#short-chinese-fixed-terms-can-cause-false-positives)
 - [Finalized Cleaning Logs Must Not Be Restored](#finalized-cleaning-logs-must-not-be-restored)
+- [Repeatable Test Outputs](#repeatable-test-outputs)
 
 ## Contextual Latin Fixed-Word False Positives (resolved)
 
@@ -84,9 +85,9 @@ Some YouTube exports write the literal text `None` in every `author_channel_id` 
 
 Regression coverage proves that two different YouTube `author` values paired with account-ID values `None` generate two different hashes. No AI, value semantics, or row-by-row identity switching is involved.
 
-## Known Trailing `(edited)` Date Suffix
+## Known Trailing Edited-Date Suffixes
 
-Some YouTube exports append the exact literal suffix `(edited)` to relative or ISO dates, such as `1 year ago (edited)`. Before the standardizer applies its registered deterministic date parser, it strips that one trailing suffix for parsing only. Relative values still use the configured Beijing-date granularity, so `1 year ago (edited)` becomes the year only. Unknown suffixes and unmatched nonblank values are preserved unchanged instead of being guessed.
+Some YouTube exports append one of two registered literal suffixes to relative or ISO dates: `(edited)` or `（修改过）`. Before the standardizer applies its registered deterministic date parser, it strips only those exact trailing suffixes for parsing. Relative values still use the configured Beijing-date granularity, so `1 year ago (edited)` and `三年前（修改过）` become the year only. Unknown suffixes and unmatched nonblank values are preserved unchanged instead of being guessed.
 
 ## YouTube Export Variants Use Different Display-Name Headers
 
@@ -154,7 +155,7 @@ When the user has confirmed the platform profile, use `scripts/preprocess_platfo
 
 ## Standardized Output Audit Stops Unsafe Progression
 
-The automatic audit is intentionally structural. It checks locked header order, unexpected raw identity headers, hash format, worksheet order, and row-count preservation against the exact standardization source. A failed audit blocks standardization approval, KOL-word collection, and cleaning.
+The automatic audit is intentionally deterministic and non-semantic. It checks locked header order, unexpected raw identity headers, hash format, worksheet order, row-count preservation, and every verifiable fixed mapped source/output value against the exact standardization source. A failed audit blocks standardization approval, KOL-word collection, and cleaning.
 
 The audit does not evaluate the meaning, language, quality, sentiment, or correctness of a comment. It emits issue codes and counts only, never raw identity values or comment values. Correct an underlying fixed configuration or tool defect, then rerun the standardization and audit; do not manually alter the audit report to continue.
 
@@ -164,10 +165,16 @@ Chinese configured fixed terms use literal substring containment. Short generic 
 
 Examples that must remain when no other rule matches include `无炫光设计让我很满意`, `第一次购买屏幕挂灯效果很好`, `价格略贵但整体品质不错`, `感应到人来了就会自动亮灯`, `测试使用两周后光线非常舒服`, and `路过时人体感应会自动亮灯`.
 
-Do not create a custom per-run cleaner JSON to override the canonical configuration. The cleaner CLI rejects every non-canonical `--config` path. A user-confirmed rule change must update the root configuration, the bundled Skill configuration, this reference, and deterministic positive/negative tests together.
+Do not create a custom per-run cleaner JSON to override the canonical configuration. Platform-specific cleaner exceptions and `platform_profiles` are prohibited. The public preprocessing, standardization, hash-ID, audit, and cleaner CLIs reject every non-canonical `--config` path. A user-confirmed rule change must update the root configuration, the bundled Skill configuration, this reference, and deterministic positive/negative tests together.
 
 ## Finalized Cleaning Logs Must Not Be Restored
 
 The default retention policy deletes cleaner `.deletions.csv` and `.summary.json` after the final `.xlsx` and `.csv` are verified. Retrying the cleaner against the same final `.xlsx` path used to recreate a log that the workflow intentionally removed, which creates inconsistent audit state.
 
-The cleaner now refuses that rerun when its final output exists and the deletion log is absent. Do not restore a deletion log from another location or use the cleanup tool's `--summary` option to recreate a `.deletions.csv` file. If a fresh run is required, use a new user-confirmed final output path.
+The cleaner now refuses that rerun when its final output exists and either the deletion log or summary is absent. Do not restore either artifact from another location or use the cleanup tool's `--summary` option to recreate a final `.deletions.csv` or `.summary.json` file. If a fresh run is required, use a new user-confirmed final output path.
+
+## Repeatable Test Outputs
+
+Test code must use a process-isolated operating-system temporary root, not a fixed repository `.tmp-tests` directory. Reusing fixed output paths can correctly trigger the production no-clobber guard on a second test run and conceal real regressions behind `OutputPathConflictError`.
+
+The test helper keeps a stable `.tmp-tests` child name only for deterministic filename-discovery fixtures, while its parent is unique for each test process. This preserves naming tests and allows the complete suite to run repeatedly in the same working tree without touching user inputs or workflow outputs.

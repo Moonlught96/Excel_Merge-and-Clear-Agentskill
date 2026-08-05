@@ -6,7 +6,7 @@ import json
 import re
 import unicodedata
 from contextlib import ExitStack
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from pathlib import Path
@@ -63,11 +63,14 @@ def require_canonical_cleaner_config_path(config_path: Path) -> Path:
 def refuse_finalized_audit_artifact_restoration(
     output_xlsx: Path,
     deletion_log_csv: Path,
+    summary_json: Path,
 ) -> None:
     """Keep default-retention cleanup irreversible for a finalized output path."""
-    if output_xlsx.exists() and not deletion_log_csv.exists():
+    if output_xlsx.exists() and (
+        not deletion_log_csv.exists() or not summary_json.exists()
+    ):
         raise FinalizedCleaningAuditArtifactsError(
-            "Refusing to regenerate a deletion log that was removed by the retention policy. "
+            "Refusing to regenerate a finalized cleaning audit artifact that was removed by the retention policy. "
             "Choose a new confirmed final output path for a fresh run; do not restore finalized audit artifacts."
         )
 
@@ -80,6 +83,10 @@ DEVANAGARI_PATTERN = re.compile(r"[\u0900-\u097f]")
 ALNUM_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
 LIKE_COUNT_PATTERN = re.compile(r"[+-]?\d+(?:\.\d+)?")
 LATIN_LETTER_PATTERN = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿĀ-ž]")
+HTTPS_URL_PATTERN = re.compile(r"https://\S+")
+FIXED_TERM_SCRIPT_GROUPS = frozenset(
+    {"chinese", "japanese", "korean", "thai", "hindi", "latin", "neutral"}
+)
 DEFAULT_DELETE_CONTAINS_TEXTS = (
     "链接",
     "凑字数",
@@ -125,6 +132,11 @@ DEFAULT_DELETE_CONTAINS_TEXTS = (
     "回关",
     "秒回",
     "交朋友",
+    "优惠",
+    "好物",
+    "红包",
+    "特价",
+    "国补",
     "リンク",
     "プロフィール見て",
     "プロフ見て",
@@ -135,10 +147,20 @@ DEFAULT_DELETE_CONTAINS_TEXTS = (
     "内容なし",
     "評価なし",
     "コメント稼ぎ",
+    "割引",
+    "良いもの",
+    "お年玉",
+    "特価",
+    "国の補助金",
     "링크",
     "맞팔",
     "테스트",
     "내용 없음",
+    "할인",
+    "좋은 물건",
+    "홍바오",
+    "특가",
+    "국가 보조금",
 )
 DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS = (
     "加v",
@@ -163,6 +185,11 @@ DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS = (
     "promo code",
     "coupon code",
     "discount code",
+    "discount",
+    "good stuff",
+    "red envelope",
+    "special price",
+    "national subsidy",
     "whatsapp",
     "telegram",
     "n/a",
@@ -192,6 +219,10 @@ DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS = (
     "código promocional",
     "codigo promocional",
     "descuento",
+    "cosas buenas",
+    "sobre rojo",
+    "precio especial",
+    "subsidio nacional",
     "primero",
     "prueba",
     "sin contenido",
@@ -219,6 +250,11 @@ DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS = (
     "ไม่มีความคิดเห็น",
     "ปั๊มคอมเมนต์",
     "เก็บแต้ม",
+    "ส่วนลด",
+    "ของดี",
+    "อั่งเปา",
+    "ราคาพิเศษ",
+    "เงินอุดหนุนจากรัฐ",
     "ราคาเท่าไหร่",
     "กี่บาท",
     "ยี่ห้ออะไร",
@@ -239,6 +275,11 @@ DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS = (
     "कोई टिप्पणी नहीं",
     "पॉइंट कमाने",
     "सिक्के कमाने",
+    "छूट",
+    "अच्छी चीज़",
+    "लाल लिफाफा",
+    "विशेष कीमत",
+    "राष्ट्रीय सब्सिडी",
     "कितने का है",
     "कीमत",
     "कौन सा ब्रांड",
@@ -249,20 +290,70 @@ DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS = (
 )
 
 
+def parse_fixed_term_script_group_overrides(
+    raw_overrides: Any,
+    fixed_terms: tuple[str, ...],
+) -> tuple[tuple[str, str], ...]:
+    if raw_overrides is None:
+        return ()
+    if not isinstance(raw_overrides, dict):
+        raise CleanerConfigError("fixed_term_script_group_overrides must be an object")
+
+    configured_terms = set(fixed_terms)
+    overrides: list[tuple[str, str]] = []
+    for term, script_group in raw_overrides.items():
+        if not isinstance(term, str) or not term:
+            raise CleanerConfigError(
+                "fixed_term_script_group_overrides keys must be non-empty strings"
+            )
+        if term not in configured_terms:
+            raise CleanerConfigError(
+                "fixed_term_script_group_overrides may only classify an active fixed delete term: "
+                f"{term}"
+            )
+        if script_group not in FIXED_TERM_SCRIPT_GROUPS:
+            raise CleanerConfigError(
+                "fixed_term_script_group_overrides has an unsupported script group: "
+                f"{script_group}"
+            )
+        overrides.append((term, script_group))
+    return tuple(overrides)
+
+
+def default_fixed_term_script_group_overrides() -> tuple[tuple[str, str], ...]:
+    data = json.loads(DEFAULT_CONFIG_PATH.read_text(encoding="utf-8"))
+    fixed_terms = tuple(
+        data.get("delete_contains_texts", DEFAULT_DELETE_CONTAINS_TEXTS)
+    ) + tuple(
+        data.get(
+            "delete_contains_case_insensitive_texts",
+            DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS,
+        )
+    )
+    return parse_fixed_term_script_group_overrides(
+        data.get("fixed_term_script_group_overrides"),
+        fixed_terms,
+    )
+
+
 @dataclass(frozen=True)
 class CleanerConfig:
     # Kept only as an ignored compatibility field for callers that still pass it.
     # Cleaning always resolves the locked standardized comment header instead.
     target_column: int | None = None
     target_header: str | None = STANDARDIZED_COMMENT_HEADER
-    platform_profile: str | None = None
+    platform: str = ""
+    twitter_comments_strip_https_urls_from_comment_content: bool = False
     first_data_row: int = 2
     min_trimmed_length: int = 8
-    non_chinese_max_short_words: int = 4
+    non_chinese_max_short_words: int = 2
     non_chinese_max_short_unspaced_chars: int = 4
     delete_exact_texts: tuple[str, ...] = ("该用户未填写评价内容", "此用户未填写评价内容")
     delete_contains_texts: tuple[str, ...] = DEFAULT_DELETE_CONTAINS_TEXTS
     delete_contains_case_insensitive_texts: tuple[str, ...] = DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS
+    fixed_term_script_group_overrides: tuple[tuple[str, str], ...] = field(
+        default_factory=default_fixed_term_script_group_overrides
+    )
     delete_random_alnum_without_chinese: bool = True
     random_digit_min_length: int = 9
     random_letter_min_length: int = 10
@@ -305,88 +396,15 @@ class CleanResult:
     sheets_processed: int
     rows_deleted: int
     cells_cleared: int
-
-
-def _require_platform_profile_terms(value: Any, field_name: str) -> tuple[str, ...]:
-    if value is None:
-        return ()
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise CleanerConfigError(f"{field_name} must be a list of strings")
-    return tuple(value)
-
-
-def _apply_platform_profile(
-    config: CleanerConfig,
-    raw_config: dict[str, Any],
-    platform: str | None,
-) -> CleanerConfig:
-    if platform is None:
-        return config
-
-    requested_platform = platform.strip().casefold()
-    if not requested_platform:
-        return config
-
-    raw_profiles = raw_config.get("platform_profiles", {})
-    if raw_profiles is None:
-        raw_profiles = {}
-    if not isinstance(raw_profiles, dict):
-        raise CleanerConfigError("platform_profiles must be an object")
-
-    matches: list[tuple[str, dict[str, Any]]] = []
-    for profile_name, raw_profile in raw_profiles.items():
-        if not isinstance(profile_name, str) or not isinstance(raw_profile, dict):
-            raise CleanerConfigError("Each platform profile must have a string name and object value")
-        aliases = _require_platform_profile_terms(
-            raw_profile.get("aliases", []),
-            f"platform_profiles.{profile_name}.aliases",
-        )
-        names = {profile_name.casefold(), *(alias.strip().casefold() for alias in aliases)}
-        if requested_platform in names:
-            matches.append((profile_name, raw_profile))
-
-    if not matches:
-        return config
-    if len(matches) > 1:
-        raise CleanerConfigError(
-            f"Platform matches multiple cleaner profiles: {platform!r}"
-        )
-
-    profile_name, raw_profile = matches[0]
-    remove_sensitive = _require_platform_profile_terms(
-        raw_profile.get("remove_delete_contains_texts", []),
-        f"platform_profiles.{profile_name}.remove_delete_contains_texts",
-    )
-    remove_insensitive = _require_platform_profile_terms(
-        raw_profile.get("remove_delete_contains_case_insensitive_texts", []),
-        f"platform_profiles.{profile_name}.remove_delete_contains_case_insensitive_texts",
-    )
-    unknown_sensitive = set(remove_sensitive) - set(config.delete_contains_texts)
-    unknown_insensitive = set(remove_insensitive) - set(
-        config.delete_contains_case_insensitive_texts
-    )
-    if unknown_sensitive or unknown_insensitive:
-        unknown = sorted(unknown_sensitive | unknown_insensitive)[0]
-        raise CleanerConfigError(
-            f"Platform cleaner profile {profile_name!r} removes an unconfigured term: {unknown!r}"
-        )
-
-    return replace(
-        config,
-        platform_profile=profile_name,
-        delete_contains_texts=tuple(
-            text for text in config.delete_contains_texts if text not in set(remove_sensitive)
-        ),
-        delete_contains_case_insensitive_texts=tuple(
-            text
-            for text in config.delete_contains_case_insensitive_texts
-            if text not in set(remove_insensitive)
-        ),
-    )
+    https_urls_stripped: int
 
 
 def load_config(path: Path, platform: str | None = None) -> CleanerConfig:
     data = json.loads(path.read_text(encoding="utf-8"))
+    if "platform_profiles" in data:
+        raise CleanerConfigError(
+            "platform_profiles are forbidden. All platforms must use the canonical fixed cleaning rules."
+        )
     if "target_column" in data:
         raise CleanerConfigError(
             "target_column is not supported. Cleaning must resolve the standardized 评论内容 header."
@@ -396,16 +414,33 @@ def load_config(path: Path, platform: str | None = None) -> CleanerConfig:
         raise CleanerConfigError(
             "target_header must be exactly 评论内容 for the standardized cleaning workflow."
         )
+    delete_exact_texts = tuple(data.get("delete_exact_texts", []))
+    delete_contains_texts = tuple(
+        data.get("delete_contains_texts", DEFAULT_DELETE_CONTAINS_TEXTS)
+    )
+    delete_contains_case_insensitive_texts = tuple(
+        data.get(
+            "delete_contains_case_insensitive_texts",
+            DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS,
+        )
+    )
+    normalized_platform = (platform or "").strip().casefold()
     config = CleanerConfig(
         target_header=STANDARDIZED_COMMENT_HEADER,
+        platform=normalized_platform,
+        twitter_comments_strip_https_urls_from_comment_content=bool(
+            data.get("twitter_comments_strip_https_urls_from_comment_content", False)
+        ),
         first_data_row=int(data.get("first_data_row", 2)),
         min_trimmed_length=int(data.get("min_trimmed_length", 8)),
-        non_chinese_max_short_words=int(data.get("non_chinese_max_short_words", 4)),
+        non_chinese_max_short_words=int(data.get("non_chinese_max_short_words", 2)),
         non_chinese_max_short_unspaced_chars=int(data.get("non_chinese_max_short_unspaced_chars", 4)),
-        delete_exact_texts=tuple(data.get("delete_exact_texts", [])),
-        delete_contains_texts=tuple(data.get("delete_contains_texts", DEFAULT_DELETE_CONTAINS_TEXTS)),
-        delete_contains_case_insensitive_texts=tuple(
-            data.get("delete_contains_case_insensitive_texts", DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS)
+        delete_exact_texts=delete_exact_texts,
+        delete_contains_texts=delete_contains_texts,
+        delete_contains_case_insensitive_texts=delete_contains_case_insensitive_texts,
+        fixed_term_script_group_overrides=parse_fixed_term_script_group_overrides(
+            data.get("fixed_term_script_group_overrides"),
+            delete_contains_texts + delete_contains_case_insensitive_texts,
         ),
         delete_random_alnum_without_chinese=bool(data.get("delete_random_alnum_without_chinese", True)),
         random_digit_min_length=int(data.get("random_digit_min_length", 9)),
@@ -423,7 +458,7 @@ def load_config(path: Path, platform: str | None = None) -> CleanerConfig:
         export_first_sheet_csv=bool(data.get("export_first_sheet_csv", True)),
         csv_encoding=str(data.get("csv_encoding", "utf-8-sig")),
     )
-    return _apply_platform_profile(config, data, platform)
+    return config
 
 
 def normalize_cell(value: Any) -> str:
@@ -575,7 +610,14 @@ def parse_like_count(value: Any) -> Decimal:
         return Decimal(0)
 
 
-def fixed_term_script_group(text: str) -> str:
+def fixed_term_script_group(
+    text: str,
+    *,
+    overrides: tuple[tuple[str, str], ...] = (),
+) -> str:
+    for term, script_group in overrides:
+        if term == text:
+            return script_group
     normalized = text.casefold()
     if normalized in {"http://", "https://"}:
         return "neutral"
@@ -596,8 +638,14 @@ def fixed_term_script_group(text: str) -> str:
     return "neutral"
 
 
-def contains_configured_fixed_term(comment: str, term: str, *, case_sensitive: bool) -> bool:
-    term_group = fixed_term_script_group(term)
+def contains_configured_fixed_term(
+    comment: str,
+    term: str,
+    *,
+    case_sensitive: bool,
+    term_script_group_overrides: tuple[tuple[str, str], ...] = (),
+) -> bool:
+    term_group = fixed_term_script_group(term, overrides=term_script_group_overrides)
     comment_group = fixed_term_script_group(comment)
     if term_group != "neutral" and term_group != comment_group:
         return False
@@ -631,11 +679,21 @@ def should_delete_comment(
             return f"评论包含清理词: {clean_word}"
 
     for text in config.delete_contains_texts:
-        if text and contains_configured_fixed_term(comment, text, case_sensitive=True):
+        if text and contains_configured_fixed_term(
+            comment,
+            text,
+            case_sensitive=True,
+            term_script_group_overrides=config.fixed_term_script_group_overrides,
+        ):
             return f"评论包含固定删除词: {text}"
 
     for text in config.delete_contains_case_insensitive_texts:
-        if text and contains_configured_fixed_term(comment, text, case_sensitive=False):
+        if text and contains_configured_fixed_term(
+            comment,
+            text,
+            case_sensitive=False,
+            term_script_group_overrides=config.fixed_term_script_group_overrides,
+        ):
             return f"评论包含固定删除词: {text}"
 
     if config.delete_random_alnum_without_chinese and is_random_alnum_without_chinese(comment, config):
@@ -759,6 +817,29 @@ def clear_duplicate_subcomments(sheet: Worksheet, config: CleanerConfig) -> list
     return sorted(cleared_cells, key=lambda cell: (cell.row_number, cell.column_header))
 
 
+def strip_https_urls_from_twitter_comment_content(
+    sheet: Worksheet,
+    config: CleanerConfig,
+) -> int:
+    """Remove inline HTTPS URLs from X comment text before normal fixed-rule cleaning."""
+    if (
+        config.platform != "twitter-comments"
+        or not config.twitter_comments_strip_https_urls_from_comment_content
+    ):
+        return 0
+
+    target_column = resolve_target_column(sheet, config)
+    stripped_url_count = 0
+    for row_number in range(config.first_data_row, sheet.max_row + 1):
+        cell = sheet.cell(row=row_number, column=target_column)
+        comment = normalize_cell(cell.value)
+        stripped_comment, replacements = HTTPS_URL_PATTERN.subn("", comment)
+        if replacements:
+            cell.value = stripped_comment.strip()
+            stripped_url_count += replacements
+    return stripped_url_count
+
+
 def clean_sheet(sheet: Worksheet, config: CleanerConfig, clean_words: tuple[str, ...]) -> tuple[list[DeletedRow], list[ClearedCell]]:
     deleted: list[DeletedRow] = []
     pending_deletions = collect_main_comment_deletions(sheet, config, clean_words)
@@ -858,7 +939,11 @@ def clean_workbook(
     outputs_to_create = [output_xlsx, deletion_log_csv, summary_json]
     if config.export_first_sheet_csv:
         outputs_to_create.append(output_csv)
-    refuse_finalized_audit_artifact_restoration(output_xlsx, deletion_log_csv)
+    refuse_finalized_audit_artifact_restoration(
+        output_xlsx,
+        deletion_log_csv,
+        summary_json,
+    )
     ensure_output_paths_safe(
         [input_path],
         outputs_to_create,
@@ -871,9 +956,11 @@ def clean_workbook(
     workbook = load_workbook_for_processing(input_path, read_only=False, data_only=False)
     deleted_rows: list[DeletedRow] = []
     cleared_cells: list[ClearedCell] = []
+    https_urls_stripped = 0
 
     try:
         for sheet in workbook.worksheets:
+            https_urls_stripped += strip_https_urls_from_twitter_comment_content(sheet, config)
             sheet_deleted_rows, sheet_cleared_cells = clean_sheet(sheet, config, clean_words)
             deleted_rows.extend(sheet_deleted_rows)
             cleared_cells.extend(sheet_cleared_cells)
@@ -893,8 +980,9 @@ def clean_workbook(
         "sheets_processed": len(workbook.worksheets),
         "rows_deleted": len(deleted_rows),
         "cells_cleared": len(cleared_cells),
+        "platform": config.platform,
+        "https_urls_stripped": https_urls_stripped,
         "target_header": config.target_header,
-        "platform_profile": config.platform_profile,
         "first_data_row": config.first_data_row,
         "min_trimmed_length": config.min_trimmed_length,
         "non_chinese_max_short_words": config.non_chinese_max_short_words,
@@ -949,6 +1037,7 @@ def clean_workbook(
         sheets_processed=len(workbook.worksheets),
         rows_deleted=len(deleted_rows),
         cells_cleared=len(cleared_cells),
+        https_urls_stripped=https_urls_stripped,
     )
 
 
@@ -977,7 +1066,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--platform",
         required=True,
-        help="本轮已确认的平台名称；用于选择内置的固定清洗例外规则",
+        help="本轮已确认的平台名称；用于记录已确认的执行上下文，不改变固定清洗规则。",
     )
     parser.add_argument(
         "--output-dir",
@@ -1029,6 +1118,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"工作表数量: {result.sheets_processed}")
     print(f"删除行数: {result.rows_deleted}")
     print(f"清空单元格数: {result.cells_cleared}")
+    print(f"X 评论评论内容列已移除 https URL 数: {result.https_urls_stripped}")
     print(f"清洗后 xlsx: {result.output_xlsx}")
     if result.output_csv:
         print(f"首个工作表 csv: {result.output_csv}")

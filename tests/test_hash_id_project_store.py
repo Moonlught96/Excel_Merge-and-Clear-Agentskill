@@ -10,6 +10,7 @@ import threading
 import uuid
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 from unittest import mock
 
 from tools import hash_id_project_store
@@ -29,7 +30,7 @@ from tools.hash_id_pseudonymizer import HashProjectContext
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEST_TEMP_ROOT = PROJECT_ROOT / ".tmp-tests" / "hash-id-project-store"
+TEST_TEMP_ROOT = TEST_TEMP_ROOT / "hash-id-project-store"
 
 
 class MemoryProjectKeyProvider:

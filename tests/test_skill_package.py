@@ -159,14 +159,14 @@ class SkillPackageTest(unittest.TestCase):
             "请确认以上产品名、数据来源、平台预处理分流和文件命名是否正确，并确认是否可以进入合并流程。",
             "是否已经提供并合并完所有需要合并的表格？你确认后我再进行标准化。",
             "是否已经提供完成所有 KOL 清理词？你确认后我再进行清洗。",
-            "是否已经提供完成所有 Twitter/X 保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。",
+            "是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。",
             "`评论日期`、`评论内容`、`产品名`、`电商平台评分`、`用户属性`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
             "the tool does not validate, infer, round, or rewrite a rating.",
             "`评论日期与产品`",
             "Beijing date (`UTC+8`)",
             "Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.",
             "Chinese comments whose trimmed length is less than or equal to 7 characters are deleted.",
-            "Non-Chinese comments with four or fewer words are deleted.",
+            "Non-Chinese comments with two or fewer words are deleted.",
             "Pure numeric comments keep the legacy seven-character threshold",
             "`一级评论`, `二级评论`, and `三级评论` cells whose trimmed length is less than or equal to 5 characters",
             "Fixed delete words are appended to the original `链接` rule",
@@ -245,14 +245,20 @@ class SkillPackageTest(unittest.TestCase):
                 f"Long reference must start with a contents section: {reference_name}",
             )
 
-    def test_cleaner_entrypoint_matches_current_global_platform_rules(self) -> None:
+    def test_cleaner_entrypoint_matches_canonical_x_comment_url_rule(self) -> None:
         cleaner_config = json.loads(
             (SKILL_ROOT / "config" / "comment-cleaner.json").read_text(encoding="utf-8")
         )
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
 
         self.assertNotIn("platform_profiles", cleaner_config)
-        self.assertIn("there is no active platform-specific cleaner exception", skill)
+        self.assertTrue(
+            cleaner_config["twitter_comments_strip_https_urls_from_comment_content"]
+        )
+        self.assertIn(
+            "The sole canonical route-specific behavior is `twitter-comments` removal of literal `https://` URL text from `评论内容` only before normal rules.",
+            skill,
+        )
 
     def test_project_instructions_enforce_standard_skill_packaging(self) -> None:
         agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
@@ -296,13 +302,13 @@ class SkillPackageTest(unittest.TestCase):
             tool_reference,
         )
         self.assertIn(
-            "amazon-japan-or-amazon-us-or-rakuten-or-twitter",
+            "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-twitter-comments",
             tool_reference,
         )
         self.assertIn("Python 3.10 or newer is required.", tool_reference)
         self.assertIn("Requires Python >=3.10", requirements)
         self.assertIn(
-            "amazon-japan-or-amazon-us-or-rakuten-or-twitter",
+            "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-twitter-comments",
             readme,
         )
         self.assertNotIn("非空原值不改写", readme)

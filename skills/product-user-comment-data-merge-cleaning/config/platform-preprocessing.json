@@ -394,6 +394,67 @@
       ]
     },
     {
+      "namespace": "twitter-comments",
+      "aliases": [],
+      "header_signature": [
+        "id",
+        "created_at",
+        "full_text",
+        "media",
+        "screen_name",
+        "name",
+        "profile_image_url",
+        "user_id",
+        "in_reply_to",
+        "retweeted_status",
+        "quoted_status",
+        "media_tags",
+        "favorite_count",
+        "retweet_count",
+        "bookmark_count",
+        "quote_count",
+        "reply_count",
+        "views_count",
+        "favorited",
+        "retweeted",
+        "bookmarked",
+        "url",
+        "metadata"
+      ],
+      "output_columns": [
+        {
+          "header": "评论日期",
+          "operation": "copy",
+          "source_headers": ["created_at"]
+        },
+        {
+          "header": "评论内容",
+          "operation": "copy",
+          "source_headers": ["full_text"]
+        },
+        {
+          "header": "点赞数",
+          "operation": "copy",
+          "source_headers": ["favorite_count"]
+        },
+        {
+          "header": "子评论数/追评数",
+          "operation": "copy",
+          "source_headers": ["reply_count"]
+        },
+        {
+          "header": "Twitter用户ID",
+          "operation": "copy",
+          "source_headers": ["user_id"]
+        },
+        {
+          "header": "Twitter昵称",
+          "operation": "copy",
+          "source_headers": ["screen_name"]
+        }
+      ]
+    },
+    {
       "namespace": "reddit",
       "aliases": ["Reddit", "reddit"],
       "header_signature": [

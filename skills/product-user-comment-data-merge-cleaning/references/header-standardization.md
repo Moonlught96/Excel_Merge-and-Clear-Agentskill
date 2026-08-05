@@ -6,7 +6,7 @@
 - [Fixed Header Aliases](#fixed-header-aliases)
 - [Platform Preprocessing Profiles](#platform-preprocessing-profiles)
   - [Amazon Japan And Amazon US Profiles](#amazon-japan-and-amazon-us-profiles)
-  - [Twitter/X Profile](#twitterx-profile)
+  - [Twitter/X Post And Comment Profiles](#twitterx-post-and-comment-profiles)
   - [Reddit Profile](#reddit-profile)
   - [Rakuten Market Profile](#rakuten-market-profile)
   - [Mixed Rakuten Variant Batch Merge](#mixed-rakuten-variant-batch-merge)
@@ -78,11 +78,11 @@ Japan parses `查看` as `评论日期`. US has no confirmed date source, so it 
 
 The Amazon parser uses only the registered exact headers, fixed regular expressions, fixed source-field order, and fixed string joining. It never uses AI, translation, semantic inference, or row-level judgment.
 
-### Twitter/X Profile
+### Twitter/X Post And Comment Profiles
 
-The registered `twitter` profile has one exact ordered signature: `id`, `created_at`, `full_text`, `media`, `screen_name`, `name`, `profile_image_url`, `user_id`, `in_reply_to`, `retweeted_status`, `quoted_status`, `media_tags`, `favorite_count`, `retweet_count`, `bookmark_count`, `quote_count`, `reply_count`, `views_count`, `favorited`, `retweeted`, `bookmarked`, `url`, and `metadata`.
+The registered `twitter` X 推文 profile and the registered `twitter-comments` X 评论 profile each have the same exact ordered signature: `id`, `created_at`, `full_text`, `media`, `screen_name`, `name`, `profile_image_url`, `user_id`, `in_reply_to`, `retweeted_status`, `quoted_status`, `media_tags`, `favorite_count`, `retweet_count`, `bookmark_count`, `quote_count`, `reply_count`, `views_count`, `favorited`, `retweeted`, `bookmarked`, `url`, and `metadata`.
 
-The profile is selected only when the entire source header row has exactly that order and column count. A file is not routed as Twitter/X merely because it contains `user_id`, `full_text`, `created_at`, or another familiar field. `Twitter`, `twitter`, `X`, and `x` are fixed aliases for the one `twitter` profile.
+The same signature is intentional because these exports have the same physical format. A file is not routed as Twitter/X merely because it contains `user_id`, `full_text`, `created_at`, or another familiar field. The user must first select `推文` or `评论`; that selection passes `twitter` or `twitter-comments` explicitly. Automatic signature detection sees both profiles and stops as ambiguous rather than guessing. `Twitter`, `twitter`, `X`, and `x` are aliases for the `twitter` X 推文 profile; `twitter-comments` is the explicit X 评论 route label.
 
 | Source field | Configured operation | Preprocessing output |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ The profile is selected only when the entire source header row has exactly that 
 | `user_id` | `copy` | Temporary `Twitter用户ID`, used only as the registered stable account-ID input for `哈希ID`. |
 | `screen_name` | `copy` | Temporary `Twitter昵称`, used only as the registered display-name fallback when the whole `Twitter用户ID` column is empty. |
 
-`id`, `media`, `name`, `profile_image_url`, `in_reply_to`, `retweeted_status`, `quoted_status`, `media_tags`, `retweet_count`, `bookmark_count`, `quote_count`, `views_count`, `favorited`, `retweeted`, `bookmarked`, `url`, and `metadata` are intentionally omitted from the preprocessing output. The temporary Twitter identity fields are omitted from standardized and cleaned outputs, logs, and summaries after deterministic hash derivation. This profile never uses AI, source-value semantics, or partial-header matching.
+`id`, `media`, `name`, `profile_image_url`, `in_reply_to`, `retweeted_status`, `quoted_status`, `media_tags`, `retweet_count`, `bookmark_count`, `quote_count`, `views_count`, `favorited`, `retweeted`, `bookmarked`, `url`, and `metadata` are intentionally omitted from either preprocessing output. The temporary Twitter identity fields are omitted from standardized and cleaned outputs, logs, and summaries after deterministic hash derivation. `twitter-comments` and `twitter` share the confirmed `twitter` hash namespace, so equal `user_id` values in the same project receive equal hash IDs; only `twitter` runs the X 推文 keep-keyword filter. Both profiles use no AI, source-value semantics, or partial-header matching.
 
 ### Reddit Profile
 
@@ -170,7 +170,7 @@ Do not use AI or semantic judgment to split product names.
 - Keep only year, month, and day; do not output hours, minutes, or seconds.
 - For Chinese `评论时间` or `评论日期`, convert only numeric timestamps or date-time text that includes a time component. Preserve plain date-only text as provided.
 - Relative platform time values such as `1年前`, `9个月前`, `1 year ago`, and `9 months ago` are converted deterministically from the current Beijing date.
-- Before a configured relative, ISO, or fixed date parser runs, the one known literal trailing suffix `(edited)` is removed only for parsing. Unknown suffixes and unmatched nonblank values remain unchanged.
+- Before a configured relative, ISO, or fixed date parser runs, either known literal trailing suffix `(edited)` or `（修改过）` is removed only for parsing. Unknown suffixes and unmatched nonblank values remain unchanged.
 - Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.
 - Relative day and week values output `YYYY-MM-DD`.
 - Do not infer missing month or day beyond the fixed relative-time granularity.
@@ -209,7 +209,7 @@ Unknown columns that are not configured standard aliases are omitted. They are n
   - 亚马逊日本: none.
   - 亚马逊美国: none.
   - 乐天市场: none.
-  - Twitter/X: `Twitter用户ID`.
+  - Twitter/X 推文和 X 评论: `Twitter用户ID`.
   - Reddit: none.
 - Exact display-name fallback mappings:
   - YouTube: `author`, then `author_name`.
@@ -221,7 +221,7 @@ Unknown columns that are not configured standard aliases are omitted. They are n
   - 亚马逊日本: `名称`.
   - 亚马逊美国: `名称`.
   - 乐天市场: `乐天市场昵称`.
-  - Twitter/X: `Twitter昵称`.
+  - Twitter/X 推文和 X 评论: `Twitter昵称`.
   - Reddit: `Reddit作者`.
 - The same normalized display name in the same research project and platform produces the same hash regardless of which registered display-name header supplied it.
 - Account-ID and display-name hashes use separate identity domains. Cross-project, cross-platform, and account-ID/display-name hashes differ.

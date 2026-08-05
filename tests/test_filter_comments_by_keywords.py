@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 from openpyxl import Workbook, load_workbook
 
@@ -25,7 +26,7 @@ class FilterCommentsByKeywordsTest(unittest.TestCase):
         workbook.close()
 
     def test_keeps_only_rows_matching_confirmed_keywords_case_insensitively(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-twitter-keyword-filter"
+        tmp = TEST_TEMP_ROOT / "case-twitter-keyword-filter"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "standardized.xlsx"
         output_path = tmp / "twitter-keyword-filtered.xlsx"
@@ -69,7 +70,7 @@ class FilterCommentsByKeywordsTest(unittest.TestCase):
         self.assertNotIn("ScreenBar works well.", result.summary_json.read_text(encoding="utf-8"))
 
     def test_rejects_blank_keywords_without_writing_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-twitter-keyword-filter-blank"
+        tmp = TEST_TEMP_ROOT / "case-twitter-keyword-filter-blank"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "standardized.xlsx"
         output_path = tmp / "filtered.xlsx"
@@ -81,7 +82,7 @@ class FilterCommentsByKeywordsTest(unittest.TestCase):
         self.assertFalse(output_path.exists())
 
     def test_requires_exact_target_header_without_guessing(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-twitter-keyword-filter-header"
+        tmp = TEST_TEMP_ROOT / "case-twitter-keyword-filter-header"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "standardized.xlsx"
         self.write_source(source_path, ["正文"], [["ScreenBar works well."]])

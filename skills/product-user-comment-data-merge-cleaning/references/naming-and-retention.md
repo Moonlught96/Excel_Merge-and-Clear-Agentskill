@@ -64,7 +64,7 @@ Rakuten display naming is determined only from the registered `乐天市场`, `R
 
 When a YouTube input path contains an exact `Shorts` directory segment, classify its display data source as `YouTube Shorts评论数据` before applying the generic YouTube rule. This display-name distinction does not change the shared `youtube` hash namespace.
 
-Twitter file/path keywords `Twitter` or `twitter` deterministically produce `Twitter评论数据` and the planned `twitter` preprocessing route. The display source label does not select the profile by itself: execution still requires the complete registered Twitter/X ordered header signature.
+Twitter file/path keywords `Twitter` or `twitter` deterministically produce `Twitter评论数据`. Before planning a preprocessing route or filenames, the workflow must run the X data-type gate and pass the confirmed `--x-data-type` to `scripts/output_file_naming.py`. A user choice of `推文` plans `twitter`; a choice of `评论` plans `twitter-comments`. The display source label does not select a profile by itself: the two profiles intentionally share one exact signature, so execution still requires both the explicit type-derived profile and the complete registered ordered header signature.
 
 Reddit file/path keywords `Reddit` or `reddit` deterministically produce `Reddit评论数据` and the planned `reddit` preprocessing route. A fixed exporter stem in the form `reddit-<subreddit>-<post-id>-json-primary` or `reddit-<subreddit>-<post-id>-json-fallback` contains subreddit/post metadata, not a product name: it must not produce a product candidate, and the workflow must ask the user for the product name unless another allowed deterministic source supplies exactly one. The display source label does not select the profile by itself: execution still requires the complete registered Reddit ordered header signature.
 
@@ -108,7 +108,7 @@ The tools may generate:
 - `.standardized.summary.json`;
 - `.audit.json`;
 - platform-preprocessing `.summary.json`;
-- Twitter/X `.keyword-filter.summary.json`;
+- X 推文 `.keyword-filter.summary.json`;
 - `.deletions.csv`;
 - cleaning `.summary.json`.
 
@@ -119,7 +119,7 @@ Retain and return these only when the user explicitly requests audit logs or sum
 After verifying the final cleaned `.xlsx` and `.csv`:
 
 - run cleanup immediately without a separate user confirmation;
-- pass each raw merged, prefix-stripped, platform-preprocessed, standardized, Twitter/X keyword-filtered, audit, deletion-log, and summary path explicitly as an intermediate;
+- pass each raw merged, prefix-stripped, platform-preprocessed, standardized, X 推文 keyword-filtered, audit, deletion-log, and summary path explicitly as an intermediate;
 - pass every original input plus final cleaned `.xlsx` and `.csv` as protected paths;
 - At least one `--protect` path is mandatory; cleanup refuses to run without protected paths.
 - omit cleanup `--summary` by default so cleanup creates no extra retained file;

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 from openpyxl import Workbook
 
@@ -10,7 +11,7 @@ from tools.inventory_comment_inputs import inventory_comment_inputs
 
 class InventoryCommentInputsTest(unittest.TestCase):
     def test_counts_csv_logical_rows_and_xlsx_rows_from_explicit_inputs(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-comment-input-inventory"
+        tmp = TEST_TEMP_ROOT / "case-comment-input-inventory"
         tmp.mkdir(parents=True, exist_ok=True)
         csv_path = tmp / "comments.csv"
         xlsx_path = tmp / "comments.xlsx"
@@ -38,7 +39,7 @@ class InventoryCommentInputsTest(unittest.TestCase):
         self.assertEqual(1, result.files[1].data_rows)
 
     def test_rejects_duplicate_explicit_input_path(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-comment-input-inventory-duplicates"
+        tmp = TEST_TEMP_ROOT / "case-comment-input-inventory-duplicates"
         tmp.mkdir(parents=True, exist_ok=True)
         csv_path = tmp / "comments.csv"
         csv_path.write_text("date,comment\n2026-07-01,comment\n", encoding="utf-8-sig")

@@ -6,7 +6,7 @@
 
 - 读取一个或多个 `.xlsx`、`.xlsm` 或 `.csv` 文件。
 - 遍历所有工作表。
-- 标准化前先用已登记的平台表头签名进行确定性分流；平台特有字段拼接、日期、评分和点赞数解析只在对应独立配置中执行。Twitter/X 分流会在标准化审核通过且用户确认后，额外按用户确认的保留关键词进行纯工具行筛选，再进入通用清洗。
+- 标准化前先用已登记的平台表头签名进行确定性分流；平台特有字段拼接、日期、评分和点赞数解析只在对应独立配置中执行。检测到 X/Twitter 数据时，先由用户选择“推文”或“评论”：`twitter` 分流仅处理推文，并在标准化审核通过且用户确认后按用户确认的保留关键词进行纯工具行筛选；`twitter-comments` 分流仅处理评论，两者同表头时也必须由用户显式选择。二者共用经确认的 `twitter` 哈希命名空间，但 X 评论不套用推文保留关键词规则；其清洗阶段只会在`评论内容`列中确定性移除 `https://` 网址文本，再执行通用清洗，绝不触碰其它列。
 - 先把表头整理为固定列：评论日期、评论内容、产品名、电商平台评分、用户属性、哈希ID、点赞数、子评论数/追评数、一级评论、二级评论、三级评论。
 - B站合并表在标准化前可先按固定规则去掉 `回复@xxx：` 或 `回复 @xxx:` 前缀，只保留冒号后的真实评论内容。
 - 删除不进入后续流程的风险列，例如昵称、IP 数据。
@@ -41,14 +41,14 @@ python tools/standardize_excel_headers.py "D:\path\合并总表_回复前缀已�
 
 这个步骤只处理 `content` 或 `评论内容` 列中开头匹配 `回复@xxx：`、`回复 @xxx：`、`回复@xxx:`、`回复 @xxx:` 的固定文本前缀；不移动回复行，不推断父子层级，不新增列，也不删除行。
 
-已登记的平台会在通用标准化前进入独立的确定性预处理配置。每个平台或具名表头变体都必须完整、有序且按字面命中已登记的 `header_signature`，包括空白字符；配置不匹配时工具会停止，不会猜测平台或字段。当前包含 `amazon-japan`、`amazon-us`、`rakuten`、`twitter` 和 `reddit`：亚马逊日本和美国使用独立的表头与哈希命名空间，前者按已登记字段解析日期，后者没有日期源而固定留空。乐天市场的五个已登记变体会把标题与正文固定合并、转换日期和点赞数、保留评分、从`レビュアー属性`中只保留性别/年龄字段，并将精确匿名标记`購入者さん`置空，不参与`哈希ID`。Twitter/X 的固定导出格式会保留评论日期、评论内容、点赞数、回复数，并使用 `user_id` 优先、`screen_name` 整表兜底生成哈希 ID；标准化确认后才会按本轮确认的保留关键词筛选评论行。Reddit 的固定导出格式会固定拼接 `标题` 和 `内容`，映射时间、点赞数、评论/回复数，并把 `作者` 仅作为临时弱伪名化来源；主帖和各层回复均作为独立行保留，绝不重建层级或复制父评论。
+已登记的平台会在通用标准化前进入独立的确定性预处理配置。每个平台或具名表头变体都必须完整、有序且按字面命中已登记的 `header_signature`，包括空白字符；配置不匹配时工具会停止，不会猜测平台或字段。当前包含 `amazon-japan`、`amazon-us`、`rakuten`、`twitter`（X 推文）、`twitter-comments`（X 评论）和 `reddit`：亚马逊日本和美国使用独立的表头与哈希命名空间，前者按已登记字段解析日期，后者没有日期源而固定留空。乐天市场的五个已登记变体会把标题与正文固定合并、转换日期和点赞数、保留评分、从`レビュアー属性`中只保留性别/年龄字段，并将精确匿名标记`購入者さん`置空，不参与`哈希ID`。两种 X 分流使用相同的完整导出表头与固定字段映射，但未选择类型时会安全停止；两者共用经确认的 `twitter` 哈希命名空间，只有推文流程会在标准化确认后按本轮确认的保留关键词筛选行。Reddit 的固定导出格式会固定拼接 `标题` 和 `内容`，映射时间、点赞数、评论/回复数，并把 `作者` 仅作为临时弱伪名化来源；主帖和各层回复均作为独立行保留，绝不重建层级或复制父评论。
 
 同一乐天市场批次若包含多个已登记但彼此不同的表头变体，普通原始合并会安全停止，不会产生半成品。此时仅在每张表都完整匹配已登记乐天变体的前提下，工具会按各自固定规则预处理后合并为一个平台预处理合并总表，再进入通用标准化；原始文件不会被改写，也不会使用 AI、模糊匹配或语义判断。
 
 ```powershell
-python tools/preprocess_platform_comments.py "D:\path\平台原始表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-reddit" --output "D:\path\平台预处理表.xlsx"
+python tools/preprocess_platform_comments.py "D:\path\平台原始表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-twitter-comments-or-reddit" --output "D:\path\平台预处理表.xlsx"
 python tools/preprocess_platform_comments.py "D:\path\乐天表1.xlsx" "D:\path\乐天表2.xlsx" --platform "rakuten" --merge-registered-variants --output "D:\path\乐天平台预处理合并总表.xlsx"
-python tools/standardize_excel_headers.py "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-reddit" --project-name "研究项目" --product-name "产品名"
+python tools/standardize_excel_headers.py "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.xlsx" --platform "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-twitter-comments-or-reddit" --project-name "研究项目" --product-name "产品名"
 python tools/audit_standardized_comments.py "D:\path\标准化总表.xlsx" --source "D:\path\平台预处理表.xlsx" --output "D:\path\标准化总表.audit.json"
 ```
 

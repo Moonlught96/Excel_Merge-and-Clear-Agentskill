@@ -77,6 +77,18 @@ class PlatformPreprocessConfigError(ValueError):
     pass
 
 
+def require_canonical_platform_preprocessing_config_path(config_path: Path) -> Path:
+    """Reject unreviewed per-run platform routing configurations at the CLI boundary."""
+    configured_path = config_path.resolve()
+    canonical_path = DEFAULT_CONFIG_PATH.resolve()
+    if configured_path != canonical_path:
+        raise PlatformPreprocessConfigError(
+            "External or temporary platform preprocessing configs are forbidden. "
+            f"Use the bundled canonical config only: {canonical_path}"
+        )
+    return canonical_path
+
+
 class PlatformNotDetectedError(ValueError):
     pass
 
@@ -279,7 +291,10 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PlatformPreprocessCon
         raise PlatformPreprocessConfigError("platforms must be a non-empty list")
 
     registered_names: set[str] = set()
-    registered_signatures: dict[tuple[str, ...], str] = {}
+    # Multiple user-confirmed routes may intentionally share one exporter
+    # signature. They remain distinct only when the caller explicitly selects
+    # a profile; automatic detection then rejects the ambiguity.
+    registered_signatures: dict[tuple[str, ...], dict[str, str]] = {}
     platforms: list[PlatformPreprocessDefinition] = []
     for index, raw_platform in enumerate(raw_platforms):
         platform_prefix = f"platforms[{index}]"
@@ -339,12 +354,13 @@ def load_config(path: Path | str = DEFAULT_CONFIG_PATH) -> PlatformPreprocessCon
         for variant_name, header_signature, output_columns in variants:
             signature_key = tuple(normalize_header(header) for header in header_signature)
             signature_owner = f"{namespace}:{variant_name}"
-            existing_owner = registered_signatures.get(signature_key)
+            owners = registered_signatures.setdefault(signature_key, {})
+            existing_owner = owners.get(namespace.casefold())
             if existing_owner is not None:
                 raise PlatformPreprocessConfigError(
                     f"Duplicate header_signature registered by {existing_owner} and {signature_owner}"
                 )
-            registered_signatures[signature_key] = signature_owner
+            owners[namespace.casefold()] = signature_owner
             platforms.append(
                 PlatformPreprocessDefinition(
                     namespace=namespace,
@@ -957,7 +973,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Preprocess a registered platform export using exact configured header signatures."
     )
     parser.add_argument("input_paths", type=Path, nargs="+", help="Input .xlsx/.xlsm/.csv file(s).")
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG_PATH,
+        help="Only the bundled canonical platform preprocessing config is accepted.",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -989,7 +1010,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    config = load_config(args.config)
+    config = load_config(require_canonical_platform_preprocessing_config_path(args.config))
     if args.merge_registered_variants:
         if args.platform is None:
             raise SystemExit("--merge-registered-variants requires --platform")

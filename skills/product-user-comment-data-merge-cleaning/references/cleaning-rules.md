@@ -8,7 +8,8 @@
 - Chinese comments use character length. Non-Chinese comments use deterministic word count.
 - Script classification is deterministic and gives Japanese Kana, Korean Hangul, Thai, and Devanagari precedence over Han characters, so mixed Japanese/Korean text does not inherit the Chinese length threshold.
 - Text containing Han characters but no Kana, Hangul, Thai, or Devanagari is treated as Chinese. A Han-only Japanese comment cannot be distinguished from Chinese without semantic inference and therefore follows the Chinese threshold.
-- Non-Chinese comments with four or fewer words are deleted.
+- Han-only fixed terms that need a non-Chinese script group are declared in the canonical configuration's `fixed_term_script_group_overrides`. `割引` and `特価` are currently mapped to `japanese`, so they match Japanese-script comments despite containing no Kana. This is a per-term literal override, not generic language inference for other Han-only text.
+- Non-Chinese comments with two or fewer words are deleted.
 - For unspaced non-Chinese scripts, only text with four or fewer characters is deleted by the short-text rule.
 - Pure numeric comments keep the legacy seven-character threshold for backward compatibility.
 - Delete comments exactly equal to `该用户未填写评价内容` or `此用户未填写评价内容`.
@@ -16,14 +17,16 @@
 - Delete duplicate main comments only within the same worksheet, keeping the row with the highest deterministic numeric value in `点赞数` and deleting the other rows. If likes are tied, blank, non-numeric, or the `点赞数` column is absent, keep the last occurrence. Non-numeric likes are treated as `0`; no semantic or abbreviated-number inference is permitted.
 - Never use AI, semantic quality review, sentiment, relevance, suspected-advertising judgment, or fuzzy matching.
 - Fixed delete words are isolated by deterministic script group. Chinese comments use only Chinese fixed words; Japanese, Korean, Thai, and Hindi comments use only their corresponding script group. English and Spanish share the Latin-script group because script inspection cannot reliably distinguish those languages without semantic inference.
-- The base configuration applies language-neutral URL markers such as `http://` and `https://` to every script group and platform, including Twitter/X. No platform-specific URL/link exemption is active.
+- The base configuration applies language-neutral URL markers such as `http://` and `https://` to every script group and platform, including Twitter/X. The one fixed exception is `twitter-comments`: before normal cleaning, the canonical script strips each literal `https://` URL from the standardized `评论内容` cell only, then applies all normal rules. It never reads or rewrites `profile_image_url`, raw `url`, or any other column; it does not apply to `twitter` X posts or other platforms, and `http://` remains active.
 - Latin-script fixed words use complete lexical boundaries with case-insensitive matching where configured. A configured whole word must not match a longer token: `TESTV`, `contest`, and `testing` do not match a configured `test` term.
 
 ## Fixed Delete Words
 
 Fixed delete words are appended to the original `链接` rule; do not replace or remove `链接`.
 
-The executable source of truth is `config/comment-cleaner.json`. The exact active base lists are duplicated below for documentation and must be kept synchronized with that configuration. No platform-specific cleaner exception is currently registered; external, copied, and temporary cleaner configurations are prohibited.
+The executable source of truth is `config/comment-cleaner.json`. The exact active base lists are duplicated below for documentation and must be kept synchronized with that configuration. Per-run platform-specific cleaner exceptions and `platform_profiles` are prohibited. The only canonical exception is the configured `twitter-comments` `评论内容` HTTPS stripping step described above; external, copied, and temporary cleaner configurations are prohibited.
+
+`fixed_term_script_group_overrides` is also executable configuration. Each override must name an already-active fixed delete term and one of the fixed groups `chinese`, `japanese`, `korean`, `thai`, `hindi`, `latin`, or `neutral`; it must never be implemented as a hard-coded term list in the cleaner.
 
 ### Ambiguous Chinese Substring Exclusions
 
@@ -37,14 +40,14 @@ Do not re-add these six terms through a temporary per-run configuration. A futur
 
 Do not restore these four terms through an external, copied, or temporary configuration. A future change requires explicit user confirmation, a canonical-config update, synchronized documentation, and positive/nearby-negative regression tests.
 
-`链接`, `凑字数`, `水经验`, `赚积分`, `为了金币`, `赚硬币`, `赚京豆`, `淘气值`, `为了评论而评论`, `混个脸熟`, `完成任务`, `代下`, `代买`, `内部券`, `加微`, `加v`, `私聊我`, `主页看`, `点击链接`, `http://`, `https://`, `打卡`, `冒泡`, `占座`, `无内容`, `暂无评价`, `蹲`, `蹲一个`, `求链接`, `求分享`, `多少钱`, `怎么卖`, `啥牌子`, `什么牌子`, `求品牌`, `求私`, `加群`, `裙内`, `互赞`, `互粉`, `互关`, `回关`, `秒回`, `交朋友`, `リンク`, `プロフィール見て`, `プロフ見て`, `DMして`, `フォロー返し`, `相互フォロー`, `テスト`, `内容なし`, `評価なし`, `コメント稼ぎ`, `링크`, `맞팔`, `테스트`, `내용 없음`.
+`链接`, `凑字数`, `水经验`, `赚积分`, `为了金币`, `赚硬币`, `赚京豆`, `淘气值`, `为了评论而评论`, `混个脸熟`, `完成任务`, `代下`, `代买`, `内部券`, `加微`, `加v`, `私聊我`, `主页看`, `点击链接`, `http://`, `https://`, `打卡`, `冒泡`, `占座`, `无内容`, `暂无评价`, `蹲`, `蹲一个`, `求链接`, `求分享`, `多少钱`, `怎么卖`, `啥牌子`, `什么牌子`, `求品牌`, `求私`, `加群`, `裙内`, `互赞`, `互粉`, `互关`, `回关`, `秒回`, `交朋友`, `优惠`, `好物`, `红包`, `特价`, `国补`, `リンク`, `プロフィール見て`, `プロフ見て`, `DMして`, `フォロー返し`, `相互フォロー`, `テスト`, `内容なし`, `評価なし`, `コメント稼ぎ`, `割引`, `良いもの`, `お年玉`, `特価`, `国の補助金`, `링크`, `맞팔`, `테스트`, `내용 없음`, `할인`, `좋은 물건`, `홍바오`, `특가`, `국가 보조금`.
 
 Case-insensitive configured terms include:
 
-- Chinese/English: `加v`, `link in bio`, `click link`, `click the link`, `check my profile`, `see my profile`, `visit my profile`, `dm me`, `message me`, `follow me`, `follow back`, `follow for follow`, `sub4sub`, `sub for sub`, `subscribe to my channel`, `earn coins`, `free coins`, `for coins`, `comment for points`, `promo code`, `coupon code`, `discount code`, `whatsapp`, `telegram`, `n/a`, `no content`, `no comment`, `nothing to say`, `what brand`, `brand?`, `share link`, `need link`, `passing by`, `check in`.
-- Spanish: `enlace`, `link en bio`, `haz clic en el enlace`, `mira mi perfil`, `revisa mi perfil`, `mándame dm`, `mandame dm`, `escríbeme`, `escribeme`, `sígueme`, `sigueme`, `te sigo`, `cupón`, `cupon`, `código promocional`, `codigo promocional`, `descuento`, `primero`, `prueba`, `sin contenido`, `sin comentario`, `nada que decir`, `cuánto cuesta`, `cuanto cuesta`, `precio`, `qué marca`, `que marca`, `marca?`, `pásame el link`, `pasame el link`, `necesito el link`.
-- Thai: `ลิงก์`, `ขอลิงก์`, `ส่งลิงก์`, `ดูโปรไฟล์`, `ทัก dm`, `dm มา`, `ติดตามกลับ`, `ฟอลกลับ`, `ทดสอบ`, `ไม่มีเนื้อหา`, `ไม่มีความคิดเห็น`, `ปั๊มคอมเมนต์`, `เก็บแต้ม`, `ราคาเท่าไหร่`, `กี่บาท`, `ยี่ห้ออะไร`, `แบรนด์อะไร`, `ผ่านมา`, `เช็คชื่อ`, `ทำภารกิจ`.
-- Hindi: `लिंक`, `लिंक दो`, `लिंक भेजो`, `प्रोफाइल देखें`, `डीएम करें`, `dm करें`, `फॉलो बैक`, `मुझे फॉलो करें`, `टेस्ट`, `कोई सामग्री नहीं`, `कोई टिप्पणी नहीं`, `पॉइंट कमाने`, `सिक्के कमाने`, `कितने का है`, `कीमत`, `कौन सा ब्रांड`, `ब्रांड क्या है`, `बस गुजर रहा`, `चेक इन`, `काम पूरा`.
+- English: `加v`, `link in bio`, `click link`, `click the link`, `check my profile`, `see my profile`, `visit my profile`, `dm me`, `message me`, `follow me`, `follow back`, `follow for follow`, `sub4sub`, `sub for sub`, `subscribe to my channel`, `earn coins`, `free coins`, `for coins`, `comment for points`, `promo code`, `coupon code`, `discount code`, `discount`, `good stuff`, `red envelope`, `special price`, `national subsidy`, `whatsapp`, `telegram`, `n/a`, `no content`, `no comment`, `nothing to say`, `what brand`, `brand?`, `share link`, `need link`, `passing by`, `check in`.
+- Spanish: `enlace`, `link en bio`, `haz clic en el enlace`, `mira mi perfil`, `revisa mi perfil`, `mándame dm`, `mandame dm`, `escríbeme`, `escribeme`, `sígueme`, `sigueme`, `te sigo`, `cupón`, `cupon`, `código promocional`, `codigo promocional`, `descuento`, `cosas buenas`, `sobre rojo`, `precio especial`, `subsidio nacional`, `primero`, `prueba`, `sin contenido`, `sin comentario`, `nada que decir`, `cuánto cuesta`, `cuanto cuesta`, `precio`, `qué marca`, `que marca`, `marca?`, `pásame el link`, `pasame el link`, `necesito el link`.
+- Thai: `ลิงก์`, `ขอลิงก์`, `ส่งลิงก์`, `ดูโปรไฟล์`, `ทัก dm`, `dm มา`, `ติดตามกลับ`, `ฟอลกลับ`, `ทดสอบ`, `ไม่มีเนื้อหา`, `ไม่มีความคิดเห็น`, `ปั๊มคอมเมนต์`, `เก็บแต้ม`, `ส่วนลด`, `ของดี`, `อั่งเปา`, `ราคาพิเศษ`, `เงินอุดหนุนจากรัฐ`, `ราคาเท่าไหร่`, `กี่บาท`, `ยี่ห้ออะไร`, `แบรนด์อะไร`, `ผ่านมา`, `เช็คชื่อ`, `ทำภารกิจ`.
+- Hindi: `लिंक`, `लिंक दो`, `लिंक भेजो`, `प्रोफाइल देखें`, `डीएम करें`, `dm करें`, `फॉलो बैक`, `मुझे फॉलो करें`, `टेस्ट`, `कोई सामग्री नहीं`, `कोई टिप्पणी नहीं`, `पॉइंट कमाने`, `सिक्के कमाने`, `छूट`, `अच्छी चीज़`, `लाल लिफाफा`, `विशेष कीमत`, `राष्ट्रीय सब्सिडी`, `कितने का है`, `कीमत`, `कौन सा ब्रांड`, `ब्रांड क्या है`, `बस गुजर रहा`, `चेक इन`, `काम पूरा`.
 
 `加v` must match both lowercase and uppercase forms such as `加v` and `加V`.
 

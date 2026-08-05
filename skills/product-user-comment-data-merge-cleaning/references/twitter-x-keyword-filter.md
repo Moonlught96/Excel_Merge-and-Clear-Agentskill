@@ -1,8 +1,10 @@
-# Twitter/X Keep-Keyword Retention Filter
+# X Tweet Keep-Keyword Retention Filter
 
 ## Scope And Order
 
-This is a platform-specific deterministic filter for the registered `twitter` preprocessing profile only. `Twitter`, `twitter`, `X`, and `x` are fixed aliases for the same profile and the same `twitter` hash namespace.
+This is a platform-specific deterministic filter for the registered `twitter` X 推文 preprocessing profile only. It runs only after the user selected `推文` in the X data-type gate. `Twitter`, `twitter`, `X`, and `x` are fixed labels for the confirmed X 推文 route and its `twitter` hash namespace.
+
+It does not apply to X 评论. X 评论 uses the separate registered `twitter-comments` profile, shares only the user-confirmed `twitter` hash namespace and identity fields, and never falls back to this X 推文 profile or filter.
 
 Run it only after all of the following have occurred:
 
@@ -18,13 +20,13 @@ It runs before the universal KOL clean-word gate and before `clean_excel_comment
 Ask exactly:
 
 ```text
-请提供本轮 Twitter/X 评论保留关键词。仅保留“评论内容”包含任一关键词的整行数据；请一次性提供所有关键词。
+请提供本轮 X 推文保留关键词。仅保留“评论内容”包含任一关键词的整行数据；请一次性提供所有关键词。
 ```
 
 After one or more keywords are supplied, ask exactly:
 
 ```text
-是否已经提供完成所有 Twitter/X 保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。
+是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。
 ```
 
 Do not run the filter before the user explicitly confirms the list is complete. At least one nonblank keyword is required; an empty keyword list is a deterministic configuration error and does not mean “keep all rows.”

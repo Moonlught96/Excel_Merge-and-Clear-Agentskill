@@ -58,7 +58,7 @@
     },
     {
       "namespace": "twitter",
-      "aliases": ["Twitter", "twitter", "X", "x"],
+      "aliases": ["Twitter", "twitter", "X", "x", "twitter-comments"],
       "user_id_headers": ["Twitter用户ID"],
       "display_name_headers": ["Twitter昵称"]
     },

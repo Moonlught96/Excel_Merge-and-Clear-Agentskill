@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 from openpyxl import Workbook
 
@@ -20,7 +21,7 @@ def write_workbook(path: Path, rows: list[list[object]]) -> None:
 
 class CompareCleanedWorkbooksTest(unittest.TestCase):
     def test_reports_duplicate_row_multiplicity_difference(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-compare-duplicate-multiplicity"
+        tmp = TEST_TEMP_ROOT / "case-compare-duplicate-multiplicity"
         tmp.mkdir(parents=True, exist_ok=True)
         left = tmp / "left.xlsx"
         right = tmp / "right.xlsx"
@@ -43,7 +44,7 @@ class CompareCleanedWorkbooksTest(unittest.TestCase):
         self.assertEqual(0, report["whole_row_only_in_right_count"])
 
     def test_compares_formula_text_instead_of_uncalculated_cache_values(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-compare-formulas"
+        tmp = TEST_TEMP_ROOT / "case-compare-formulas"
         tmp.mkdir(parents=True, exist_ok=True)
         left = tmp / "left.xlsx"
         right = tmp / "right.xlsx"
@@ -64,7 +65,7 @@ class CompareCleanedWorkbooksTest(unittest.TestCase):
         self.assertEqual(1, report["whole_row_only_in_right_count"])
 
     def test_requires_explicit_overwrite_for_existing_comparison_outputs(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-compare-no-clobber"
+        tmp = TEST_TEMP_ROOT / "case-compare-no-clobber"
         tmp.mkdir(parents=True, exist_ok=True)
         left = tmp / "left.xlsx"
         right = tmp / "right.xlsx"

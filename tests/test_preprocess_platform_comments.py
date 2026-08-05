@@ -4,6 +4,7 @@ import csv
 import json
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 from openpyxl import Workbook, load_workbook
 
@@ -15,10 +16,14 @@ from tools.hash_id_pseudonymizer import (
 )
 import tools.preprocess_platform_comments as preprocess_module
 from tools.preprocess_platform_comments import (
+    DEFAULT_CONFIG_PATH,
+    AmbiguousPlatformError,
+    PlatformPreprocessConfigError,
     PlatformHeaderSignatureError,
     PlatformNotDetectedError,
     detect_platform,
     load_config,
+    main as preprocess_main,
     preprocess_workbook,
 )
 from tools.standardize_excel_headers import load_config as load_header_config
@@ -262,6 +267,26 @@ def write_reddit_source(path: Path, rows: list[dict[str, object]]) -> None:
 
 
 class PreprocessPlatformCommentsTest(unittest.TestCase):
+    def test_cli_rejects_external_platform_preprocessing_config(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-preprocessor-external-config"
+        tmp.mkdir(parents=True, exist_ok=True)
+        external_config = tmp / "platform-preprocessing-temporary.json"
+        external_config.write_text(
+            DEFAULT_CONFIG_PATH.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(PlatformPreprocessConfigError, "External or temporary"):
+            preprocess_main(
+                [
+                    str(tmp / "source.xlsx"),
+                    "--output",
+                    str(tmp / "preprocessed.xlsx"),
+                    "--config",
+                    str(external_config),
+                ]
+            )
+
     def setUp(self) -> None:
         self.hash_context = HashProjectContext(
             project_id="project-screenbar",
@@ -273,7 +298,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
         self.hash_config = load_hash_id_config()
 
     def test_preprocesses_twitter_csv_with_exact_signature_and_hashes_account_ids(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-twitter-preprocess"
+        tmp = TEST_TEMP_ROOT / "case-twitter-preprocess"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "twitter-screenbar.csv"
         write_twitter_source(
@@ -361,8 +386,91 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
         self.assertNotIn("Twitter昵称", standardized_rows[0])
         self.assertNotIn("screenbar-user-one", str(standardized_rows))
 
+    def test_preprocesses_x_comments_only_when_the_comment_profile_is_explicit_and_reuses_twitter_hashes(
+        self,
+    ) -> None:
+        tmp = TEST_TEMP_ROOT / "case-twitter-comments-preprocess"
+        tmp.mkdir(parents=True, exist_ok=True)
+        source_path = tmp / "twitter-comment-detail.csv"
+        write_twitter_source(
+            source_path,
+            [
+                {
+                    "id": "comment-1",
+                    "created_at": "2026-08-05T09:30:00+08:00",
+                    "full_text": "This is an X reply about ScreenBar.",
+                    "screen_name": "screenbar-user-one",
+                    "user_id": "1000000000000000001",
+                    "favorite_count": "5",
+                    "reply_count": "0",
+                }
+            ],
+        )
+
+        preprocessed = preprocess_workbook(
+            source_path,
+            load_config(),
+            output_dir=tmp / "preprocessed",
+            platform="twitter-comments",
+        )
+        self.assertEqual("twitter-comments", preprocessed.platform)
+
+        standardized = standardize_workbook(
+            preprocessed.output_xlsx,
+            load_header_config(),
+            output_dir=tmp / "standardized",
+            platform="twitter-comments",
+            hash_context=self.hash_context,
+            hash_config=self.hash_config,
+            product_name="ScreenBar",
+        )
+        standardized_book = load_workbook(
+            standardized.output_xlsx,
+            read_only=True,
+            data_only=True,
+        )
+        try:
+            standardized_rows = list(
+                standardized_book.worksheets[0].iter_rows(values_only=True)
+            )
+        finally:
+            standardized_book.close()
+
+        self.assertEqual(STANDARDIZED_HEADERS, standardized_rows[0])
+        self.assertEqual(
+            hash_user_id(
+                "1000000000000000001",
+                "twitter",
+                self.hash_context,
+                self.hash_config,
+            ),
+            standardized_rows[1][STANDARDIZED_HASH_ID_INDEX],
+        )
+        self.assertEqual("2026-08-05", standardized_rows[1][0])
+        self.assertNotIn("Twitter用户ID", standardized_rows[0])
+        self.assertNotIn("Twitter昵称", standardized_rows[0])
+
+    def test_requires_explicit_x_data_type_when_posts_and_comments_share_signature(self) -> None:
+        config = load_config()
+
+        with self.assertRaises(AmbiguousPlatformError):
+            detect_platform(TWITTER_HEADERS, config)
+
+        self.assertEqual(
+            "twitter",
+            detect_platform(TWITTER_HEADERS, config, platform="twitter").namespace,
+        )
+        self.assertEqual(
+            "twitter-comments",
+            detect_platform(
+                TWITTER_HEADERS,
+                config,
+                platform="twitter-comments",
+            ).namespace,
+        )
+
     def test_preprocesses_reddit_csv_as_independent_rows_and_hashes_author_display_names(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-reddit-preprocess"
+        tmp = TEST_TEMP_ROOT / "case-reddit-preprocess"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "reddit-thread-json-primary.csv"
         write_reddit_source(
@@ -484,7 +592,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
             detect_platform(headers, load_config(), platform="reddit")
 
     def test_detects_amazon_signature_and_preprocesses_only_registered_fields(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-amazon-preprocess"
+        tmp = TEST_TEMP_ROOT / "case-amazon-preprocess"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "amazon.xlsx"
         write_amazon_source(source_path)
@@ -523,7 +631,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
         self.assertNotIn("Ricky", result.summary_json.read_text(encoding="utf-8"))
 
     def test_detects_registered_compact_amazon_signature(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-amazon-compact-preprocess"
+        tmp = TEST_TEMP_ROOT / "case-amazon-compact-preprocess"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "amazon-compact.xlsx"
         write_amazon_compact_source(source_path)
@@ -555,7 +663,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
         )
 
     def test_rejects_an_unmatched_header_signature_without_guessing(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-amazon-preprocess-unmatched"
+        tmp = TEST_TEMP_ROOT / "case-amazon-preprocess-unmatched"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "unmatched.xlsx"
         workbook = Workbook()
@@ -579,7 +687,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
             detect_platform(headers, load_config(), platform="amazon-us")
 
     def test_rejects_a_selected_profile_when_a_required_header_is_duplicated(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-amazon-preprocess-duplicate-header"
+        tmp = TEST_TEMP_ROOT / "case-amazon-preprocess-duplicate-header"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "duplicate-header.xlsx"
         workbook = Workbook()
@@ -615,7 +723,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
             )
 
     def test_rejects_a_sheet_that_only_partially_resembles_amazon_schema(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-amazon-preprocess-extra-header"
+        tmp = TEST_TEMP_ROOT / "case-amazon-preprocess-extra-header"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "other-platform.xlsx"
         workbook = Workbook()
@@ -650,7 +758,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
             )
 
     def test_rejects_a_sheet_with_reordered_amazon_headers(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-amazon-preprocess-reordered-header"
+        tmp = TEST_TEMP_ROOT / "case-amazon-preprocess-reordered-header"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "reordered.xlsx"
         workbook = Workbook()
@@ -668,7 +776,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
             )
 
     def test_preprocessed_amazon_name_becomes_a_platform_scoped_hash_id(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-amazon-preprocess-standardize"
+        tmp = TEST_TEMP_ROOT / "case-amazon-preprocess-standardize"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "amazon.xlsx"
         write_amazon_source(source_path)
@@ -775,7 +883,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
         )
         for case_name, headers, row in cases:
             with self.subTest(case_name=case_name):
-                tmp = Path.cwd() / ".tmp-tests" / f"case-rakuten-{case_name}"
+                tmp = TEST_TEMP_ROOT / f"case-rakuten-{case_name}"
                 tmp.mkdir(parents=True, exist_ok=True)
                 source_path = tmp / "rakuten.xlsx"
                 write_rakuten_source(source_path, headers, [row])
@@ -808,7 +916,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
                 )
 
     def test_rakuten_keeps_only_gender_and_age_and_skips_anonymous_buyer_hashes(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-rakuten-attributes-and-hash"
+        tmp = TEST_TEMP_ROOT / "case-rakuten-attributes-and-hash"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "rakuten.xlsx"
         write_rakuten_source(
@@ -891,7 +999,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
         self.assertNotIn("購入者さん", str(standardized_rows))
 
     def test_rejects_rakuten_header_variants_with_extra_or_reordered_columns(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-rakuten-invalid-signature"
+        tmp = TEST_TEMP_ROOT / "case-rakuten-invalid-signature"
         tmp.mkdir(parents=True, exist_ok=True)
         source_path = tmp / "rakuten-invalid.xlsx"
         workbook = Workbook()
@@ -916,7 +1024,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
             "Mixed registered platform variants need a deterministic preprocessed merge entry point.",
         )
 
-        tmp = Path.cwd() / ".tmp-tests" / "case-rakuten-mixed-variant-merge"
+        tmp = TEST_TEMP_ROOT / "case-rakuten-mixed-variant-merge"
         tmp.mkdir(parents=True, exist_ok=True)
         first_path = tmp / "first.xlsx"
         second_path = tmp / "second.xlsx"
@@ -982,7 +1090,7 @@ class PreprocessPlatformCommentsTest(unittest.TestCase):
         self.assertEqual(2, result.data_rows_written)
 
     def test_mixed_variant_merge_rejects_unregistered_headers_without_partial_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-rakuten-mixed-variant-merge-reject"
+        tmp = TEST_TEMP_ROOT / "case-rakuten-mixed-variant-merge-reject"
         tmp.mkdir(parents=True, exist_ok=True)
         valid_path = tmp / "valid.xlsx"
         invalid_path = tmp / "invalid.xlsx"

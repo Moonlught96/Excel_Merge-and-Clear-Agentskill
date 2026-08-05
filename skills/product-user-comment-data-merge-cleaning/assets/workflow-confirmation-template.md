@@ -4,6 +4,20 @@
 
 The confirmation text below must be sent in the current conversation and answered explicitly by the user. Do not replace a response with a CLI flag, a JSON/state file, an old log, a historical confirmation, or a request to process quickly.
 
+## X Data-Type Gate
+
+Use this before output naming, merge planning, or preprocessing whenever the user identifies the supplied data as X/Twitter. Do not infer the type from filenames, headers, row values, or content.
+
+```text
+检测到 X/Twitter 数据，请选择本轮数据类型：
+[1] 推文：使用既有 `twitter` 推文分流和推文保留关键词流程。
+[2] 评论：使用独立的 X 评论分流，不套用推文分流或推文保留关键词流程。
+
+请回复“推文”或“评论”。
+```
+
+Only `推文` selects the registered `twitter` profile. `评论` selects the separate registered `twitter-comments` profile. Both profiles deliberately require the same complete ordered exporter signature, so the selected type must be passed explicitly; do not infer it from a filename, header, or value. The confirmed `twitter-comments` mapping uses `user_id` -> temporary `Twitter用户ID` and `screen_name` -> temporary `Twitter昵称`, then reuses the `twitter` hash namespace. X 评论 never runs the X 推文 keep-keyword filter and proceeds from standardization approval to the KOL clean-word gate.
+
 ## Naming And Merge Entry
 
 ### Amazon Routing Constraint
@@ -68,16 +82,16 @@ After the user confirms, the standardizer command must use `--initialize-project
 是否已经提供完成所有 KOL 清理词？你确认后我再进行清洗。
 ```
 
-## Twitter/X Keep Keywords
+## X Tweet Keep Keywords
 
-Only for a confirmed `twitter` preprocessing profile, after standardized-workbook approval and before the KOL clean-word gate:
+Only when the user selected `推文` and the confirmed preprocessing profile is `twitter`, after standardized-workbook approval and before the KOL clean-word gate. This does not apply to X 评论:
 
 ```text
-请提供本轮 Twitter/X 评论保留关键词。仅保留“评论内容”包含任一关键词的整行数据；请一次性提供所有关键词。
+请提供本轮 X 推文保留关键词。仅保留“评论内容”包含任一关键词的整行数据；请一次性提供所有关键词。
 ```
 
 ```text
-是否已经提供完成所有 Twitter/X 保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。
+是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。
 ```
 
 ## Existing Output Replacement

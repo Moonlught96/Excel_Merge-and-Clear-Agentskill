@@ -4,6 +4,7 @@ import csv
 import unittest
 from contextlib import nullcontext
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 
 from openpyxl import Workbook, load_workbook
 
@@ -44,7 +45,7 @@ def write_source(path: Path, rows: list[list[object]]) -> None:
 
 class EndToEndWorkflowTest(unittest.TestCase):
     def test_merge_standardize_clean_and_cleanup_preserves_inputs_and_keeps_only_final_outputs(self) -> None:
-        base = Path.cwd() / ".tmp-tests"
+        base = TEST_TEMP_ROOT
         base.mkdir(parents=True, exist_ok=True)
 
         test_directory = base / "case-end-to-end-workflow"
@@ -139,6 +140,7 @@ class EndToEndWorkflowTest(unittest.TestCase):
             cleanup_result = cleanup_intermediate_outputs(
                 intermediate_paths=intermediate_paths,
                 protected_paths=[first, second, clean_result.output_xlsx, clean_result.output_csv],
+                final_output_paths=[clean_result.output_xlsx, clean_result.output_csv],
                 summary_path=None,
             )
 

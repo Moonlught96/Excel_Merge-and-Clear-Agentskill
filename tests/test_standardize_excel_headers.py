@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import unittest
@@ -14,6 +14,7 @@ from tools.hash_id_pseudonymizer import (
 )
 from tools.standardize_excel_headers import (
     HeaderNotFoundError,
+    ExternalStandardizerConfigError,
     MissingHashContextError,
     UnsafeIdentityValueError,
     UnsafeUserIdValueError,
@@ -21,8 +22,10 @@ from tools.standardize_excel_headers import (
     convert_platform_datetime_to_beijing_date,
     load_config,
     parse_args,
+    main as standardizer_main,
     standardize_workbook,
 )
+from tests.test_support import TEST_TEMP_ROOT
 
 
 EXPECTED_HEADER = [
@@ -110,7 +113,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             workbook.close()
 
     def test_youtube_none_account_id_column_falls_back_to_author_hashes(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-youtube-none-account-id-fallback"
+        tmp = TEST_TEMP_ROOT / "case-youtube-none-account-id-fallback"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
 
@@ -138,6 +141,22 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             ),
         )
 
+    def test_relative_platform_date_strips_known_chinese_edited_suffix(self) -> None:
+        self.assertEqual(
+            "2023",
+            convert_platform_datetime_to_beijing_date(
+                "三年前（修改过）",
+                today=date(2026, 8, 4),
+            ),
+        )
+        self.assertEqual(
+            "2026-07",
+            convert_platform_datetime_to_beijing_date(
+                "一个月前（修改过）",
+                today=date(2026, 8, 4),
+            ),
+        )
+
     def test_initialize_project_requires_explicit_project_key_confirmation(self) -> None:
         base_args = [
             "source.xlsx",
@@ -162,8 +181,47 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
         self.assertEqual("ScreenBar", args.confirm_project_key_creation)
 
+    def test_cli_rejects_external_standardizer_config(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-standardizer-external-config"
+        tmp.mkdir(parents=True, exist_ok=True)
+        external_config = tmp / "header-standardizer-temporary.json"
+        canonical_config = Path(__file__).resolve().parents[1] / "config" / "header-standardizer.json"
+        external_config.write_text(canonical_config.read_text(encoding="utf-8"), encoding="utf-8")
+
+        with self.assertRaisesRegex(ExternalStandardizerConfigError, "External or temporary"):
+            standardizer_main(
+                [
+                    str(tmp / "source.xlsx"),
+                    "--output",
+                    str(tmp / "standardized.xlsx"),
+                    "--config",
+                    str(external_config),
+                ]
+            )
+
+    def test_cli_rejects_external_hash_id_config(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-standardizer-external-hash-config"
+        tmp.mkdir(parents=True, exist_ok=True)
+        external_hash_config = tmp / "hash-id-temporary.json"
+        canonical_hash_config = Path(__file__).resolve().parents[1] / "config" / "hash-id.json"
+        external_hash_config.write_text(
+            canonical_hash_config.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(ExternalStandardizerConfigError, "External or temporary"):
+            standardizer_main(
+                [
+                    str(tmp / "source.xlsx"),
+                    "--output",
+                    str(tmp / "standardized.xlsx"),
+                    "--hash-config",
+                    str(external_hash_config),
+                ]
+            )
+
     def test_csv_formula_like_values_remain_text_after_standardization(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-csv-formula-text"
+        tmp = TEST_TEMP_ROOT / "case-standardize-csv-formula-text"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.csv"
         output_path = tmp / "standardized.xlsx"
@@ -186,7 +244,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("s", standardized.active.cell(row=2, column=LIKES_INDEX + 1).data_type)
 
     def test_compact_yyyymmdd_date_is_not_treated_as_unix_timestamp(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-compact-date"
+        tmp = TEST_TEMP_ROOT / "case-standardize-compact-date"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "standardized.xlsx"
@@ -208,7 +266,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("2026-07-09", rows[1][0])
 
     def test_requires_explicit_overwrite_for_existing_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-existing-output"
+        tmp = TEST_TEMP_ROOT / "case-standardize-existing-output"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "standardized.xlsx"
@@ -230,7 +288,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("existing", output_path.read_text(encoding="utf-8"))
 
     def test_standardizes_header_order_and_removes_risk_columns(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-headers"
+        tmp = TEST_TEMP_ROOT / "case-standardize-headers"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         output_dir = tmp / "out"
@@ -261,7 +319,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
 
     def test_copies_confirmed_profile_columns_and_keeps_them_blank_when_absent(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-profile-columns"
+        tmp = TEST_TEMP_ROOT / "case-standardize-profile-columns"
         tmp.mkdir(parents=True, exist_ok=True)
         populated_input_path = tmp / "populated.xlsx"
         blank_input_path = tmp / "blank.xlsx"
@@ -298,7 +356,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual((None, None), blank_rows[1][3:5])
 
     def test_normalizes_registered_rating_and_helpful_text_formats(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-rating-and-likes-text"
+        tmp = TEST_TEMP_ROOT / "case-standardize-rating-and-likes-text"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         output_path = tmp / "standardized.xlsx"
@@ -346,7 +404,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual((4, 8), (rows[3][rating_index], rows[3][LIKES_INDEX]))
 
     def test_defaults_missing_likes_column_to_zero(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-missing-likes-default"
+        tmp = TEST_TEMP_ROOT / "case-standardize-missing-likes-default"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "standardized.xlsx"
@@ -368,7 +426,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(0, rows[1][LIKES_INDEX])
 
     def test_defaults_blank_likes_value_to_zero(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-blank-likes-default"
+        tmp = TEST_TEMP_ROOT / "case-standardize-blank-likes-default"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "standardized.xlsx"
@@ -390,7 +448,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(0, rows[1][LIKES_INDEX])
 
     def test_merges_gender_and_age_into_the_single_user_attribute_column(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-user-attribute"
+        tmp = TEST_TEMP_ROOT / "case-standardize-user-attribute"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "standardized.xlsx"
@@ -420,7 +478,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertIsNone(rows[4][user_attribute_index])
 
     def test_combined_user_attribute_formula_like_value_remains_text(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-user-attribute-formula"
+        tmp = TEST_TEMP_ROOT / "case-standardize-user-attribute-formula"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "standardized.xlsx"
@@ -449,7 +507,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             standardized.close()
 
     def test_direct_user_attribute_has_row_level_priority_over_gender_and_age(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-direct-user-attribute"
+        tmp = TEST_TEMP_ROOT / "case-standardize-direct-user-attribute"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "standardized.xlsx"
@@ -473,7 +531,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("男 40", rows[2][user_attribute_index])
 
     def test_rejects_missing_comment_content_header_without_guessing(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-missing-header"
+        tmp = TEST_TEMP_ROOT / "case-standardize-missing-header"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -488,7 +546,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             standardize_workbook(input_path, load_config(), output_dir=tmp / "out")
 
     def test_splits_taobao_comment_date_and_product_into_two_standard_columns(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-taobao-date-product-header"
+        tmp = TEST_TEMP_ROOT / "case-taobao-date-product-header"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -519,7 +577,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
 
     def test_maps_direct_product_header_to_product_name(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-direct-product-header"
+        tmp = TEST_TEMP_ROOT / "case-direct-product-header"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -555,7 +613,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
 
     def test_fills_confirmed_product_name_when_source_product_column_is_absent(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-confirmed-product-name"
+        tmp = TEST_TEMP_ROOT / "case-confirmed-product-name"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         output_path = tmp / "standardized.xlsx"
@@ -587,7 +645,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
 
     def test_maps_confirmed_taobao_aliases_to_standard_columns(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-confirmed-taobao-aliases"
+        tmp = TEST_TEMP_ROOT / "case-confirmed-taobao-aliases"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -608,7 +666,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual((3, 5, "追评 A", None, None), rows[1][LIKES_INDEX:])
 
     def test_maps_confirmed_english_comment_aliases_and_drops_id_risk_columns(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-confirmed-english-comment-aliases"
+        tmp = TEST_TEMP_ROOT / "case-confirmed-english-comment-aliases"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -635,7 +693,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
 
     def test_keeps_subcomment_count_output_column_blank_when_source_header_is_missing(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-missing-subcomment-count"
+        tmp = TEST_TEMP_ROOT / "case-missing-subcomment-count"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -656,7 +714,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual((2, None, None, None, None), rows[1][LIKES_INDEX:])
 
     def test_standardizes_csv_input_with_same_header_mapping_rules(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-csv-input"
+        tmp = TEST_TEMP_ROOT / "case-standardize-csv-input"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.csv"
         input_path.write_text(
@@ -675,7 +733,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual((2, "0", None, None, None), rows[1][LIKES_INDEX:])
 
     def test_maps_tiktok_comment_exporter_aliases_without_ai(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-aliases"
+        tmp = TEST_TEMP_ROOT / "case-tiktok-aliases"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.csv"
         input_path.write_text(
@@ -703,7 +761,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(["id", "uniqueId"], summary["sheets"][0]["configured_drop_headers_found"])
 
     def test_maps_confirmed_tiktok_chinese_exporter_aliases_without_ai(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-chinese-aliases"
+        tmp = TEST_TEMP_ROOT / "case-tiktok-chinese-aliases"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.csv"
         input_path.write_text(
@@ -722,7 +780,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual((4, "7", None, None, None), rows[1][LIKES_INDEX:])
 
     def test_maps_confirmed_tiktok_chinese_datetime_without_time_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-tiktok-chinese-datetime"
+        tmp = TEST_TEMP_ROOT / "case-tiktok-chinese-datetime"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.csv"
         input_path.write_text(
@@ -747,7 +805,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
 
     def test_maps_youtube_comment_aliases_and_iso_time_to_beijing_date(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-youtube-aliases"
+        tmp = TEST_TEMP_ROOT / "case-youtube-aliases"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -775,7 +833,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         )
 
     def test_maps_youtube_relative_published_at_to_beijing_year_or_month(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-youtube-relative-published-at"
+        tmp = TEST_TEMP_ROOT / "case-youtube-relative-published-at"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -805,7 +863,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(expected_standardized_row("2026-03", "Four months old comment", likes=4, subcomment_count=0), rows[4])
 
     def test_hashes_verified_youtube_user_id_without_exposing_raw_id_in_summary(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-user-id"
+        tmp = TEST_TEMP_ROOT / "case-hash-youtube-user-id"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -830,7 +888,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(1, summary["sheets"][0]["hash_id"]["hashed_count"])
 
     def test_hash_summary_records_reason_only_when_no_identity_header_exists(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-no-registered-identity-header"
+        tmp = TEST_TEMP_ROOT / "case-hash-no-registered-identity-header"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -874,7 +932,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertNotIn("reason", sheets["WithIdentity"]["hash_id"])
 
     def test_hashes_xiaohongshu_user_id_stably_across_runs(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-xiaohongshu-user-id"
+        tmp = TEST_TEMP_ROOT / "case-hash-xiaohongshu-user-id"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 
@@ -891,7 +949,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(first_rows[1][HASH_ID_INDEX], second_rows[1][HASH_ID_INDEX])
 
     def test_hashes_bilibili_username_as_display_name_without_exposing_raw_name(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-bilibili-display-name"
+        tmp = TEST_TEMP_ROOT / "case-hash-bilibili-display-name"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -916,7 +974,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(0, hash_summary["blank_count"])
 
     def test_youtube_account_id_column_wins_globally_without_row_fallback(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-account-id-priority"
+        tmp = TEST_TEMP_ROOT / "case-hash-youtube-account-id-priority"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -938,7 +996,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(1, hash_summary["blank_count"])
 
     def test_youtube_uses_author_when_account_id_column_is_entirely_blank(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-blank-account-id-fallback"
+        tmp = TEST_TEMP_ROOT / "case-hash-youtube-blank-account-id-fallback"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -960,7 +1018,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual(0, hash_summary["blank_count"])
 
     def test_youtube_uses_author_only_when_account_id_column_is_absent(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-author-fallback"
+        tmp = TEST_TEMP_ROOT / "case-hash-youtube-author-fallback"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -978,7 +1036,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("display_name", hash_summary["identity_type"])
 
     def test_youtube_author_name_reuses_author_display_name_hash_domain(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-youtube-author-name-fallback"
+        tmp = TEST_TEMP_ROOT / "case-hash-youtube-author-name-fallback"
         tmp.mkdir(parents=True, exist_ok=True)
         author_path = tmp / "author.xlsx"
         author_name_path = tmp / "author-name.xlsx"
@@ -1009,7 +1067,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertEqual("display_name", hash_summary["identity_type"])
 
     def test_xiaohongshu_uses_display_name_when_user_id_column_is_absent(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-xhs-display-name-fallback"
+        tmp = TEST_TEMP_ROOT / "case-hash-xhs-display-name-fallback"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -1033,7 +1091,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         ]
         for case_name, identity_headers, identity_values, expected_header in cases:
             with self.subTest(case=case_name):
-                tmp = Path.cwd() / ".tmp-tests" / f"case-hash-tiktok-{case_name}"
+                tmp = TEST_TEMP_ROOT / f"case-hash-tiktok-{case_name}"
                 tmp.mkdir(parents=True, exist_ok=True)
                 input_path = tmp / "raw.xlsx"
                 workbook = Workbook()
@@ -1072,7 +1130,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         ]
         for platform, identity_headers, identity_values, expected_header in cases:
             with self.subTest(platform=platform):
-                tmp = Path.cwd() / ".tmp-tests" / f"case-hash-{platform}-display-name"
+                tmp = TEST_TEMP_ROOT / f"case-hash-{platform}-display-name"
                 tmp.mkdir(parents=True, exist_ok=True)
                 input_path = tmp / "raw.xlsx"
                 workbook = Workbook()
@@ -1105,7 +1163,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
                 self.assertEqual("display_name", hash_summary["identity_type"])
 
     def test_supplied_platform_ignores_identity_header_from_other_platform(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-cross-platform-identity-header"
+        tmp = TEST_TEMP_ROOT / "case-cross-platform-identity-header"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -1131,7 +1189,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertIsNone(hash_summary["source_header"])
 
     def test_registered_real_user_id_requires_platform_and_project_context(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-hash-context-required"
+        tmp = TEST_TEMP_ROOT / "case-hash-context-required"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -1144,7 +1202,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             standardize_workbook(input_path, load_config(), output_dir=tmp / "without-context")
 
     def test_registered_author_without_platform_still_requires_context(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-author-context-required"
+        tmp = TEST_TEMP_ROOT / "case-author-context-required"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -1162,7 +1220,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertNotIn("SECRET-AUTHOR", message)
 
     def test_registered_display_name_requires_context_without_exposing_raw_value(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-display-name-context-required"
+        tmp = TEST_TEMP_ROOT / "case-display-name-context-required"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -1181,7 +1239,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertNotIn("SECRET-DISPLAY-NAME", message)
 
     def test_invalid_identity_error_is_safe_and_legacy_compatible(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-invalid-hash-user-id"
+        tmp = TEST_TEMP_ROOT / "case-invalid-hash-user-id"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
         workbook = Workbook()
@@ -1207,7 +1265,7 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
         self.assertNotIn("SECRET_RAW_ID", message)
 
     def test_preserves_formula_cells_in_retained_columns(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-standardize-preserves-formulas"
+        tmp = TEST_TEMP_ROOT / "case-standardize-preserves-formulas"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "raw.xlsx"
 

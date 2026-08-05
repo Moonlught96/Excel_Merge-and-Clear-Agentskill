@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from tests.test_support import TEST_TEMP_ROOT
 from unittest import mock
 
 from openpyxl import Workbook, load_workbook
@@ -23,7 +24,7 @@ def write_workbook(path: Path, sheets: dict[str, list[list[object]]]) -> None:
 
 class MergeExcelWorkbooksTest(unittest.TestCase):
     def test_closes_input_workbook_when_merge_processing_fails(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-merge-closes-on-error"
+        tmp = TEST_TEMP_ROOT / "case-merge-closes-on-error"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "merged.xlsx"
@@ -52,7 +53,7 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         output_workbook.close.assert_called_once_with()
 
     def test_rejects_duplicate_input_paths_instead_of_duplicating_rows(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-merge-duplicate-input"
+        tmp = TEST_TEMP_ROOT / "case-merge-duplicate-input"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "merged.xlsx"
@@ -65,7 +66,7 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         self.assertFalse(output_path.exists())
 
     def test_merges_all_workbooks_with_one_header(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-merge"
+        tmp = TEST_TEMP_ROOT / "case-merge"
         tmp.mkdir(parents=True, exist_ok=True)
         first_path = tmp / "b_second.xlsx"
         second_path = tmp / "a_first.xlsx"
@@ -116,7 +117,7 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         self.assertTrue(result.summary_path.exists())
 
     def test_rejects_header_mismatch_by_default(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-merge-header-mismatch"
+        tmp = TEST_TEMP_ROOT / "case-merge-header-mismatch"
         tmp.mkdir(parents=True, exist_ok=True)
         first_path = tmp / "first.xlsx"
         second_path = tmp / "second.xlsx"
@@ -128,7 +129,7 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
             merge_workbooks([first_path, second_path], tmp / "merged.xlsx")
 
     def test_rejects_output_path_that_would_overwrite_input_file(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-merge-output-conflict"
+        tmp = TEST_TEMP_ROOT / "case-merge-output-conflict"
         tmp.mkdir(parents=True, exist_ok=True)
         first_path = tmp / "first.xlsx"
         second_path = tmp / "second.xlsx"
@@ -143,7 +144,7 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         self.assertEqual(before, first_path.read_bytes())
 
     def test_requires_explicit_overwrite_for_existing_output(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-merge-existing-output"
+        tmp = TEST_TEMP_ROOT / "case-merge-existing-output"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "merged.xlsx"
@@ -156,7 +157,7 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         self.assertEqual("existing", output_path.read_text(encoding="utf-8"))
 
     def test_merges_explicit_csv_inputs_through_compatibility_layer(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-merge-csv-inputs"
+        tmp = TEST_TEMP_ROOT / "case-merge-csv-inputs"
         tmp.mkdir(parents=True, exist_ok=True)
         first_path = tmp / "first.csv"
         second_path = tmp / "second.csv"
@@ -182,7 +183,7 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         self.assertEqual(2, result.data_rows_written)
 
     def test_csv_formula_like_values_remain_text_after_merge(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-merge-csv-formula-text"
+        tmp = TEST_TEMP_ROOT / "case-merge-csv-formula-text"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.csv"
         output_path = tmp / "merged.xlsx"
@@ -200,7 +201,7 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         self.assertEqual("s", merged["总表"].cell(row=2, column=3).data_type)
 
     def test_preserves_formula_cells_instead_of_turning_them_into_blanks(self) -> None:
-        tmp = Path.cwd() / ".tmp-tests" / "case-merge-preserves-formulas"
+        tmp = TEST_TEMP_ROOT / "case-merge-preserves-formulas"
         tmp.mkdir(parents=True, exist_ok=True)
         input_path = tmp / "source.xlsx"
         output_path = tmp / "merged.xlsx"
