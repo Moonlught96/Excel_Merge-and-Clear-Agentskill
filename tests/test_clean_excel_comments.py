@@ -452,6 +452,73 @@ class CleanExcelCommentsTest(unittest.TestCase):
             ),
         )
 
+    def test_new_neutral_fixed_terms_apply_to_all_comment_script_groups(self) -> None:
+        config = load_config(DEFAULT_CONFIG_PATH)
+
+        self.assertEqual(
+            "评论包含固定删除词: 搭载",
+            should_delete_comment(
+                "This is a detailed English review that mentions 搭载 as imported source text.",
+                set(),
+                config,
+                (),
+            ),
+        )
+        self.assertEqual(
+            "评论包含固定删除词: 爽翻",
+            should_delete_comment(
+                "これは十分に長い日本語レビューで爽翻という文字列を含みます。",
+                set(),
+                config,
+                (),
+            ),
+        )
+
+    def test_technical_terms_delete_only_after_four_distinct_literal_matches(self) -> None:
+        config = CleanerConfig(
+            delete_contains_texts=(),
+            delete_contains_case_insensitive_texts=(),
+        )
+        technical_terms = ("HDRi", "自动调光", "色温", "护眼模式")
+
+        self.assertEqual(
+            "评论命中技术名词数达到阈值: 4（阈值: 4）",
+            should_delete_comment(
+                "hdri、自动调光、色温调节和护眼模式都很实用，整体体验稳定。",
+                set(),
+                config,
+                (),
+                technical_terms,
+            ),
+        )
+        self.assertIsNone(
+            should_delete_comment(
+                "HDRi HDRi HDRi 反复出现，但这是一条足够完整的正常使用评价。",
+                set(),
+                config,
+                (),
+                technical_terms,
+            )
+        )
+        self.assertIsNone(
+            should_delete_comment(
+                "HDRimax 自动调光 色温调节和护眼模式都很实用，这是一条完整评价。",
+                set(),
+                config,
+                (),
+                technical_terms,
+            )
+        )
+        self.assertIsNone(
+            should_delete_comment(
+                "préclairage、自动调光、色温与护眼模式都很实用，这是一条完整评价。",
+                set(),
+                config,
+                (),
+                ("éclairage", "自动调光", "色温", "护眼模式"),
+            )
+        )
+
     def test_japanese_with_kanji_does_not_use_chinese_length_threshold(self) -> None:
         config = CleanerConfig(
             delete_contains_texts=(),
@@ -514,6 +581,46 @@ class CleanExcelCommentsTest(unittest.TestCase):
         self.assertTrue(result.output_csv and result.output_csv.exists())
         self.assertTrue(result.deletion_log_csv.exists())
         self.assertTrue(result.summary_json.exists())
+
+    def test_clean_workbook_applies_confirmed_technical_terms_and_records_them(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-technical-terms"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容", "点赞数"])
+        sheet.append(["2026-08-05", "HDRi、自动调光、色温与护眼模式都很好，整体体验很稳定。", 3])
+        sheet.append(["2026-08-05", "HDRi、自动调光和色温都不错，整体使用体验很稳定。", 2])
+        workbook.save(input_path)
+        workbook.close()
+
+        result = clean_workbook(
+            input_path=input_path,
+            config=CleanerConfig(
+                target_header="评论内容",
+                delete_contains_texts=(),
+                delete_contains_case_insensitive_texts=(),
+                delete_random_alnum_without_chinese=False,
+            ),
+            clean_words=(),
+            technical_terms=("HDRi", "自动调光", "色温", "护眼模式", "HDRI"),
+            output_dir=tmp / "out",
+        )
+
+        cleaned = load_workbook(result.output_xlsx, read_only=True, data_only=True)
+        remaining_comments = [
+            cleaned.active.cell(row=row_number, column=2).value
+            for row_number in range(2, cleaned.active.max_row + 1)
+        ]
+        cleaned.close()
+        self.assertEqual(["HDRi、自动调光和色温都不错，整体使用体验很稳定。"], remaining_comments)
+        self.assertEqual(1, result.rows_deleted)
+        self.assertTrue(result.output_csv and result.output_csv.exists())
+
+        summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
+        self.assertEqual(4, summary["technical_term_min_distinct_matches"])
+        self.assertEqual(["HDRi", "自动调光", "色温", "护眼模式"], summary["technical_terms"])
 
     def test_clean_workbook_rejects_legacy_numeric_target_column_fallback(self) -> None:
         tmp = TEST_TEMP_ROOT / "case-reject-legacy-target-column"

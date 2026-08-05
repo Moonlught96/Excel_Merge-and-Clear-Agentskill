@@ -85,6 +85,7 @@ The standardized workbook contains exactly these columns in this order:
 
 - The public cleaner CLI and internal cleaner require the exact `--target-header 评论内容` and a confirmed nonblank `--platform`; numeric column 3 / `target_column` fallback is disabled.
 - Main-comment rules may delete an entire row only when a deterministic configured rule matches.
+- Per-run technical terms are optional runtime inputs, never cleaner configuration. Only after the user confirms the complete list may each term be passed as a separate `--technical-term` argument. A row is deleted only when it matches at least four distinct confirmed technical terms; repeated occurrences of the same term count once. Latin terms use case-insensitive complete Unicode lexical-term matching. Chinese, Japanese, Korean, Thai, Hindi, numeric-only, and mixed-script terms use exact literal containment. The rule does not translate, expand, fuzzy-match, or infer terms.
 - Subcomment duplicate and short-text rules clear only the affected subcomment cell; they must not delete the row or modify `评论内容`.
 - Deduplicate only within the same worksheet.
 
@@ -114,13 +115,13 @@ The standardized workbook contains exactly these columns in this order:
 - Immediately after standardization, run `scripts/audit_standardized_comments.py` against the standardized workbook and the exact source workbook supplied to standardization.
 - The audit checks only deterministic, non-semantic invariants: fixed output header order, duplicate/unexpected identity headers, 64-character lowercase hexadecimal nonblank `哈希ID` values, nonblank `点赞数` values on every data row, worksheet name/order, source-to-output row counts, and each verifiable fixed source-to-output mapped value. It verifies the standardizer's blank-to-`0` default and never rewrites the workbook.
 - The audit must not read, expose, classify, translate, or judge comment text or raw identity values. Its JSON report contains only paths, sheet names, counts, headers, and issue codes.
-- A failed audit blocks the user-confirmation, KOL, and cleaning phases. A passed audit does not remove the existing user confirmation of the standardized workbook.
+- A failed audit blocks the user-confirmation, technical-term, KOL, and cleaning phases. A passed audit does not remove the existing user confirmation of the standardized workbook.
 - The audit JSON is a current-run intermediate. Delete it with other intermediate outputs after successful cleaning unless the user explicitly asked to retain audit artifacts before cleaning.
 
 ## X Tweet Keep-Keyword Filter Contract
 
 - This contract applies only after the user selected `推文`, a registered `twitter` X 推文 preprocessing profile has matched, standardization/audit have passed, and the user has approved the standardized workbook. It does not apply to the registered `twitter-comments` X 评论 profile.
-- It runs before the universal KOL clean-word and common-cleaning stages. It is defined in detail in `twitter-x-keyword-filter.md`.
+- It runs before the universal technical-term, KOL clean-word, and common-cleaning stages. It is defined in detail in `twitter-x-keyword-filter.md`.
 - The user must provide one or more nonblank keep keywords and explicitly confirm that the list is complete before execution.
 - For each worksheet, the filter requires exactly one `评论内容` header and retains a row only when its comment contains at least one confirmed literal keyword through Unicode casefolded substring matching.
 - Missing target headers, duplicate target headers, or an empty keyword list stop without output. No AI, translation, semantic relevance judgment, fuzzy match, synonym expansion, or unconfirmed keyword is allowed.

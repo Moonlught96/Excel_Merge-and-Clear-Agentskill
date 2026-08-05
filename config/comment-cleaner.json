@@ -5,6 +5,7 @@
   "min_trimmed_length": 8,
   "non_chinese_max_short_words": 2,
   "non_chinese_max_short_unspaced_chars": 4,
+  "technical_term_min_distinct_matches": 4,
   "delete_exact_texts": [
     "该用户未填写评价内容",
     "此用户未填写评价内容"
@@ -59,6 +60,8 @@
     "红包",
     "特价",
     "国补",
+    "搭载",
+    "爽翻",
     "リンク",
     "プロフィール見て",
     "プロフ見て",
@@ -212,7 +215,9 @@
   ],
   "fixed_term_script_group_overrides": {
     "割引": "japanese",
-    "特価": "japanese"
+    "特価": "japanese",
+    "搭载": "neutral",
+    "爽翻": "neutral"
   },
   "delete_random_alnum_without_chinese": true,
   "random_digit_min_length": 9,

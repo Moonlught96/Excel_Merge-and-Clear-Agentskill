@@ -7,6 +7,7 @@
 - [Adding A Platform Preprocessing Profile](#adding-a-platform-preprocessing-profile)
 - [Changing The Standardized Output Audit](#changing-the-standardized-output-audit)
 - [Adding A Fixed Delete Word](#adding-a-fixed-delete-word)
+- [Adding A Per-Run Technical-Term Rule](#adding-a-per-run-technical-term-rule)
 - [Changing Cleaner Configuration](#changing-cleaner-configuration)
 - [Adding Automation](#adding-automation)
 - [Required Change Record](#required-change-record)
@@ -26,6 +27,7 @@ Examples of locked behavior include:
 - non-Chinese threshold of 2 or fewer words and unspaced fallback of 4 or fewer characters;
 - pure numeric legacy threshold;
 - fixed-word append-only behavior preserving `链接`;
+- optional per-run technical terms that are completion-confirmed and passed only through `--technical-term`, never persisted as fixed delete words;
 - same-worksheet main-comment duplicate policy that keeps the highest `点赞数`, with the last occurrence as the deterministic tie, blank, non-numeric, or missing-column fallback;
 - subcomment duplicate/short rules that clear cells instead of deleting rows;
 - confirmation gates between merge, standardization, and cleaning;
@@ -65,7 +67,7 @@ Examples of locked behavior include:
 
 1. Add a failing test for each new structural check before changing the audit tool.
 2. Audit only deterministic structure, configuration, counts, header names, hash format, and fixed source-to-output mapping equality. Never inspect comment semantics or raw identity values.
-3. Make failures block standardization approval, KOL collection, and cleaning until the underlying deterministic defect or configuration is corrected.
+3. Make failures block standardization approval, technical-term collection, KOL collection, and cleaning until the underlying deterministic defect or configuration is corrected.
 4. Ensure the audit JSON contains no raw comment content, raw identity values, or project secret material.
 5. Record the audit artifact as an explicit cleanup intermediate unless the user requests retention before cleaning.
 
@@ -78,6 +80,16 @@ Examples of locked behavior include:
 5. Do not use AI-generated translations as live cleaning decisions.
 6. Add tests for matching and a nearby negative case.
 7. Update `references/cleaning-rules.md` and synchronize the bundled configuration.
+
+## Adding A Per-Run Technical-Term Rule
+
+1. Obtain explicit user confirmation of the threshold, the definition of distinct matches, matching boundaries, script behavior, and both completion-gate prompts.
+2. Keep terms as repeatable runtime CLI arguments only; never write a per-run list into fixed delete-word configuration or an external cleaner configuration.
+3. Add failing positive, below-threshold, repeated-term, and adjacent-boundary tests before implementation. Include a workbook-level test proving the CLI/API passes the list into final row deletion.
+4. Implement only deterministic literal or explicitly specified token-boundary matching. Do not translate, expand, stem, infer, or use AI.
+5. Preserve the established cleaner rule order and all existing deletion rules. The new threshold may only add a deletion reason after existing rules have been evaluated unless the user explicitly changes the order.
+6. Update `cleaning-rules.md`, `workflow.md`, `data-contract.md`, `tool-reference.md`, reusable confirmation assets, `SKILL.md`, project instructions, and tests.
+7. Synchronize the bundled script/config and validate the standalone Skill package.
 
 ## Changing Cleaner Configuration
 
@@ -134,8 +146,8 @@ Use `assets/rule-extension-template.md` to record:
 1. Obtain the exact user-confirmed platform scope, stage order, matching predicate, and confirmation prompts.
 2. Implement the predicate as a standalone deterministic script in `scripts/`; do not add a natural-language decision path to the common cleaner.
 3. Specify whether matching is literal, case-sensitive, case-insensitive, token-boundary-based, or regular-expression-based. Do not leave matching behavior implicit.
-4. Place the filter after standardization audit and user approval, and before the common KOL and cleaner stages, unless the user explicitly changes that order.
+4. Place the filter after standardization audit and user approval, and before the common technical-term, KOL, and cleaner stages, unless the user explicitly changes that order.
 5. Require an explicit completion confirmation for any user-provided dynamic rule list before execution.
 6. Add tests for positive retention, negative deletion, blank/invalid inputs, missing target headers, summary privacy, and output-path safety.
 7. Document input/output/cleanup behavior in `workflow.md`, `data-contract.md` or a dedicated reference, `tool-reference.md`, `naming-and-retention.md`, and reusable confirmation assets.
-8. Preserve the final naming, KOL, common-cleaner, original-file, and intermediate-cleanup rules unless the user explicitly changes them.
+8. Preserve the final naming, technical-term, KOL, common-cleaner, original-file, and intermediate-cleanup rules unless the user explicitly changes them.

@@ -155,7 +155,7 @@ When the user has confirmed the platform profile, use `scripts/preprocess_platfo
 
 ## Standardized Output Audit Stops Unsafe Progression
 
-The automatic audit is intentionally deterministic and non-semantic. It checks locked header order, unexpected raw identity headers, hash format, worksheet order, row-count preservation, and every verifiable fixed mapped source/output value against the exact standardization source. A failed audit blocks standardization approval, KOL-word collection, and cleaning.
+The automatic audit is intentionally deterministic and non-semantic. It checks locked header order, unexpected raw identity headers, hash format, worksheet order, row-count preservation, and every verifiable fixed mapped source/output value against the exact standardization source. A failed audit blocks standardization approval, technical-term collection, KOL-word collection, and cleaning.
 
 The audit does not evaluate the meaning, language, quality, sentiment, or correctness of a comment. It emits issue codes and counts only, never raw identity values or comment values. Correct an underlying fixed configuration or tool defect, then rerun the standardization and audit; do not manually alter the audit report to continue.
 

@@ -14,6 +14,9 @@
 - Pure numeric comments keep the legacy seven-character threshold for backward compatibility.
 - Delete comments exactly equal to `该用户未填写评价内容` or `此用户未填写评价内容`.
 - Delete a row when the main comment contains any user-confirmed KOL clean word.
+- Per run, after the user confirms the complete technical-term list and before KOL-word collection, delete a row only when `评论内容` matches 4 个及以上不同技术名词. A repeated occurrence of one term counts once.
+- Technical terms are supplied only through repeatable `--technical-term` arguments; they are not fixed delete words and are never written into the canonical configuration. An empty confirmed list passes no `--technical-term` arguments and changes nothing.
+- Technical-term matching is deterministic: a Latin-script term is case-insensitive and must be a complete Unicode lexical token, while Chinese, Japanese, Korean, Thai, Hindi, numeric-only, and mixed-script terms use exact literal containment. Do not translate, expand abbreviations, fuzzy-match, infer synonyms, or use AI.
 - Delete duplicate main comments only within the same worksheet, keeping the row with the highest deterministic numeric value in `点赞数` and deleting the other rows. If likes are tied, blank, non-numeric, or the `点赞数` column is absent, keep the last occurrence. Non-numeric likes are treated as `0`; no semantic or abbreviated-number inference is permitted.
 - Never use AI, semantic quality review, sentiment, relevance, suspected-advertising judgment, or fuzzy matching.
 - Fixed delete words are isolated by deterministic script group. Chinese comments use only Chinese fixed words; Japanese, Korean, Thai, and Hindi comments use only their corresponding script group. English and Spanish share the Latin-script group because script inspection cannot reliably distinguish those languages without semantic inference.
@@ -28,6 +31,8 @@ The executable source of truth is `config/comment-cleaner.json`. The exact activ
 
 `fixed_term_script_group_overrides` is also executable configuration. Each override must name an already-active fixed delete term and one of the fixed groups `chinese`, `japanese`, `korean`, `thai`, `hindi`, `latin`, or `neutral`; it must never be implemented as a hard-coded term list in the cleaner.
 
+`搭载` and `爽翻` are active append-only fixed delete words. Their explicit `neutral` overrides make their literal characters apply to every comment script group without translation or language detection; this does not alter the existing per-script behavior of any other fixed word.
+
 ### Ambiguous Chinese Substring Exclusions
 
 The following short Chinese strings are deliberately **not** fixed delete terms: `无`, `第一`, `略`, `测试`, `来了`, and `路过`. They caused false positives under literal Chinese substring matching, for example `无炫光设计让我很满意`, `第一次购买屏幕挂灯效果很好`, `价格略贵但整体品质不错`, and `感应到人来了就会自动亮灯`.
@@ -40,7 +45,7 @@ Do not re-add these six terms through a temporary per-run configuration. A futur
 
 Do not restore these four terms through an external, copied, or temporary configuration. A future change requires explicit user confirmation, a canonical-config update, synchronized documentation, and positive/nearby-negative regression tests.
 
-`链接`, `凑字数`, `水经验`, `赚积分`, `为了金币`, `赚硬币`, `赚京豆`, `淘气值`, `为了评论而评论`, `混个脸熟`, `完成任务`, `代下`, `代买`, `内部券`, `加微`, `加v`, `私聊我`, `主页看`, `点击链接`, `http://`, `https://`, `打卡`, `冒泡`, `占座`, `无内容`, `暂无评价`, `蹲`, `蹲一个`, `求链接`, `求分享`, `多少钱`, `怎么卖`, `啥牌子`, `什么牌子`, `求品牌`, `求私`, `加群`, `裙内`, `互赞`, `互粉`, `互关`, `回关`, `秒回`, `交朋友`, `优惠`, `好物`, `红包`, `特价`, `国补`, `リンク`, `プロフィール見て`, `プロフ見て`, `DMして`, `フォロー返し`, `相互フォロー`, `テスト`, `内容なし`, `評価なし`, `コメント稼ぎ`, `割引`, `良いもの`, `お年玉`, `特価`, `国の補助金`, `링크`, `맞팔`, `테스트`, `내용 없음`, `할인`, `좋은 물건`, `홍바오`, `특가`, `국가 보조금`.
+`链接`, `凑字数`, `水经验`, `赚积分`, `为了金币`, `赚硬币`, `赚京豆`, `淘气值`, `为了评论而评论`, `混个脸熟`, `完成任务`, `代下`, `代买`, `内部券`, `加微`, `加v`, `私聊我`, `主页看`, `点击链接`, `http://`, `https://`, `打卡`, `冒泡`, `占座`, `无内容`, `暂无评价`, `蹲`, `蹲一个`, `求链接`, `求分享`, `多少钱`, `怎么卖`, `啥牌子`, `什么牌子`, `求品牌`, `求私`, `加群`, `裙内`, `互赞`, `互粉`, `互关`, `回关`, `秒回`, `交朋友`, `优惠`, `好物`, `红包`, `特价`, `国补`, `搭载`, `爽翻`, `リンク`, `プロフィール見て`, `プロフ見て`, `DMして`, `フォロー返し`, `相互フォロー`, `テスト`, `内容なし`, `評価なし`, `コメント稼ぎ`, `割引`, `良いもの`, `お年玉`, `特価`, `国の補助金`, `링크`, `맞팔`, `테스트`, `내용 없음`, `할인`, `좋은 물건`, `홍바오`, `특가`, `국가 보조금`.
 
 Case-insensitive configured terms include:
 

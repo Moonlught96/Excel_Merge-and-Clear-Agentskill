@@ -13,7 +13,7 @@ Run it only after all of the following have occurred:
 3. the standardized-output audit has passed; and
 4. the user has approved the standardized workbook.
 
-It runs before the universal KOL clean-word gate and before `clean_excel_comments.py`. It does not replace KOL clean words, fixed delete words, duplicate rules, or any common cleaner rule.
+It runs before the universal technical-term and KOL clean-word gates and before `clean_excel_comments.py`. It does not replace confirmed technical terms, KOL clean words, fixed delete words, duplicate rules, or any common cleaner rule.
 
 ## Confirmation Gate
 
@@ -26,7 +26,7 @@ Ask exactly:
 After one or more keywords are supplied, ask exactly:
 
 ```text
-是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。
+是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用技术名词、KOL 清理词与清洗流程。
 ```
 
 Do not run the filter before the user explicitly confirms the list is complete. At least one nonblank keyword is required; an empty keyword list is a deterministic configuration error and does not mean “keep all rows.”

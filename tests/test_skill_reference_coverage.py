@@ -262,7 +262,7 @@ class SkillReferenceCoverageTest(unittest.TestCase):
         for phrase in (
             "Twitter`, `twitter`, `X`, and `x`",
             "请提供本轮 X 推文保留关键词。仅保留“评论内容”包含任一关键词的整行数据；请一次性提供所有关键词。",
-            "是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。",
+            "是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用技术名词、KOL 清理词与清洗流程。",
             "Unicode `casefold()` literal substring check",
             "does not translate, segment, normalize Unicode, expand abbreviations",
             "`.keyword-filter.summary.json`",

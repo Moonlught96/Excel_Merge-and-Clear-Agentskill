@@ -137,6 +137,8 @@ DEFAULT_DELETE_CONTAINS_TEXTS = (
     "红包",
     "特价",
     "国补",
+    "搭载",
+    "爽翻",
     "リンク",
     "プロフィール見て",
     "プロフ見て",
@@ -348,6 +350,7 @@ class CleanerConfig:
     min_trimmed_length: int = 8
     non_chinese_max_short_words: int = 2
     non_chinese_max_short_unspaced_chars: int = 4
+    technical_term_min_distinct_matches: int = 4
     delete_exact_texts: tuple[str, ...] = ("该用户未填写评价内容", "此用户未填写评价内容")
     delete_contains_texts: tuple[str, ...] = DEFAULT_DELETE_CONTAINS_TEXTS
     delete_contains_case_insensitive_texts: tuple[str, ...] = DEFAULT_DELETE_CONTAINS_CASE_INSENSITIVE_TEXTS
@@ -425,6 +428,13 @@ def load_config(path: Path, platform: str | None = None) -> CleanerConfig:
         )
     )
     normalized_platform = (platform or "").strip().casefold()
+    technical_term_min_distinct_matches = int(
+        data.get("technical_term_min_distinct_matches", 4)
+    )
+    if technical_term_min_distinct_matches < 1:
+        raise CleanerConfigError(
+            "technical_term_min_distinct_matches must be a positive integer"
+        )
     config = CleanerConfig(
         target_header=STANDARDIZED_COMMENT_HEADER,
         platform=normalized_platform,
@@ -435,6 +445,7 @@ def load_config(path: Path, platform: str | None = None) -> CleanerConfig:
         min_trimmed_length=int(data.get("min_trimmed_length", 8)),
         non_chinese_max_short_words=int(data.get("non_chinese_max_short_words", 2)),
         non_chinese_max_short_unspaced_chars=int(data.get("non_chinese_max_short_unspaced_chars", 4)),
+        technical_term_min_distinct_matches=technical_term_min_distinct_matches,
         delete_exact_texts=delete_exact_texts,
         delete_contains_texts=delete_contains_texts,
         delete_contains_case_insensitive_texts=delete_contains_case_insensitive_texts,
@@ -661,11 +672,51 @@ def contains_configured_fixed_term(
     return term.casefold() in comment.casefold()
 
 
+def normalize_confirmed_technical_terms(technical_terms: tuple[str, ...]) -> tuple[str, ...]:
+    """Normalize per-run confirmed terms without changing their literal matching semantics."""
+    normalized_terms: list[str] = []
+    seen_keys: set[tuple[str, str]] = set()
+    for raw_term in technical_terms:
+        term = normalize_cell(raw_term)
+        if not term:
+            continue
+        script_group = fixed_term_script_group(term)
+        match_key = term.casefold() if script_group == "latin" else term
+        deduplication_key = (script_group, match_key)
+        if deduplication_key in seen_keys:
+            continue
+        seen_keys.add(deduplication_key)
+        normalized_terms.append(term)
+    return tuple(normalized_terms)
+
+
+def contains_confirmed_technical_term(comment: str, term: str) -> bool:
+    """Match user-confirmed technical terms deterministically without expansion or translation."""
+    if fixed_term_script_group(term) != "latin":
+        return term in comment
+
+    prefix = r"(?<!\w)" if term[0].isalnum() else ""
+    suffix = r"(?!\w)" if term[-1].isalnum() else ""
+    return re.search(f"{prefix}{re.escape(term)}{suffix}", comment, re.IGNORECASE) is not None
+
+
+def count_matched_distinct_technical_terms(
+    comment: str,
+    technical_terms: tuple[str, ...],
+) -> int:
+    return sum(
+        1
+        for term in normalize_confirmed_technical_terms(technical_terms)
+        if contains_confirmed_technical_term(comment, term)
+    )
+
+
 def should_delete_comment(
     comment: str,
     seen_comments: set[str],
     config: CleanerConfig,
     clean_words: tuple[str, ...],
+    technical_terms: tuple[str, ...] = (),
 ) -> str | None:
     length_reason = should_delete_for_length(comment, config)
     if length_reason:
@@ -699,6 +750,16 @@ def should_delete_comment(
     if config.delete_random_alnum_without_chinese and is_random_alnum_without_chinese(comment, config):
         return "评论为无中文随机英文/数字堆砌"
 
+    matched_technical_term_count = count_matched_distinct_technical_terms(
+        comment,
+        technical_terms,
+    )
+    if matched_technical_term_count >= config.technical_term_min_distinct_matches:
+        return (
+            "评论命中技术名词数达到阈值: "
+            f"{matched_technical_term_count}（阈值: {config.technical_term_min_distinct_matches}）"
+        )
+
     if comment in seen_comments:
         return "同一工作表内重复评论"
 
@@ -717,6 +778,7 @@ def collect_main_comment_deletions(
     sheet: Worksheet,
     config: CleanerConfig,
     clean_words: tuple[str, ...],
+    technical_terms: tuple[str, ...] = (),
 ) -> list[DeletedRow]:
     if config.main_comment_duplicate_keep != "max_likes_last_tiebreak":
         raise ValueError("main_comment_duplicate_keep 只能是 max_likes_last_tiebreak")
@@ -728,7 +790,13 @@ def collect_main_comment_deletions(
 
     for row_number in range(config.first_data_row, sheet.max_row + 1):
         comment = normalize_cell(sheet.cell(row=row_number, column=target_column).value)
-        reason = should_delete_comment(comment, set(), config, clean_words)
+        reason = should_delete_comment(
+            comment,
+            set(),
+            config,
+            clean_words,
+            technical_terms,
+        )
         if reason:
             pending_deletions.append(
                 DeletedRow(
@@ -840,9 +908,19 @@ def strip_https_urls_from_twitter_comment_content(
     return stripped_url_count
 
 
-def clean_sheet(sheet: Worksheet, config: CleanerConfig, clean_words: tuple[str, ...]) -> tuple[list[DeletedRow], list[ClearedCell]]:
+def clean_sheet(
+    sheet: Worksheet,
+    config: CleanerConfig,
+    clean_words: tuple[str, ...],
+    technical_terms: tuple[str, ...] = (),
+) -> tuple[list[DeletedRow], list[ClearedCell]]:
     deleted: list[DeletedRow] = []
-    pending_deletions = collect_main_comment_deletions(sheet, config, clean_words)
+    pending_deletions = collect_main_comment_deletions(
+        sheet,
+        config,
+        clean_words,
+        technical_terms,
+    )
 
     for deleted_row in sorted(pending_deletions, key=lambda row: row.row_number, reverse=True):
         sheet.delete_rows(deleted_row.row_number, 1)
@@ -916,6 +994,7 @@ def clean_workbook(
     output_dir: Path | None = None,
     output_path: Path | None = None,
     *,
+    technical_terms: tuple[str, ...] = (),
     overwrite: bool = True,
     overwrite_confirmations: tuple[Path, ...] | list[Path] | None = None,
 ) -> CleanResult:
@@ -961,7 +1040,12 @@ def clean_workbook(
     try:
         for sheet in workbook.worksheets:
             https_urls_stripped += strip_https_urls_from_twitter_comment_content(sheet, config)
-            sheet_deleted_rows, sheet_cleared_cells = clean_sheet(sheet, config, clean_words)
+            sheet_deleted_rows, sheet_cleared_cells = clean_sheet(
+                sheet,
+                config,
+                clean_words,
+                technical_terms,
+            )
             deleted_rows.extend(sheet_deleted_rows)
             cleared_cells.extend(sheet_cleared_cells)
     except BaseException:
@@ -987,7 +1071,9 @@ def clean_workbook(
         "min_trimmed_length": config.min_trimmed_length,
         "non_chinese_max_short_words": config.non_chinese_max_short_words,
         "non_chinese_max_short_unspaced_chars": config.non_chinese_max_short_unspaced_chars,
+        "technical_term_min_distinct_matches": config.technical_term_min_distinct_matches,
         "clean_words": list(clean_words),
+        "technical_terms": list(normalize_confirmed_technical_terms(technical_terms)),
         "delete_contains_texts": list(config.delete_contains_texts),
         "delete_contains_case_insensitive_texts": list(config.delete_contains_case_insensitive_texts),
         "delete_random_alnum_without_chinese": config.delete_random_alnum_without_chinese,
@@ -1059,6 +1145,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="额外清理词，可重复传入。例如 --clean-word KOL清理词1 --clean-word KOL清理词2",
     )
     parser.add_argument(
+        "--technical-term",
+        action="append",
+        default=[],
+        help=(
+            "本轮已确认的技术名词，可重复传入。评论命中 4 个及以上不同技术名词时整行删除；"
+            "同一术语重复只计一次。"
+        ),
+    )
+    parser.add_argument(
         "--target-header",
         required=True,
         help="必须显式指定标准化后的评论列表头：评论内容",
@@ -1104,12 +1199,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     config = replace(config, target_header=args.target_header)
     clean_words = tuple(word.strip() for word in args.clean_word if word and word.strip())
+    technical_terms = tuple(
+        term.strip() for term in args.technical_term if term and term.strip()
+    )
     result = clean_workbook(
         args.input_path.resolve(),
         config,
         clean_words,
         args.output_dir,
         args.output,
+        technical_terms=technical_terms,
         overwrite=args.overwrite,
         overwrite_confirmations=tuple(args.confirm_overwrite),
     )

@@ -8,6 +8,7 @@
 - [X Data-Type Gate](#x-data-type-gate)
 - [Single-File Workflow](#single-file-workflow)
 - [Multi-File Workflow](#multi-file-workflow)
+- [Technical-Term Gate](#technical-term-gate)
 - [KOL Clean-Word Gate](#kol-clean-word-gate)
 - [X Tweet Keep-Keyword Gate](#x-tweet-keep-keyword-gate)
 - [B站 Reply Prefix Step](#b站-reply-prefix-step)
@@ -31,9 +32,10 @@ The fixed workflow is:
 9. Audit the standardized workbook automatically before it may reach the user-approval or cleaning gate.
 10. Return the standardized workbook only after the audit passes, then wait for approval.
 11. For the registered `twitter` X 推文 profile only, collect and confirm X 推文 keep keywords, then run its deterministic row-retention filter.
-12. Ask for optional KOL clean words and, when words exist, confirm the list is complete.
-13. Clean with deterministic tools.
-14. Verify final `.xlsx` and `.csv`, clean up current-run intermediates, and return retained outputs.
+12. Ask for optional technical terms and, when terms exist, confirm the list is complete.
+13. Ask for optional KOL clean words and, when words exist, confirm the list is complete.
+14. Clean with deterministic tools.
+15. Verify final `.xlsx` and `.csv`, clean up current-run intermediates, and return retained outputs.
 
 Do not collapse or reorder the confirmation gates.
 
@@ -78,8 +80,8 @@ Ask exactly:
 - `推文` selects the registered `twitter` profile. Only this branch runs the X 推文 keep-keyword gate after standardization approval.
 - `评论` selects the registered `twitter-comments` profile. It has the same complete ordered exporter signature as `twitter`, so omitting the selected profile is an ambiguity error rather than permission to choose either route.
 - X 评论使用独立的 `twitter-comments` 分流。它固定复制 `created_at`、`full_text`、`favorite_count`、`reply_count`、`user_id`、`screen_name` 到与推文相同的临时列；不得套用 `twitter` 推文分流或保留关键词筛选。
-- `twitter-comments` 与 `twitter` 共用 `twitter` 哈希命名空间，并共用已确认的 `Twitter用户ID`、`Twitter昵称` 身份优先级；X 评论不执行 X 推文保留关键词筛选，标准化审批后直接进入 KOL 清理词闸门。
-- Both answers are independent from the merge-completion, standardization-approval, KOL-word, and output-overwrite confirmation gates.
+- `twitter-comments` 与 `twitter` 共用 `twitter` 哈希命名空间，并共用已确认的 `Twitter用户ID`、`Twitter昵称` 身份优先级；X 评论不执行 X 推文保留关键词筛选，标准化审批后直接进入技术名词闸门。
+- Both answers are independent from the merge-completion, standardization-approval, technical-term, KOL-word, and output-overwrite confirmation gates.
 
 ## Single-File Workflow
 
@@ -92,7 +94,7 @@ After showing product name, data source, and the planned `标准化总表` and `
 - Do not skip merge until the user confirms this is the only intended input.
 - After confirmation, apply the fixed B站 prefix step when applicable, then apply an exact registered platform-preprocessing profile when applicable, each into a separate workbook.
 - Standardize the resulting workflow source into a separate workbook, then run the standardized-output audit against that exact source.
-- Return the standardized workbook only after the audit passes, and wait for approval before asking for X 推文 keep keywords when applicable, then KOL clean words or cleaning.
+- Return the standardized workbook only after the audit passes, and wait for approval before asking for X 推文 keep keywords when applicable, then technical terms, KOL clean words, and cleaning.
 
 ## Multi-File Workflow
 
@@ -121,20 +123,39 @@ This is the default for same-platform batches with the same original format.
 10. If the data source is B站, run the fixed reply-prefix step on the merged workbook and create a separate output.
 11. If an exact registered platform profile applies and the merge checkpoint was raw, run it against the raw merged or B站 prefix-stripped workbook and write a separate temporary workbook. If the merge checkpoint is already platform-preprocessed, pass it directly to standardization; otherwise retain the existing fixed platform standardization flow.
 12. Standardize into a new workbook; never overwrite the raw merged workbook or platform-preprocessed merged workbook.
-13. Run the standardized-output audit with the exact workbook used as the standardization source. If it fails, stop before asking for KOL words or standardization approval.
+13. Run the standardized-output audit with the exact workbook used as the standardization source. If it fails, stop before asking for technical terms, KOL words, or standardization approval.
 14. Return the standardized workbook only after the audit passes and ask exactly:
 
     ```text
-    标准化后的表格已生成，请确认是否可以进入清洗流程？你确认后我再询问 KOL 清理词并清洗。
+    标准化后的表格已生成，请确认是否可以进入清洗流程？你确认后我将先询问技术名词，再询问 KOL 清理词并清洗。
     ```
 
-15. Do not clean until the user explicitly approves the standardized workbook. For the registered `twitter` X 推文 profile, run the X 推文 keep-keyword gate defined below before the KOL clean-word gate.
+15. Do not clean until the user explicitly approves the standardized workbook. For the registered `twitter` X 推文 profile, run the X 推文 keep-keyword gate defined below before the technical-term gate, which is always before the KOL clean-word gate.
 
 Do not standardize individual files before merging a same-platform batch.
 
-## KOL Clean-Word Gate
+## Technical-Term Gate
 
 After standardized-workbook approval and, for the registered `twitter` X 推文 profile, after its keep-keyword filter completes, ask exactly:
+
+```text
+是否有技术名词需要清洗？没有就回复“没有”；有的话请一次性提供所有技术名词。
+```
+
+- If the user says there are no technical terms, pass no `--technical-term` arguments and continue to the KOL clean-word gate.
+- If one or more terms are provided, do not clean yet. Ask exactly:
+
+  ```text
+  是否已经提供完成所有技术名词？你确认后我再询问 KOL 清理词。
+  ```
+
+- Only after confirmation, pass each confirmed term as a separate `--technical-term` argument. The common cleaner deletes a main-comment row only when it matches 4 个及以上不同技术名词.
+- Repeated occurrences of the same term count once. Latin terms use deterministic case-insensitive complete-term matching; Chinese, Japanese, Korean, Thai, Hindi, and mixed-script terms use exact literal containment. Do not translate, expand, fuzzy-match, normalize by meaning, or use AI.
+- Never add an unconfirmed technical term or persist a per-run list into the canonical fixed delete-word configuration.
+
+## KOL Clean-Word Gate
+
+After the technical-term gate completes and, for the registered `twitter` X 推文 profile, after its keep-keyword filter completes, ask exactly:
 
 ```text
 是否有 KOL 清理词？没有就回复“没有”；有的话请一次性发来所有清理词。
@@ -152,7 +173,7 @@ After standardized-workbook approval and, for the registered `twitter` X 推文 
 
 ## X Tweet Keep-Keyword Gate
 
-This gate applies only when the user selected `推文` in the X data-type gate and the confirmed platform-preprocessing profile is `twitter`. It runs after standardization audit and user approval, and before the universal KOL clean-word gate. It does not apply to X 评论.
+This gate applies only when the user selected `推文` in the X data-type gate and the confirmed platform-preprocessing profile is `twitter`. It runs after standardization audit and user approval, and before the universal technical-term and KOL clean-word gates. It does not apply to X 评论.
 
 Ask exactly:
 
@@ -164,10 +185,10 @@ Ask exactly:
 - When the user supplies one or more keywords, do not filter yet. Ask exactly:
 
   ```text
-  是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。
+  是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用技术名词、KOL 清理词与清洗流程。
   ```
 
-- After confirmation, run `scripts/filter_comments_by_keywords.py` with one `--keep-keyword` argument per confirmed keyword. Its output is the input to the common KOL clean-word and cleaning stages.
+- After confirmation, run `scripts/filter_comments_by_keywords.py` with one `--keep-keyword` argument per confirmed keyword. Its output is the input to the common technical-term, KOL clean-word, and cleaning stages.
 - The filter is deterministic and literal: it deletes every row whose `评论内容` does not contain at least one confirmed keyword. It does not translate, expand, fuzzy-match, or interpret a keyword.
 - Treat the filtered workbook and its keyword-filter summary as current-run intermediates. After final verification, delete them through explicit-path cleanup while protecting original inputs and final outputs.
 
@@ -208,7 +229,7 @@ The audit is deterministic and must pass all of these checks before the standard
 
 Standardization captures one Beijing calendar date for the entire workbook and records it in the standardization summary. The audit reuses that exact `reference_date` when verifying relative source times, so a run crossing Beijing midnight cannot create a false mapping mismatch.
 
-The audit report records only structural metadata, counts, header names, and issue codes; it must not record a raw identity value or comment text. It does not judge semantic quality, sentiment, language, product relevance, or whether a row should be deleted. If any check fails, stop the workflow before user confirmation, KOL-word collection, or cleaning.
+The audit report records only structural metadata, counts, header names, and issue codes; it must not record a raw identity value or comment text. It does not judge semantic quality, sentiment, language, product relevance, or whether a row should be deleted. If any check fails, stop the workflow before user confirmation, technical-term collection, KOL-word collection, or cleaning.
 
 ## Execution Safeguards
 

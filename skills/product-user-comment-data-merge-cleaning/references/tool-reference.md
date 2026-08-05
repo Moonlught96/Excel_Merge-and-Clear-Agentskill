@@ -23,7 +23,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - `scripts/hash_id_project_store.py`: create/load protected project keys; Windows uses current-user DPAPI.
 - `scripts/standardize_excel_headers.py`: map fixed aliases, use a confirmed literal `--product-name` fallback only when a source product value is absent or blank, derive `哈希ID`, reorder complete columns, convert configured dates, apply fixed cross-platform rating/likes numeric normalization, and omit non-standard columns.
 - `scripts/audit_standardized_comments.py`: verify the fixed standardized schema, source/output row and fixed-mapping consistency, hash-ID format, and nonblank standardized `点赞数` values before cleaning; it never rewrites the workbook.
-- `scripts/clean_excel_comments.py`: apply deterministic main-comment, KOL, fixed-word, random-heap, duplicate, and subcomment rules using only the bundled canonical cleaner configuration.
+- `scripts/clean_excel_comments.py`: apply deterministic main-comment, confirmed technical-term, KOL, fixed-word, random-heap, duplicate, and subcomment rules using only the bundled canonical cleaner configuration.
 - `scripts/cleanup_intermediate_outputs.py`: delete only explicitly supplied current-run intermediates while protecting inputs and final outputs.
 - `scripts/compare_cleaned_workbooks.py`: optional audit-only workbook comparison; it is not part of the default workflow.
 - `scripts/csv_excel_compat.py`: text-preserving CSV compatibility shared by the other scripts.
@@ -137,6 +137,14 @@ Clean with confirmed KOL words:
 ```powershell
 python scripts\clean_excel_comments.py "<standardized.xlsx>" --target-header "评论内容" --platform "<confirmed-platform>" --clean-word "<word1>" --clean-word "<word2>" --output "<confirmed-cleaned.xlsx>"
 ```
+
+Clean with confirmed technical terms and KOL words:
+
+```powershell
+python scripts\clean_excel_comments.py "<standardized.xlsx>" --target-header "评论内容" --platform "<confirmed-platform>" --technical-term "<term1>" --technical-term "<term2>" --technical-term "<term3>" --technical-term "<term4>" --clean-word "<word1>" --output "<confirmed-cleaned.xlsx>"
+```
+
+Pass `--technical-term` only after the user confirms the complete per-run list. The canonical threshold is 4 distinct literal term matches in `评论内容`; repeated matching of one term counts once. No `--technical-term` option is passed when the user confirms there are no technical terms. These arguments do not create or alter a cleaner configuration file.
 
 Clean up explicit intermediates:
 

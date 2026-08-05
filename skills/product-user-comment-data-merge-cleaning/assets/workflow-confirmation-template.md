@@ -16,7 +16,7 @@ Use this before output naming, merge planning, or preprocessing whenever the use
 请回复“推文”或“评论”。
 ```
 
-Only `推文` selects the registered `twitter` profile. `评论` selects the separate registered `twitter-comments` profile. Both profiles deliberately require the same complete ordered exporter signature, so the selected type must be passed explicitly; do not infer it from a filename, header, or value. The confirmed `twitter-comments` mapping uses `user_id` -> temporary `Twitter用户ID` and `screen_name` -> temporary `Twitter昵称`, then reuses the `twitter` hash namespace. X 评论 never runs the X 推文 keep-keyword filter and proceeds from standardization approval to the KOL clean-word gate.
+Only `推文` selects the registered `twitter` profile. `评论` selects the separate registered `twitter-comments` profile. Both profiles deliberately require the same complete ordered exporter signature, so the selected type must be passed explicitly; do not infer it from a filename, header, or value. The confirmed `twitter-comments` mapping uses `user_id` -> temporary `Twitter用户ID` and `screen_name` -> temporary `Twitter昵称`, then reuses the `twitter` hash namespace. X 评论 never runs the X 推文 keep-keyword filter and proceeds from standardization approval to the technical-term gate.
 
 ## Naming And Merge Entry
 
@@ -69,8 +69,22 @@ After the user confirms, the standardizer command must use `--initialize-project
 ## Standardization Approval
 
 ```text
-标准化后的表格已生成，请确认是否可以进入清洗流程？你确认后我再询问 KOL 清理词并清洗。
+标准化后的表格已生成，请确认是否可以进入清洗流程？你确认后我将先询问技术名词，再询问 KOL 清理词并清洗。
 ```
+
+## Technical Terms
+
+Use this after standardized-workbook approval and, for X 推文 only, after its completed keep-keyword filter. Do not skip it because the user asks to process quickly.
+
+```text
+是否有技术名词需要清洗？没有就回复“没有”；有的话请一次性提供所有技术名词。
+```
+
+```text
+是否已经提供完成所有技术名词？你确认后我再询问 KOL 清理词。
+```
+
+Only after the user confirms the list is complete may the workflow pass one `--technical-term` per term. A row is deleted only when `评论内容` deterministically matches 4 or more different confirmed terms; the same term repeated in a comment still counts once. Do not translate, expand, fuzzy-match, or use AI.
 
 ## KOL Clean Words
 
@@ -84,14 +98,14 @@ After the user confirms, the standardizer command must use `--initialize-project
 
 ## X Tweet Keep Keywords
 
-Only when the user selected `推文` and the confirmed preprocessing profile is `twitter`, after standardized-workbook approval and before the KOL clean-word gate. This does not apply to X 评论:
+Only when the user selected `推文` and the confirmed preprocessing profile is `twitter`, after standardized-workbook approval and before the technical-term and KOL clean-word gates. This does not apply to X 评论:
 
 ```text
 请提供本轮 X 推文保留关键词。仅保留“评论内容”包含任一关键词的整行数据；请一次性提供所有关键词。
 ```
 
 ```text
-是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。
+是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用技术名词、KOL 清理词与清洗流程。
 ```
 
 ## Existing Output Replacement

@@ -158,8 +158,10 @@ class SkillPackageTest(unittest.TestCase):
         required_rules = (
             "请确认以上产品名、数据来源、平台预处理分流和文件命名是否正确，并确认是否可以进入合并流程。",
             "是否已经提供并合并完所有需要合并的表格？你确认后我再进行标准化。",
+            "是否有技术名词需要清洗？没有就回复“没有”；有的话请一次性提供所有技术名词。",
+            "是否已经提供完成所有技术名词？你确认后我再询问 KOL 清理词。",
             "是否已经提供完成所有 KOL 清理词？你确认后我再进行清洗。",
-            "是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用 KOL 清理词与清洗流程。",
+            "是否已经提供完成所有 X 推文保留关键词？你确认后我将执行关键词筛选，再进入通用技术名词、KOL 清理词与清洗流程。",
             "`评论日期`、`评论内容`、`产品名`、`电商平台评分`、`用户属性`、`哈希ID`、`点赞数`、`子评论数/追评数`、`一级评论`、`二级评论`、`三级评论`",
             "the tool does not validate, infer, round, or rewrite a rating.",
             "`评论日期与产品`",
@@ -167,6 +169,8 @@ class SkillPackageTest(unittest.TestCase):
             "Relative year values output only `YYYY`; relative month values output only `YYYY-MM`.",
             "Chinese comments whose trimmed length is less than or equal to 7 characters are deleted.",
             "Non-Chinese comments with two or fewer words are deleted.",
+            "4 个及以上不同技术名词",
+            "--technical-term",
             "Pure numeric comments keep the legacy seven-character threshold",
             "`一级评论`, `二级评论`, and `三级评论` cells whose trimmed length is less than or equal to 5 characters",
             "Fixed delete words are appended to the original `链接` rule",
@@ -329,11 +333,17 @@ class SkillPackageTest(unittest.TestCase):
             "PYTHONSTARTUP",
             "PYTHONUSERBASE",
             "PYTHONINSPECT",
+            "PYTHONUTF8",
+            "PYTHONIOENCODING",
             "PYTHONSAFEPATH",
             "PYTHONPLATLIBDIR",
         ):
             subprocess_env.pop(name, None)
         subprocess_env["PYTHONNOUSERSITE"] = "1"
+        # The parent test process runs in UTF-8 mode. Keep isolated child-script
+        # output in the same encoding so captured Chinese help/status text is readable.
+        subprocess_env["PYTHONUTF8"] = "1"
+        subprocess_env["PYTHONIOENCODING"] = "utf-8"
 
         probe_code = (
             "from pathlib import Path\n"
