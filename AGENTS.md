@@ -1,5 +1,9 @@
 ## Agent Skill Packaging Standard
 
+### 已确认的独立 AI 后置扩展（2026-09-14）
+
+用户已确认“传统规则保持不变，AI 扩展接在传统清洗结果之后”，并授权先修复后推送。本文的传统流程、固定规则及禁止 AI 改写的要求保持不变；只有用户明确要求 AI 语义审查/清洗时，才可对已确认的传统最终 XLSX 使用 `skills/product-user-comment-data-merge-cleaning/references/ai-semantic-review.md` 定义的独立后置扩展。该扩展只生成新的衍生结果，不改变传统输出、身份映射、技术词/KOL 删除、确认门槛或默认留存；不得恢复传统已删除的行或日志。AI 标注和独立全文复核负责语义证据，确定性脚本负责校验、计算和输出；未通过全量验证不得导出或宣称完成。
+
 本项目以后创建或修改任何 Agent Skill，必须遵守以下标准；不得只创建一份孤立的 `SKILL.md`：
 
 1. **创建完整的 Skill 文件夹结构。** 每个 Skill 至少包含 `SKILL.md`、`agents/openai.yaml`、`references/`、`scripts/` 和 `assets/`；需要执行配置时同时包含 `config/`。

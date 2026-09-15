@@ -2,6 +2,7 @@
 
 ## Contents
 
+- [Approved Optional AI Post-Cleaning Extension](#approved-optional-ai-post-cleaning-extension)
 - [Locked Base Rules](#locked-base-rules)
 - [Adding A Header Alias](#adding-a-header-alias)
 - [Adding A Platform Preprocessing Profile](#adding-a-platform-preprocessing-profile)
@@ -14,6 +15,10 @@
 - [Validation For Every Extension](#validation-for-every-extension)
 - [Adding An Identity Header](#adding-an-identity-header)
 - [Adding A Platform-Specific Post-Standardization Filter](#adding-a-platform-specific-post-standardization-filter)
+
+## Approved Optional AI Post-Cleaning Extension
+
+The user approved an independent post-traditional AI extension on 2026-09-14. The locked rules below still govern every traditional run. Only an explicitly requested AI review/cleaning operation on the confirmed traditional final workbook may use [ai-semantic-review.md](ai-semantic-review.md), its separate scripts/config and assets. Do not alter traditional technical/KOL deletion, values, identities, outputs, gates or retention. AI labels are applied only to new derived outputs; no removed traditional logs or rows are restored. See [ai-semantic-extension-change-record.md](ai-semantic-extension-change-record.md) for the approved scope and tests.
 
 ## Locked Base Rules
 

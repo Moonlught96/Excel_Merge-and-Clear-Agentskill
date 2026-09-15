@@ -1,6 +1,6 @@
 ---
 name: product-user-comment-data-merge-cleaning
-description: Use when one or more Excel or CSV files containing collected user comments need deterministic processing, pseudonymized standardization, cleaning, or reusable workflow extensions.
+description: Use when one or more Excel or CSV files containing collected user comments need deterministic processing, pseudonymized standardization, cleaning, reusable workflow extensions, or explicitly requested post-cleaning AI semantic review.
 ---
 
 # 产品用户评论数据合并与清洗 Skill
@@ -10,6 +10,8 @@ description: Use when one or more Excel or CSV files containing collected user c
 **输入描述：** 支持任意数量的 `.xlsx`、`.xlsm` 与 `.csv` 用户评论文件；不支持旧版 `.xls`。
 
 ## Skill Responsibilities
+
+The responsibilities, prohibitions and numbered workflow below govern the unchanged traditional mode. For explicitly requested AI review **after** traditional cleaning, use only the separate route in [references/ai-semantic-review.md](references/ai-semantic-review.md). It never changes traditional rules or files; ordinary cleaning does not enable AI judgment.
 
 - Merge only the Excel/CSV files explicitly supplied by the user into a new workbook.
 - Route registered platform exports through exact configured preprocessing profiles, then standardize into the fixed output schema and derive project-scoped hash IDs from a worksheet-wide registered account ID or approved display-name fallback.

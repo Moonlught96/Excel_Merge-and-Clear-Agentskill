@@ -9,6 +9,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SKILL_ROOT = PROJECT_ROOT / "skills" / "product-user-comment-data-merge-cleaning"
 
 SCRIPT_FILES = (
+    "semantic_review.py",
+    "semantic_review_contract.py",
+    "semantic_review_io.py",
     "audit_standardized_comments.py",
     "cleanup_intermediate_outputs.py",
     "clean_excel_comments.py",
@@ -27,6 +30,7 @@ SCRIPT_FILES = (
 )
 
 CONFIG_FILES = (
+    "semantic-review.json",
     "comment-cleaner.json",
     "hash-id.json",
     "header-standardizer.json",
