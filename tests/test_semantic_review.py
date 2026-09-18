@@ -11,6 +11,8 @@ import sys
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from types import SimpleNamespace
+from unittest import mock
 
 from openpyxl import Workbook, load_workbook
 
@@ -95,6 +97,19 @@ class SemanticReviewTests(unittest.TestCase):
         wb.close()
         with self.assertRaises(ValueError):
             self.contract.check_manifest(self.src, m)
+
+    def test_manifest_rejects_equivalent_but_wrong_json_value_type(self):
+        self.workbook(1)
+        workbook = load_workbook(self.src)
+        workbook.active['D2'] = 1
+        workbook.save(self.src)
+        workbook.close()
+        manifest = self.contract.build_manifest(self.src, 'synthetic', 'bilibili', [], [])
+        tampered = copy.deepcopy(manifest)
+        tampered['rows'][0]['values'][3] = True
+
+        with self.assertRaisesRegex(ValueError, 'Source, policy, prompt or manifest changed'):
+            self.contract.check_manifest(self.src, tampered)
 
     def test_small_batches_support_complete_long_text(self):
         self.workbook(5)
@@ -235,6 +250,9 @@ class SemanticReviewTests(unittest.TestCase):
             with self.subTest(col=col), self.assertRaises(ValueError):
                 self.io.verify_outputs(m, decisions, groups, outputs)
 
+    def test_strict_workbook_comparison_does_not_equate_bool_and_int(self):
+        self.assertFalse(self.io.strictly_equal([1], [True]))
+
     def test_output_overlap_and_partial_overwrite_preflight(self):
         m = self.manifest()
         decisions, groups = self.contract.validate_annotations(m, self.documents(m), require_reviews=True)
@@ -257,6 +275,64 @@ class SemanticReviewTests(unittest.TestCase):
         outputs[2] = self.src.with_suffix('.csv')
         with self.assertRaises(ValueError):
             self.io.export_outputs(m, d, g, outputs, [self.src], True, [outputs[2]])
+
+    def test_rejects_finalized_sidecar_suffixes_case_insensitively(self):
+        cli = importlib.import_module('tools.semantic_review')
+        self.workbook(1)
+        manifest_path = self.dir / 'traditional.SUMMARY.JSON'
+        args = cli.parser().parse_args([
+            'prepare', '--input', str(self.src), '--output', str(manifest_path),
+            '--project', 'synthetic', '--platform', 'bilibili',
+            '--confirm-traditional-output',
+        ])
+        with self.assertRaises(ValueError):
+            cli.run(args)
+        self.assertFalse(manifest_path.exists())
+
+        manifest = self.manifest()
+        decisions, groups = self.contract.validate_annotations(
+            manifest,
+            self.documents(manifest),
+            require_reviews=True,
+        )
+        outputs = [
+            self.dir / 'review.xlsx',
+            self.dir / 'AI.xlsx',
+            self.dir / 'traditional.DELETIONS.CSV',
+        ]
+        with self.assertRaises(ValueError):
+            self.io.export_outputs(manifest, decisions, groups, outputs, [self.src])
+        self.assertFalse(outputs[2].exists())
+
+    def test_cli_orders_annotation_documents_by_manifest_batch_order(self):
+        cli = importlib.import_module('tools.semantic_review')
+        manifest = {
+            'batches': [
+                {'id': 'b0001'},
+                {'id': 'b1001'},
+                {'id': 'b10000'},
+            ],
+        }
+        documents = [
+            {'batch_id': 'b10000'},
+            {'batch_id': 'b0001'},
+            {'batch_id': 'b1001'},
+        ]
+        args = SimpleNamespace(
+            command='validate',
+            input=self.src,
+            manifest=self.dir / 'manifest.json',
+            annotation=[self.dir / 'one.json', self.dir / 'two.json', self.dir / 'three.json'],
+            reviews=None,
+        )
+
+        with mock.patch.object(cli, 'load_json', side_effect=[manifest, *documents]), \
+             mock.patch.object(cli, 'check_manifest'), \
+             mock.patch.object(cli, 'validate_annotations', return_value=({}, [])) as validate:
+            cli.run(args)
+
+        received = validate.call_args.args[1]
+        self.assertEqual(['b0001', 'b1001', 'b10000'], [doc['batch_id'] for doc in received])
 
     def test_cli_and_copied_skill(self):
         self.workbook(1)

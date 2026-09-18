@@ -11,7 +11,7 @@ description: Use when one or more Excel or CSV files containing collected user c
 
 ## Skill Responsibilities
 
-The responsibilities, prohibitions and numbered workflow below govern the unchanged traditional mode. For explicitly requested AI review **after** traditional cleaning, use only the separate route in [references/ai-semantic-review.md](references/ai-semantic-review.md). It never changes traditional rules or files; ordinary cleaning does not enable AI judgment.
+The responsibilities, prohibitions and numbered workflow below govern the unchanged traditional mode. For explicitly requested AI review **after** traditional cleaning, use only the separate route in [references/ai-semantic-review.md](references/ai-semantic-review.md). It uses `scripts/semantic_review.py` with `config/semantic-review.json`, never changes traditional rules or files, and is not enabled by ordinary cleaning.
 
 - Merge only the Excel/CSV files explicitly supplied by the user into a new workbook.
 - Route registered platform exports through exact configured preprocessing profiles, then standardize into the fixed output schema and derive project-scoped hash IDs from a worksheet-wide registered account ID or approved display-name fallback.
@@ -50,8 +50,10 @@ Read only the references needed for the current phase, but read `workflow.md` an
 - Script purposes, command shapes, and validation: [references/tool-reference.md](references/tool-reference.md)
 - Rules for safe future extensions: [references/extension-policy.md](references/extension-policy.md)
 - Confirmed failure modes and deterministic resolutions: [references/known-issues.md](references/known-issues.md)
+- Optional post-cleaning AI semantic review, only when explicitly requested: [references/ai-semantic-review.md](references/ai-semantic-review.md)
+- Verified AI-extension repair record: [references/ai-semantic-extension-change-record.md](references/ai-semantic-extension-change-record.md)
 
-The executable configuration is in `config/comment-cleaner.json`, `config/header-standardizer.json`, `config/hash-id.json`, and `config/platform-preprocessing.json`.
+The executable configuration is in `config/comment-cleaner.json`, `config/header-standardizer.json`, `config/hash-id.json`, and `config/platform-preprocessing.json`; the optional AI route additionally uses `config/semantic-review.json`.
 
 ## Execution Steps
 

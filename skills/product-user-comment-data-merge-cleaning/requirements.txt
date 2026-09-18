@@ -1,2 +1,4 @@
 # Requires Python >=3.10.
 openpyxl>=3.1,<4
+# Provides the IANA timezone database in clean portable runtimes.
+tzdata>=2024.1

@@ -114,7 +114,7 @@ The standardized workbook contains exactly these columns in this order:
 
 - Immediately after standardization, run `scripts/audit_standardized_comments.py` against the standardized workbook and the exact source workbook supplied to standardization.
 - The audit checks only deterministic, non-semantic invariants: fixed output header order, duplicate/unexpected identity headers, 64-character lowercase hexadecimal nonblank `哈希ID` values, nonblank `点赞数` values on every data row, worksheet name/order, source-to-output row counts, and each verifiable fixed source-to-output mapped value. It verifies the standardizer's blank-to-`0` default and never rewrites the workbook.
-- The audit must not read, expose, classify, translate, or judge comment text or raw identity values. Its JSON report contains only paths, sheet names, counts, headers, and issue codes.
+- For fixed mapping equality only, the audit may read cells in memory only for fixed mapping equality. It must not expose, classify, translate, semantically judge, or otherwise report comment text or raw identity values. Its JSON report contains only paths, sheet names, counts, headers, and issue codes.
 - A failed audit blocks the user-confirmation, technical-term, KOL, and cleaning phases. A passed audit does not remove the existing user confirmation of the standardized workbook.
 - The audit JSON is a current-run intermediate. Delete it with other intermediate outputs after successful cleaning unless the user explicitly asked to retain audit artifacts before cleaning.
 

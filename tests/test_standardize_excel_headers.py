@@ -576,6 +576,84 @@ class StandardizeExcelHeadersTest(unittest.TestCase):
             rows[1],
         )
 
+    def test_taobao_split_product_formula_like_text_remains_text(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-taobao-split-product-formula-text"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期与产品", "评论内容", "点赞数"])
+        sheet.append(["2026年9月16日 已购：=1+1", "完整评论内容", 1])
+        workbook.save(input_path)
+        workbook.close()
+
+        standardize_workbook(input_path, load_config(), output_path=output_path)
+
+        standardized = load_workbook(output_path, data_only=False)
+        try:
+            product_cell = standardized.active.cell(row=2, column=3)
+            self.assertEqual("=1+1", product_cell.value)
+            self.assertEqual("s", product_cell.data_type)
+        finally:
+            standardized.close()
+
+    def test_taobao_direct_product_column_precedes_combined_date_product_column(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-taobao-direct-product-precedence"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期与产品", "评论内容", "购买产品", "点赞数"])
+        sheet.append(["2026年9月16日 已购：组合产品", "完整评论内容 A", "直接产品", 1])
+        sheet.append(["2026年9月17日 已购：组合产品 B", "完整评论内容 B", "", 2])
+        workbook.save(input_path)
+        workbook.close()
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+            product_name="用户确认产品",
+        )
+
+        rows = self.read_standardized_rows(output_path)
+        self.assertEqual("2026年9月16日", rows[1][0])
+        self.assertEqual("直接产品", rows[1][2])
+        self.assertEqual("2026年9月17日", rows[2][0])
+        self.assertEqual("用户确认产品", rows[2][2])
+
+    def test_confirmed_formula_like_product_name_remains_text(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-confirmed-product-formula-text"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "raw.xlsx"
+        output_path = tmp / "standardized.xlsx"
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论日期", "评论内容", "点赞数"])
+        sheet.append(["2026-09-16", "完整评论内容", 1])
+        workbook.save(input_path)
+        workbook.close()
+
+        standardize_workbook(
+            input_path,
+            load_config(),
+            output_path=output_path,
+            product_name="=1+1",
+        )
+
+        standardized = load_workbook(output_path, data_only=False)
+        try:
+            product_cell = standardized.active.cell(row=2, column=3)
+            self.assertEqual("=1+1", product_cell.value)
+            self.assertEqual("s", product_cell.data_type)
+        finally:
+            standardized.close()
+
     def test_maps_direct_product_header_to_product_name(self) -> None:
         tmp = TEST_TEMP_ROOT / "case-direct-product-header"
         tmp.mkdir(parents=True, exist_ok=True)

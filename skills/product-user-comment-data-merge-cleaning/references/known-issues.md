@@ -165,7 +165,7 @@ Chinese configured fixed terms use literal substring containment. Short generic 
 
 Examples that must remain when no other rule matches include `无炫光设计让我很满意`, `第一次购买屏幕挂灯效果很好`, `价格略贵但整体品质不错`, `感应到人来了就会自动亮灯`, `测试使用两周后光线非常舒服`, and `路过时人体感应会自动亮灯`.
 
-Do not create a custom per-run cleaner JSON to override the canonical configuration. Platform-specific cleaner exceptions and `platform_profiles` are prohibited. The public preprocessing, standardization, hash-ID, audit, and cleaner CLIs reject every non-canonical `--config` path. A user-confirmed rule change must update the root configuration, the bundled Skill configuration, this reference, and deterministic positive/negative tests together.
+Do not create a custom per-run cleaner JSON to override the canonical configuration. New platform-specific cleaner exceptions and `platform_profiles` are prohibited. The existing canonical `twitter-comments` stage remains the only exception. The public preprocessing, standardization, hash-ID, audit, and cleaner CLIs reject every non-canonical `--config` path. A user-confirmed rule change must update the root configuration, the bundled Skill configuration, this reference, and deterministic positive/negative tests together.
 
 ## Finalized Cleaning Logs Must Not Be Restored
 

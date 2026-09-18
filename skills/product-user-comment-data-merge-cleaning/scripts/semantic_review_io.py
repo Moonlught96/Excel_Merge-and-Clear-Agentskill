@@ -182,6 +182,22 @@ def cell_signature(cell):
     return pack(cell.value), cell.data_type, cell.number_format
 
 
+def strictly_equal(expected, actual):
+    if type(expected) is not type(actual):
+        return False
+    if isinstance(expected, dict):
+        return expected.keys() == actual.keys() and all(
+            strictly_equal(expected[key], actual[key])
+            for key in expected
+        )
+    if isinstance(expected, (list, tuple)):
+        return len(expected) == len(actual) and all(
+            strictly_equal(left, right)
+            for left, right in zip(expected, actual)
+        )
+    return expected == actual
+
+
 def compare_workbook(path, expected):
     actual = load_workbook(path, read_only=True, data_only=False)
     try:
@@ -191,7 +207,10 @@ def compare_workbook(path, expected):
             if (ws.max_row, ws.max_column) != (es.max_row, es.max_column):
                 raise ValueError('Output dimensions mismatch')
             for row, exp in zip(ws.iter_rows(), es.iter_rows()):
-                if [cell_signature(c) for c in row] != [cell_signature(c) for c in exp]:
+                if not strictly_equal(
+                    [cell_signature(c) for c in row],
+                    [cell_signature(c) for c in exp],
+                ):
                     raise ValueError('Output cell value/type/format mismatch')
     finally:
         actual.close()
@@ -213,7 +232,10 @@ def verify_outputs(manifest, decisions, groups, outputs):
 def export_outputs(manifest, decisions, groups, outputs, inputs, overwrite=False, confirmations=()):
     if len(outputs) != 3 or [p.suffix.lower() for p in outputs] != ['.xlsx', '.xlsx', '.csv']:
         raise ValueError('Require review XLSX, final XLSX and final CSV')
-    if any(p.name.endswith(('.deletions.csv', '.summary.json')) for p in outputs):
+    if any(
+        p.name.casefold().endswith(('.deletions.csv', '.summary.json'))
+        for p in outputs
+    ):
         raise ValueError('AI extension must not restore finalized traditional audit files')
     protected = [*inputs, *(p.with_suffix('.csv') for p in inputs if p.suffix.lower() == '.xlsx')]
     ensure_output_paths_safe(protected, outputs, overwrite=overwrite, overwrite_confirmations=confirmations)

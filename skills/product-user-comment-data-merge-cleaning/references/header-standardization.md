@@ -144,7 +144,7 @@ This mode does not alter any original input, does not infer a missing field, and
 
 - `评论日期` and `评论内容` require one unambiguous source match.
 - `点赞数` is always retained. When its configured source column is absent, or a mapped cell is null/empty/whitespace-only, common standardization writes numeric `0`. Across all platforms, an already numeric value, digits-only text, exact `One person found this helpful`, exact `N person/people found this helpful`, or exact `N 个人发现此评论有用` is written as numeric `N`; unmatched nonblank values remain unchanged and are never guessed, translated, or abbreviated.
-- `产品名`, `电商平台评分`, `用户属性`, `子评论数/追评数`, `一级评论`, `二级评论`, and `三级评论` remain in the output when the source has no matching column; their values stay blank.
+- `产品名`, `电商平台评分`, `用户属性`, `子评论数/追评数`, `一级评论`, `二级评论`, and `三级评论` remain in the output when the source has no matching column; their values stay blank unless the current confirmed run provides the literal `--product-name` fallback for an absent or blank product value.
 - `用户属性` retains a nonblank direct `用户属性` value. If that value is blank or the direct source column is absent, the script trims and joins nonblank registered `性别` then `年龄` values with one ASCII space. It never infers, translates, classifies, or completes an attribute.
 - `电商平台评分` normally contains a source value from 1 through 5. Across all platforms, an already numeric value, exact `N out of 5 stars`, or exact `N 颗星，最多 5 颗星` is written as numeric `N` when the fixed textual score is in the 1-5 range; a whole number is written as an integer and a fractional rating remains numeric. Other nonblank values remain unchanged and are not validated, inferred, rounded, translated, or semantically interpreted. The Amazon profile's `amazon_star_rating` parser is a fixed, user-confirmed extraction step before this common normalizer. `用户属性` is a retained output field only and never a `哈希ID` identity source.
 - `子评论数/追评数` is required in the standard output schema even when the source header is absent.
@@ -158,7 +158,7 @@ For the source header `评论日期与产品`, use only this fixed parser:
 - A leading `YYYY年M月D日`, `YYYY/M/D`, or `YYYY-M-D` becomes `评论日期`.
 - Text after the optional fixed marker `已购：` becomes `产品名`.
 - If the value does not match the fixed date-leading pattern, preserve the original value in `评论日期` and leave `产品名` blank.
-- If the source has `产品名`, `购买产品`, `商品名称`, or `商品`, map that source column directly instead.
+- When a direct product column exists (`产品名`, `购买产品`, `商品名称`, or `商品`), it takes precedence over `评论日期与产品`; the combined field still supplies only `评论日期`. If the selected direct product cell is blank, use only the current confirmed literal `--product-name` fallback, never the combined field's product text. When no direct product column exists, the fixed combined-field parser supplies both standard columns.
 
 Do not use AI or semantic judgment to split product names.
 

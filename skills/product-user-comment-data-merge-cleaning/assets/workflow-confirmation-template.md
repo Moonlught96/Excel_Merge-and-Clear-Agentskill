@@ -38,6 +38,7 @@ keyword and must never be displayed as a preprocessing profile or passed to
 合并总表：{{MERGED_FILENAME}}
 标准化总表：{{STANDARDIZED_FILENAME}}
 清洗后总表：{{CLEANED_FILENAME}}
+清洗后 CSV：{{CLEANED_CSV_FILENAME}}
 
 请确认以上产品名、数据来源、平台预处理分流和文件命名是否正确，并确认是否可以进入合并流程。
 ```

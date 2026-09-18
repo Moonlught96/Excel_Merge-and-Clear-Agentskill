@@ -634,6 +634,19 @@ def select_columns(headers: list[Any], config: HeaderStandardizerConfig) -> tupl
             matched_columns.extend(lookup.get(key, []))
 
         matched_columns = sorted(set(matched_columns))
+        if normalize_header(output_column.header) == normalize_header(PRODUCT_NAME_HEADER):
+            combined_date_product_key = normalize_header(COMMENT_DATE_AND_PRODUCT_HEADER)
+            direct_product_columns = [
+                column_index
+                for column_index in matched_columns
+                if normalize_header(headers[column_index - 1])
+                != combined_date_product_key
+            ]
+            # A direct product field outranks the Taobao combined date/product
+            # field. The combined field remains the fixed fallback only when no
+            # direct product header exists at all.
+            if direct_product_columns:
+                matched_columns = direct_product_columns
         if len(matched_columns) > 1:
             raise DuplicateHeaderError(f"Multiple columns match required header: {output_column.header}")
 
@@ -923,29 +936,25 @@ def standardize_sheet(
                 column.source_column is not None
                 and column.source_column - 1 < len(row)
             )
-            direct_source_value = (
-                row_values[column.source_column - 1]
-                if has_direct_source and column.source_column is not None
-                else None
-            )
-            uses_composite_source = bool(column.composite_source_columns) and (
-                not has_direct_source
-                or direct_source_value is None
-                or (
-                    isinstance(direct_source_value, str)
-                    and not direct_source_value.strip()
-                )
-            )
             if (
-                uses_composite_source
-                and isinstance(output_value, str)
+                isinstance(output_value, str)
                 and output_value.startswith("=")
             ):
-                output_sheet.cell(
-                    row=output_row_number,
-                    column=output_column_index,
-                ).data_type = "s"
-                continue
+                source_is_preserved_formula = False
+                if has_direct_source and column.source_column is not None:
+                    source_cell = row[column.source_column - 1]
+                    source_is_preserved_formula = (
+                        source_cell.data_type == "f"
+                        and output_value == source_cell.value
+                    )
+                if not source_is_preserved_formula:
+                    # Derived text, CSV text, and confirmed literal fallback
+                    # values must never become formulas in a new workbook.
+                    output_sheet.cell(
+                        row=output_row_number,
+                        column=output_column_index,
+                    ).data_type = "s"
+                    continue
             if not has_direct_source or column.source_column is None:
                 continue
             source_cell = row[column.source_column - 1]

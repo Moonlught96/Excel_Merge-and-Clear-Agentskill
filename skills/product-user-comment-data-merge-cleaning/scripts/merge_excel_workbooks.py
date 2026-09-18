@@ -48,6 +48,13 @@ def normalize_for_header(value: Any) -> str:
     return str(value).strip()
 
 
+def headers_match_exactly(expected: list[Any], actual: list[Any]) -> bool:
+    return len(expected) == len(actual) and all(
+        type(left) is type(right) and left == right
+        for left, right in zip(expected, actual)
+    )
+
+
 def value_for_json(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat(sep=" ", timespec="seconds")
@@ -144,10 +151,15 @@ def merge_workbooks(
                     if add_source_columns:
                         output_header.extend(["source_file", "source_sheet"])
                     output_sheet.append(output_header)
-                elif header_key != canonical_header_key:
+                elif canonical_header is None or not headers_match_exactly(
+                    canonical_header,
+                    header,
+                ):
                     raise HeaderMismatchError(
                         f"Header mismatch in {path} / {sheet.title}. "
-                        f"Expected {canonical_header_key}, got {header_key}."
+                        f"Expected raw {canonical_header!r} (normalized "
+                        f"{canonical_header_key!r}), got raw {header!r} "
+                        f"(normalized {header_key!r})."
                     )
 
                 sheet_rows = 0

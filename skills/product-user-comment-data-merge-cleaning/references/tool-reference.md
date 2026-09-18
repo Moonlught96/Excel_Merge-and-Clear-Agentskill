@@ -48,6 +48,7 @@ Run commands from the Skill root directory. The Agent runs these tools for the u
 - Display-name hashes include a separate identity domain, so they cannot equal account-ID hashes for the same normalized text.
 - The exact registered mappings and priority order are defined in `config/hash-id.json` and documented in `header-standardization.md`.
 - Raw account IDs, usernames, and nicknames are read only in memory and remain omitted from outputs, logs, and summaries.
+- On a non-Windows runtime, the read-only environment provider expects `BAZHUAYU_HASH_ID_PROJECT_KEY_<PROJECT_ID>`, where `<PROJECT_ID>` is uppercase with hyphens replaced by underscores. Its value must be a base64-encoded 32-byte project key; the provider can load it but cannot initialize or persist a new key.
 - Comment IDs, parent IDs, URLs, IP fields, `用户身份`, and ambiguous fields are never identity sources.
 - Identity selection, normalization, and hashing are deterministic tooling only; do not use AI.
 ## Command Reference
@@ -172,8 +173,9 @@ The public preprocessing, standardization, hash-ID, audit, and cleaner commands 
 
 - Python 3.10 or newer is required.
 - `openpyxl` is required.
+- `tzdata` is required by the portable package so `zoneinfo` can resolve the IANA `Asia/Shanghai` database in a clean runtime.
 - Install portable dependencies with `python -m pip install -r requirements.txt` from the Skill root.
-- Use a Python runtime that includes `zoneinfo` timezone data for deterministic Beijing naming.
+- The bundled `tzdata` dependency supplies the timezone data needed for deterministic Beijing naming.
 - When global `python` lacks dependencies, use the Codex bundled Python returned by `load_workspace_dependencies`.
 - Automatic initialization and persistent storage of a new hash-ID research project requires Windows DPAPI under the current Windows user. On non-Windows systems, the Skill can load a securely pre-provisioned project key through the documented environment provider but cannot securely initialize and persist a new project key.
 - Folder portability means the complete Skill can run outside the repository with its bundled scripts and configuration; it does not mean that a Windows DPAPI-protected project key can be moved to another operating system or Windows user.
@@ -195,4 +197,4 @@ The Skill is ready only when:
 - all tests pass;
 - the Skill directory can be copied to an isolated folder and its bundled standardizer and cleaner still run;
 - no original input is modified;
-- no AI data judgment has been introduced.
+- no AI data judgment has been introduced into the traditional workflow; the optional post-cleaning AI review remains a separately bound, derived-output extension.

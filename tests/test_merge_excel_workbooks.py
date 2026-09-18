@@ -128,6 +128,18 @@ class MergeExcelWorkbooksTest(unittest.TestCase):
         with self.assertRaises(HeaderMismatchError):
             merge_workbooks([first_path, second_path], tmp / "merged.xlsx")
 
+    def test_rejects_header_mismatch_when_only_whitespace_differs(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-merge-header-whitespace-mismatch"
+        tmp.mkdir(parents=True, exist_ok=True)
+        first_path = tmp / "first.xlsx"
+        second_path = tmp / "second.xlsx"
+
+        write_workbook(first_path, {"main": [["created_at", "full_text"], ["2026-09-16", "one"]]})
+        write_workbook(second_path, {"main": [["created_at", "full_text "], ["2026-09-17", "two"]]})
+
+        with self.assertRaisesRegex(HeaderMismatchError, "Header mismatch"):
+            merge_workbooks([first_path, second_path], tmp / "merged.xlsx")
+
     def test_rejects_output_path_that_would_overwrite_input_file(self) -> None:
         tmp = TEST_TEMP_ROOT / "case-merge-output-conflict"
         tmp.mkdir(parents=True, exist_ok=True)

@@ -39,7 +39,7 @@ Examples of locked behavior include:
 - default retention of only cleaned `.xlsx` and `.csv`.
 - rejection of duplicate input paths and unconfirmed output replacement;
 - canonical bundled cleaner configuration only; no external or per-run cleaner JSON;
-- platform-specific cleaner exceptions are prohibited; every platform uses the same reviewed canonical fixed-word configuration;
+- New platform-specific cleaner exceptions are prohibited. The existing canonical `twitter-comments` stage may remove literal `https://` URL text from `评论内容` only before the shared reviewed fixed-word configuration; no other platform or per-run configuration may add, remove, or bypass a cleaner exception;
 - exact `--confirm-overwrite` confirmation for every existing output replacement;
 - mandatory explicit standardized `评论内容` header and confirmed platform for public cleaner CLI calls;
 - mandatory explicit final `.xlsx` and `.csv` verification before intermediate cleanup;
@@ -100,7 +100,7 @@ Examples of locked behavior include:
 
 1. Require the user to identify the exact rule change; never create an external or temporary cleaner JSON for one run.
 2. Update the canonical root `config/comment-cleaner.json` and its bundled Skill copy together.
-3. Platform-specific cleaner exceptions and `platform_profiles` are prohibited. A user-confirmed cleaner rule change applies through the canonical configuration to every platform or must be implemented as a separately confirmed deterministic workflow stage, never by removing base cleaner terms.
+3. New platform-specific cleaner exceptions and `platform_profiles` are prohibited. The existing canonical `twitter-comments` stage remains the only exception. A user-confirmed cleaner rule change applies through the canonical configuration to every platform or must be implemented as a separately confirmed deterministic workflow stage, never by removing base cleaner terms.
 4. Update deterministic positive and negative tests, including adjacent values that must not be deleted and a cross-platform assertion proving every platform retains the same fixed terms.
 5. Update `references/cleaning-rules.md`, `references/data-contract.md`, and this policy when the execution contract changes.
 6. Verify all public preprocessing, standardization, hash-ID, audit, and cleaner CLIs reject every non-canonical `--config` path; verify the cleaner still requires its standardized header/platform arguments.

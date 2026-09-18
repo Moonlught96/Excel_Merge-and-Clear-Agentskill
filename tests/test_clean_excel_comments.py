@@ -17,6 +17,7 @@ from tools.clean_excel_comments import (
     main,
     parse_args,
     should_delete_comment,
+    strip_https_urls_from_twitter_comment_content,
 )
 from tests.test_support import TEST_TEMP_ROOT
 
@@ -124,6 +125,81 @@ class CleanExcelCommentsTest(unittest.TestCase):
         )
         self.assertEqual(2, result.rows_deleted)
         self.assertEqual(2, result.https_urls_stripped)
+
+    def test_twitter_comment_url_stripping_keeps_csv_formula_like_comment_as_text(self) -> None:
+        tmp = TEST_TEMP_ROOT / "case-twitter-comments-strip-https-csv-formula-text"
+        tmp.mkdir(parents=True, exist_ok=True)
+        input_path = tmp / "source.csv"
+        output_path = tmp / "cleaned.xlsx"
+        input_path.write_text(
+            '评论内容,点赞数\n"=SUM(1, 2, 3) detailed product review words https://t.co/review",4\n',
+            encoding="utf-8-sig",
+        )
+
+        clean_workbook(
+            input_path,
+            load_config(DEFAULT_CONFIG_PATH, platform="twitter-comments"),
+            (),
+            output_path=output_path,
+        )
+
+        cleaned = load_workbook(output_path, data_only=False)
+        try:
+            cell = cleaned.active.cell(row=2, column=1)
+            self.assertEqual("=SUM(1, 2, 3) detailed product review words", cell.value)
+            self.assertEqual("s", cell.data_type)
+        finally:
+            cleaned.close()
+
+    def test_twitter_comment_url_stripping_keeps_non_formula_str_cell_as_text(self) -> None:
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论内容"])
+        cell = sheet.cell(
+            row=2,
+            column=1,
+            value="=SUM(1, 2, 3) detailed product review words https://t.co/review",
+        )
+        cell.data_type = "str"
+
+        count = strip_https_urls_from_twitter_comment_content(
+            sheet,
+            CleanerConfig(
+                target_header="评论内容",
+                platform="twitter-comments",
+                twitter_comments_strip_https_urls_from_comment_content=True,
+            ),
+        )
+
+        self.assertEqual(1, count)
+        self.assertEqual("=SUM(1, 2, 3) detailed product review words", cell.value)
+        self.assertEqual("s", cell.data_type)
+        workbook.close()
+
+    def test_twitter_comment_url_stripping_does_not_modify_real_formula(self) -> None:
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["评论内容"])
+        cell = sheet.cell(
+            row=2,
+            column=1,
+            value='=CONCAT("https://t.co/review", " detailed product review words")',
+        )
+        original_value = cell.value
+
+        count = strip_https_urls_from_twitter_comment_content(
+            sheet,
+            CleanerConfig(
+                target_header="评论内容",
+                platform="twitter-comments",
+                twitter_comments_strip_https_urls_from_comment_content=True,
+            ),
+        )
+
+        self.assertEqual(0, count)
+        self.assertEqual(original_value, cell.value)
+        self.assertEqual("f", cell.data_type)
+        workbook.close()
 
     def test_twitter_posts_keep_https_delete_rule(self) -> None:
         tmp = TEST_TEMP_ROOT / "case-twitter-posts-keep-https-delete"

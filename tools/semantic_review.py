@@ -50,13 +50,29 @@ def parser():
     return p
 
 
+def order_annotation_documents(manifest, documents):
+    expected_batch_ids = [batch['id'] for batch in manifest['batches']]
+    document_batch_ids = [document['batch_id'] for document in documents]
+    if len(set(expected_batch_ids)) != len(expected_batch_ids):
+        raise ValueError('Invalid manifest batch IDs')
+    if len(set(document_batch_ids)) != len(document_batch_ids):
+        raise ValueError('Duplicate annotation batch IDs')
+    if set(document_batch_ids) != set(expected_batch_ids):
+        raise ValueError('Annotation batch/run mismatch')
+    by_batch_id = {
+        document['batch_id']: document
+        for document in documents
+    }
+    return [by_batch_id[batch_id] for batch_id in expected_batch_ids]
+
+
 def run(args):
     if args.command == 'prepare':
         if (args.technical_term or args.kol_term) and not args.confirm_terms_complete:
             raise ValueError('Runtime term lists require current-conversation completion confirmation')
         if args.output.suffix.lower() != '.json':
             raise ValueError('Manifest output must be .json')
-        if args.output.name.endswith('.summary.json'):
+        if args.output.name.casefold().endswith('.summary.json'):
             raise ValueError('AI manifest must not recreate a finalized traditional summary')
         ensure_output_paths_safe([args.input], [args.output], overwrite=args.overwrite,
                                  overwrite_confirmations=args.confirm_overwrite)
@@ -81,7 +97,7 @@ def run(args):
     # Order-independent explicit paths, but duplicates/wrong batch IDs still fail.
     if not all(type(d) is dict and type(d.get('batch_id')) is str for d in docs):
         raise ValueError('Invalid annotation envelope')
-    docs.sort(key=lambda d: d['batch_id'])
+    docs = order_annotation_documents(manifest, docs)
     review = load_json(args.reviews) if args.reviews else None
     decisions, groups = validate_annotations(manifest, docs, review, require_reviews=args.command in ('export', 'verify'))
     if args.command == 'validate':

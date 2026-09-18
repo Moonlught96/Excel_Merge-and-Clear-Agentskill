@@ -26,6 +26,16 @@ REFERENCE_FILES = (
     "tool-reference.md",
     "extension-policy.md",
     "known-issues.md",
+    "ai-semantic-review.md",
+)
+
+CHANGE_RECORD_FILES = (
+    "ai-semantic-extension-change-record.md",
+)
+
+AI_SEMANTIC_ASSET_FILES = (
+    "ai-semantic-review/annotation-prompt.md",
+    "ai-semantic-review/confirmation-template.md",
 )
 
 SCRIPT_FILES = (
@@ -42,6 +52,9 @@ SCRIPT_FILES = (
     "output_file_naming.py",
     "output_path_safety.py",
     "preprocess_platform_comments.py",
+    "semantic_review.py",
+    "semantic_review_contract.py",
+    "semantic_review_io.py",
     "standardize_excel_headers.py",
     "strip_bilibili_reply_prefixes.py",
 )
@@ -51,6 +64,7 @@ CONFIG_FILES = (
     "hash-id.json",
     "header-standardizer.json",
     "platform-preprocessing.json",
+    "semantic-review.json",
 )
 
 
@@ -63,6 +77,8 @@ class SkillPackageTest(unittest.TestCase):
             SKILL_ROOT / "assets" / "workflow-confirmation-template.md",
             SKILL_ROOT / "assets" / "rule-extension-template.md",
             *(SKILL_ROOT / "references" / name for name in REFERENCE_FILES),
+            *(SKILL_ROOT / "references" / name for name in CHANGE_RECORD_FILES),
+            *(SKILL_ROOT / "assets" / name for name in AI_SEMANTIC_ASSET_FILES),
             *(SKILL_ROOT / "scripts" / name for name in SCRIPT_FILES),
             *(SKILL_ROOT / "config" / name for name in CONFIG_FILES),
         )
@@ -144,9 +160,19 @@ class SkillPackageTest(unittest.TestCase):
         self.assertIn("scripts/audit_standardized_comments.py", skill)
         self.assertIn("scripts/clean_excel_comments.py", skill)
         self.assertIn("scripts/inventory_comment_inputs.py", skill)
+        self.assertIn("scripts/semantic_review.py", skill)
+        self.assertIn("config/semantic-review.json", skill)
         self.assertIn("in a confirmed single-file run, use the original input as the source", skill)
         self.assertIn("Automatic creation of a new protected hash-ID project requires Windows DPAPI", skill)
         self.assertNotIn("tools/clean_excel_comments.py", skill)
+
+    def test_ai_semantic_documentation_uses_manifest_batch_order(self) -> None:
+        reference = (SKILL_ROOT / "references" / "ai-semantic-review.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("orders them by manifest batch order", reference)
+        self.assertNotIn("sorts by batch ID", reference)
 
     def test_references_preserve_all_confirmed_rule_categories(self) -> None:
         references = {
@@ -311,6 +337,8 @@ class SkillPackageTest(unittest.TestCase):
         )
         self.assertIn("Python 3.10 or newer is required.", tool_reference)
         self.assertIn("Requires Python >=3.10", requirements)
+        self.assertIn("tzdata", requirements)
+        self.assertIn("`tzdata`", tool_reference)
         self.assertIn(
             "amazon-japan-or-amazon-us-or-rakuten-or-twitter-or-twitter-comments",
             readme,

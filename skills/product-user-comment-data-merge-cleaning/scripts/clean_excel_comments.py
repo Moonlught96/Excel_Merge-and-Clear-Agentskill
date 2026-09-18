@@ -900,10 +900,21 @@ def strip_https_urls_from_twitter_comment_content(
     stripped_url_count = 0
     for row_number in range(config.first_data_row, sheet.max_row + 1):
         cell = sheet.cell(row=row_number, column=target_column)
+        # A real XLSX formula is source content, not a literal comment. Do not
+        # inspect or rewrite it: URL stripping applies only to literal cells.
+        if cell.data_type == "f":
+            continue
         comment = normalize_cell(cell.value)
         stripped_comment, replacements = HTTPS_URL_PATTERN.subn("", comment)
         if replacements:
             cell.value = stripped_comment.strip()
+            if (
+                isinstance(cell.value, str)
+                and cell.value.startswith("=")
+            ):
+                # A URL removal can expose a leading '=' in a non-formula text
+                # cell. Keep that literal source text from becoming a formula.
+                cell.data_type = "s"
             stripped_url_count += replacements
     return stripped_url_count
 

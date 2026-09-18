@@ -119,6 +119,10 @@ class WorkflowDocsTest(unittest.TestCase):
         self.assertIn("原始账号 ID、用户名、昵称", readme)
         self.assertNotIn("用八爪鱼 Excel 清洗工具", readme)
         self.assertIn("四个输出文件", readme)
+        self.assertIn(
+            "当独立产品列与 `评论日期与产品` 同时存在时，独立产品列优先",
+            readme,
+        )
 
         confirmation_template = (
             SKILL_ROOT / "assets" / "workflow-confirmation-template.md"
@@ -134,6 +138,7 @@ class WorkflowDocsTest(unittest.TestCase):
         self.assertIn("请选择本轮数据类型", confirmation_template)
         self.assertIn("[1] 推文", confirmation_template)
         self.assertIn("[2] 评论", confirmation_template)
+        self.assertIn("清洗后 CSV：{{CLEANED_CSV_FILENAME}}", confirmation_template)
 
         gitignore = Path(".gitignore").read_text(encoding="utf-8")
         self.assertIn("outputs/", gitignore)
@@ -200,11 +205,34 @@ class WorkflowDocsTest(unittest.TestCase):
             "`twitter-comments` 与 `twitter` 共用 `twitter` 哈希命名空间",
             "X 评论不执行 X 推文保留关键词筛选",
             "唯一已确认的固定例外是 `twitter-comments`：仅在标准列`评论内容`中",
+            "若独立产品列与 `评论日期与产品` 同时存在，独立产品列优先",
         )
         for instruction in required_instructions:
             self.assertIn(instruction, agents)
 
         self.assertNotIn("未知表头必须停止", agents)
+        self.assertNotIn("当用户只说“清洗这个文件”且还没说明清理词时，只回复：", agents)
+        self.assertIn("不得因用户只说“清洗这个文件”而跳过", agents)
+
+    def test_references_distinguish_the_locked_traditional_workflow_from_optional_ai_review(self) -> None:
+        extension_policy = (SKILL_ROOT / "references" / "extension-policy.md").read_text(encoding="utf-8")
+        tool_reference = (SKILL_ROOT / "references" / "tool-reference.md").read_text(encoding="utf-8")
+        standardization = (SKILL_ROOT / "references" / "header-standardization.md").read_text(encoding="utf-8")
+        data_contract = (SKILL_ROOT / "references" / "data-contract.md").read_text(encoding="utf-8")
+        known_issues = (SKILL_ROOT / "references" / "known-issues.md").read_text(encoding="utf-8")
+        ai_semantic = (SKILL_ROOT / "references" / "ai-semantic-review.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("every platform uses the same reviewed canonical fixed-word configuration", extension_policy)
+        self.assertIn("New platform-specific cleaner exceptions are prohibited", extension_policy)
+        self.assertNotIn("3. Platform-specific cleaner exceptions and `platform_profiles` are prohibited.", extension_policy)
+        self.assertIn("New platform-specific cleaner exceptions and `platform_profiles` are prohibited.", extension_policy)
+        self.assertIn("The existing canonical `twitter-comments` stage remains the only exception.", extension_policy)
+        self.assertIn("The existing canonical `twitter-comments` stage remains the only exception.", known_issues)
+        self.assertIn("no AI data judgment has been introduced into the traditional workflow", tool_reference)
+        self.assertIn("BAZHUAYU_HASH_ID_PROJECT_KEY_<PROJECT_ID>", tool_reference)
+        self.assertIn("When a direct product column exists", standardization)
+        self.assertIn("may read cells in memory only for fixed mapping equality", data_contract)
+        self.assertIn("orders them by manifest batch order", ai_semantic)
 
 
 if __name__ == "__main__":

@@ -88,7 +88,7 @@ python scripts/semantic_review.py export --input CLEANED.xlsx --manifest RUN.jso
 python scripts/semantic_review.py verify --input CLEANED.xlsx --manifest RUN.json --annotation ANN01.json --annotation ANN02.json --reviews REVIEWS.json --review-output REVIEW.xlsx --output AI.xlsx --csv-output AI.csv
 ```
 
-Optional prepare arguments: repeated `--technical-term` / `--kol-term` plus `--confirm-terms-complete`. No terms means neither term flags nor fabricated list. Explicit annotation paths may be supplied in any order; the CLI sorts by batch ID for a stable canonical annotation digest. Arrays within each batch/review remain in input order.
+Optional prepare arguments: repeated `--technical-term` / `--kol-term` plus `--confirm-terms-complete`. No terms means neither term flags nor fabricated list. Explicit annotation paths may be supplied in any order; the CLI orders them by manifest batch order for a stable canonical annotation digest. Arrays within each batch/review remain in input order.
 
 ## Outputs, verification and retention
 

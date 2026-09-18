@@ -26,6 +26,23 @@ def require(condition, code):
         raise ValueError(code)
 
 
+def strictly_equal(expected, actual):
+    """Compare manifest values without Python's cross-type equality shortcuts."""
+    if type(expected) is not type(actual):
+        return False
+    if isinstance(expected, dict):
+        return expected.keys() == actual.keys() and all(
+            strictly_equal(expected[key], actual[key])
+            for key in expected
+        )
+    if isinstance(expected, (list, tuple)):
+        return len(expected) == len(actual) and all(
+            strictly_equal(left, right)
+            for left, right in zip(expected, actual)
+        )
+    return expected == actual
+
+
 def digest(obj):
     return hashlib.sha256(json.dumps(obj, sort_keys=True, ensure_ascii=False,
                                      allow_nan=False, separators=(',', ':')).encode('utf-8')).hexdigest()
@@ -101,7 +118,10 @@ def check_manifest(source, manifest):
                                   manifest['technical_terms'], manifest['kol_terms'], manifest['batch_size'])
     except KeyError as exc:
         raise ValueError('Incomplete manifest') from exc
-    require(expected == manifest, 'Source, policy, prompt or manifest changed; prepare a new run')
+    require(
+        strictly_equal(expected, manifest),
+        'Source, policy, prompt or manifest changed; prepare a new run',
+    )
 
 
 def quote(q, row, policy, extra=()):
